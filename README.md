@@ -14,7 +14,21 @@ Elo maths from.
 
 ## Status
 
-Not started. See [CLAUDE.md](CLAUDE.md) for the design and the open decisions.
+A bare Django project that serves a placeholder page and the admin. Nothing is ingested yet. See
+[CLAUDE.md](CLAUDE.md) for the design and the open decisions.
+
+## Running it
+
+```
+python -m venv .venv
+.venv/Scripts/python -m pip install -e .
+cp .env.example .env
+.venv/Scripts/python manage.py migrate
+.venv/Scripts/python manage.py runserver 127.0.0.1:8001
+```
+
+Installing it on a server (bobby, next to OpenBench, as a systemd service in a conda env) is described in
+[docs/deploy.md](docs/deploy.md).
 
 ## License
 
