@@ -29,7 +29,8 @@
   {% if pair.note %}<p class="muted">{{ pair.note }}</p>{% endif %}
   {% if pair.base and not pair.diff %}<p class="muted">Not deterministic, compared on totals only.</p>{% endif %}
   {% if pair.diff %}
-    <p class="muted">{{ pair.diff.compared }} positions compared, {{ pair.diff.changed }} changed{% if pair.diff.only_here %}, {{ pair.diff.only_here }} only in this run{% endif %}{% if pair.diff.only_there %}, {{ pair.diff.only_there }} only in the other{% endif %}.</p>
+    {% if pair.not_deterministic %}<p class="note">Not deterministic: the same tree and build searched differently.</p>{% endif %}
+    <p class="muted">{{ pair.diff.compared }} positions compared, {{ pair.diff.changed }} changed{% if pair.diff.files_changed %}; the suite file changed ({{ pair.diff.files_changed|join:", " }}), its positions aren't comparable{% else %}{% if pair.diff.only_here %}; {{ pair.diff.only_here }} new positions{% endif %}{% if pair.diff.only_there %}; {{ pair.diff.only_there }} positions missing{% endif %}{% endif %}.</p>
     {% include "runs/_changes.html" with title="Newly failing" changes=pair.diff.newly_failing open=True %}
     {% include "runs/_changes.html" with title="Newly passing" changes=pair.diff.newly_passing open=True %}
     {% include "runs/_changes.html" with title="Points changed" changes=pair.diff.points_changed %}
@@ -43,8 +44,8 @@
 <table>
   <thead><tr><th>Check</th><th>Settings</th><th>In</th><th>Why</th></tr></thead>
   <tbody>
-  {% for check, reason in comparison.only_a %}<tr><td>{{ check.name|default:check.check_id }}</td><td class="muted">{{ check.settings }}</td><td>A</td><td>{{ reason }}</td></tr>{% endfor %}
-  {% for check, reason in comparison.only_b %}<tr><td>{{ check.name|default:check.check_id }}</td><td class="muted">{{ check.settings }}</td><td>B</td><td>{{ reason }}</td></tr>{% endfor %}
+  {% for check, reason in comparison.only_a %}<tr><td>{{ check.name|default:check.check_id }}</td><td class="muted">{{ check.settings }}</td><td>{{ comparison.a_label }}</td><td>{{ reason }}</td></tr>{% endfor %}
+  {% for check, reason in comparison.only_b %}<tr><td>{{ check.name|default:check.check_id }}</td><td class="muted">{{ check.settings }}</td><td>{{ comparison.b_label }}</td><td>{{ reason }}</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>

@@ -36,9 +36,10 @@ def baselines(run):
 
 
 def previous_on_branch(run):
-    """The run recorded before this one on its branch, any state."""
-    return (Run.objects.filter(branch=run.branch, recorded_at__lt=run.recorded_at).exclude(pk=run.pk)
-            .order_by("-recorded_at").first())
+    """The run recorded before this one on its branch with a comparable check, any state."""
+    keys = {c.key for c in run.checks.all()}
+    return (Run.objects.filter(branch=run.branch, recorded_at__lt=run.recorded_at, checks__key__in=keys)
+            .exclude(pk=run.pk).distinct().order_by("-recorded_at").first())
 
 
 def relation(a, b):
@@ -86,6 +87,7 @@ class CaseDiff:
     only_here: int = 0
     only_there: int = 0
     compared: int = 0
+    files_changed: list = field(default_factory=list)   # suite files whose content differs: nothing in them compares
 
     @property
     def changed(self):
@@ -117,6 +119,8 @@ def diff_cases(check, base):
         elif case.got != previous.got:
             diff.other_move.append(change)
     diff.only_there = len(before) - len(seen)
+    now, then = check.params.get("file_sha256") or {}, base.params.get("file_sha256") or {}
+    diff.files_changed = sorted(f for f, sha in now.items() if then.get(f) not in (None, sha))
     return diff
 
 
@@ -126,6 +130,12 @@ class Pair:
     base: Check | None
     diff: CaseDiff | None = None
     note: str = ""
+
+    @property
+    def not_deterministic(self):
+        """The same tree and build searched differently: a determinism failure."""
+        return bool(self.diff and self.diff.changed and self.check.run.tree
+                    and self.check.run.tree == self.base.run.tree)
 
     def delta(self, name):
         if self.base is None:
@@ -139,21 +149,36 @@ class Comparison:
     pairs: list
     only_a: list = field(default_factory=list)       # (check, reason)
     only_b: list = field(default_factory=list)
+    a_label: str = "A"
+    b_label: str = "B"
 
 
 def compare_with_baselines(run):
     """Each of run's checks against its own baseline."""
     found = baselines(run)
+    checks = list(run.checks.all())
     pairs = []
-    for check in run.checks.all():
+    for check in checks:
         base = found[check.pk]
         pair = Pair(check, base)
         if base is None:
-            pair.note = "no comparable run in this commit's ancestry"
+            same_suite = (Check.objects.filter(check_id=check.check_id, run__commit__in=run.lineage,
+                                               run__state__in=STATE_PREFERENCE).exclude(run=run).exists())
+            pair.note = "no comparable run: " + ("the same suite ran with other settings or another build"
+                                                 if same_suite else "a new check")
         else:
             pair.diff = diff_cases(check, base)
         pairs.append(pair)
-    return Comparison(pairs)
+    comparison = Comparison(pairs, a_label="this run", b_label="baseline")
+    # what the baseline runs had and this one didn't
+    keys = {c.key for c in checks}
+    seen = set()
+    for base_run in {b.run for b in found.values() if b is not None}:
+        for check in base_run.checks.all():
+            if check.key not in keys and check.key not in seen:
+                seen.add(check.key)
+                comparison.only_b.append((check, f"missing, the baseline {base_run.short_name} ran it"))
+    return comparison
 
 
 def compare_runs(a, b):
