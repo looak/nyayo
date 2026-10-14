@@ -1,0 +1,51 @@
+{% load runs_extras %}
+{% for pair in comparison.pairs %}
+<section class="card">
+  <div class="card-head">
+    <h3>{{ pair.check.name|default:pair.check.check_id }}</h3>
+    <span class="muted mono">{{ pair.check.check_id }} v{{ pair.check.version }}</span>
+    <span class="muted">{{ pair.check.settings }}{% if not pair.check.deterministic %}, not deterministic{% endif %}</span>
+    {% if pair.check.status != "pass" %}<span class="status-error">harness: {{ pair.check.status }}</span>{% endif %}
+  </div>
+  <dl class="facts">
+    <dt>Now</dt><dd>{{ pair.check.totals }}</dd>
+    {% if pair.base %}
+    <dt>Against</dt>
+    <dd>{{ pair.base.totals }}
+      {% with d=pair|delta_of:"solved" %}{% if d is not None %}&middot; solved <span class="{{ d|trend }}">{{ d|signed }}</span>{% endif %}{% endwith %}
+      {% with d=pair|delta_of:"points" %}{% if d is not None %}&middot; points <span class="{{ d|trend }}">{{ d|signed }}</span>{% endif %}{% endwith %}
+      <div class="muted">
+        <a class="mono" href="{% url 'run' pair.base.run.pk %}">{{ pair.base.run.short_name }}</a>
+        <span class="badge {{ pair.base.run.state }}">{{ pair.base.run.state }}</span> {{ pair.base.run.branch }}
+      </div>
+    </dd>
+    {% endif %}
+    {% if pair.check.engine_verdict %}
+    <dt>Engine verdict</dt>
+    <dd><span class="status-{{ pair.check.engine_verdict.result }}">{{ pair.check.engine_verdict.result }}</span>
+      <span class="muted">baseline {{ pair.check.engine_verdict.baseline }}, minimum {{ pair.check.engine_verdict.minimum }}</span></dd>
+    {% endif %}
+  </dl>
+  {% if pair.note %}<p class="muted">{{ pair.note }}</p>{% endif %}
+  {% if pair.base and not pair.diff %}<p class="muted">Not deterministic, compared on totals only.</p>{% endif %}
+  {% if pair.diff %}
+    <p class="muted">{{ pair.diff.compared }} positions compared, {{ pair.diff.changed }} changed{% if pair.diff.only_here %}, {{ pair.diff.only_here }} only in this run{% endif %}{% if pair.diff.only_there %}, {{ pair.diff.only_there }} only in the other{% endif %}.</p>
+    {% include "runs/_changes.html" with title="Newly failing" changes=pair.diff.newly_failing open=True %}
+    {% include "runs/_changes.html" with title="Newly passing" changes=pair.diff.newly_passing open=True %}
+    {% include "runs/_changes.html" with title="Points changed" changes=pair.diff.points_changed %}
+    {% include "runs/_changes.html" with title="Same result, another move" changes=pair.diff.other_move %}
+  {% endif %}
+</section>
+{% endfor %}
+{% if comparison.only_a or comparison.only_b %}
+<h2>Not compared</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Check</th><th>Settings</th><th>In</th><th>Why</th></tr></thead>
+  <tbody>
+  {% for check, reason in comparison.only_a %}<tr><td>{{ check.name|default:check.check_id }}</td><td class="muted">{{ check.settings }}</td><td>A</td><td>{{ reason }}</td></tr>{% endfor %}
+  {% for check, reason in comparison.only_b %}<tr><td>{{ check.name|default:check.check_id }}</td><td class="muted">{{ check.settings }}</td><td>B</td><td>{{ reason }}</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}

@@ -40,6 +40,18 @@ FORCE_SCRIPT_NAME = os.environ.get("NYAYO_SCRIPT_NAME") or None
 DATA_DIR = Path(os.environ.get("NYAYO_DATA_DIR", BASE_DIR / "data")).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# Raw results as uploaded, a file per run id; the database is an index of these.
+NYAYO_ARCHIVE_DIR = DATA_DIR / "archive"
+
+# Runs that never became history expire (manage.py expire_runs): wip runs this many days after being recorded,
+# committed runs this many days after being committed if they weren't published by then.
+NYAYO_WIP_DAYS = int(os.environ.get("NYAYO_WIP_DAYS", 14))
+NYAYO_COMMITTED_DAYS = int(os.environ.get("NYAYO_COMMITTED_DAYS", 30))
+
+# A run's largest size once decompressed; uploads are gzipped and far smaller on the wire.
+NYAYO_MAX_RUN_BYTES = 64 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -48,6 +60,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "nyayo",
+    "nyayo.runs",
 ]
 
 MIDDLEWARE = [
@@ -102,5 +115,6 @@ USE_TZ = True
 # first read, which makes static files under a prefix unreliable.
 STATIC_URL = f"{FORCE_SCRIPT_NAME.rstrip('/')}/static/" if FORCE_SCRIPT_NAME else "/static/"
 STATIC_ROOT = DATA_DIR / "static"
+STATIC_ROOT.mkdir(exist_ok=True)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

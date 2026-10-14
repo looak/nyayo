@@ -1,0 +1,48 @@
+{% extends "runs/base.html" %}
+{% load runs_extras %}
+{% block title %}Runs · nyayo{% endblock %}
+{% block content %}
+<h1>Runs</h1>
+<form class="filters" method="get">
+  <label>Branch
+    <select name="branch" onchange="this.form.submit()">
+      <option value="">all branches</option>
+      {% for b in branches %}<option value="{{ b }}"{% if b == branch %} selected{% endif %}>{{ b|default:"(none)" }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>State
+    <select name="state" onchange="this.form.submit()">
+      <option value="">all states</option>
+      {% for s in states %}<option value="{{ s }}"{% if s == state %} selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <noscript><button>Filter</button></noscript>
+</form>
+{% if page.object_list %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Run</th><th>State</th><th>Branch</th><th>Commit / tree</th><th>Machine</th><th>Checks</th><th>Recorded</th></tr></thead>
+  <tbody>
+  {% for run in page.object_list %}
+    <tr>
+      <td class="mono"><a href="{% url 'run' run.pk %}">{{ run.short_name }}</a></td>
+      <td><span class="badge {{ run.state }}">{{ run.state }}</span></td>
+      <td>{{ run.branch }}</td>
+      <td class="mono">{% if run.commit %}{{ run.commit|sha }}{% else %}<span class="muted">tree</span> {{ run.tree|sha }}{% endif %}</td>
+      <td>{{ run.machine|default:"" }}<div class="muted">{{ run.host_name }}</div></td>
+      <td>{% for check in run.checks.all %}<div>{{ check.name|default:check.check_id }} <span class="muted">{{ check.totals }}</span>{% if check.status != "pass" %} <span class="status-error">{{ check.status }}</span>{% endif %}</div>{% endfor %}</td>
+      <td class="muted">{{ run.recorded_at|date:"Y-m-d H:i" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<div class="pager">
+  {% if page.has_previous %}<a href="?branch={{ branch|urlencode }}&state={{ state }}&page={{ page.previous_page_number }}">newer</a>{% endif %}
+  <span class="muted">page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?branch={{ branch|urlencode }}&state={{ state }}&page={{ page.next_page_number }}">older</a>{% endif %}
+</div>
+{% else %}
+<p class="muted">No runs yet. Push one from Elephant with <code>python test/results.py sync</code>.</p>
+{% endif %}
+{% endblock %}

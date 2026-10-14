@@ -1,0 +1,31 @@
+{% extends "runs/base.html" %}
+{% load runs_extras %}
+{% block title %}Compare · nyayo{% endblock %}
+{% block content %}
+<h1>Compare</h1>
+<form class="filters" method="get">
+  <label>A
+    <select name="a">
+      {% for r in recent %}<option value="{{ r.pk }}"{% if r.pk|stringformat:"s" == a_id %} selected{% endif %}>{{ r.short_name }} &middot; {{ r.branch }} &middot; {{ r.state }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>B
+    <select name="b">
+      <option value="baseline"{% if b_choice == "baseline" %} selected{% endif %}>each check's baseline</option>
+      <option value="previous"{% if b_choice == "previous" %} selected{% endif %}>the previous run on A's branch</option>
+      {% for r in recent %}<option value="{{ r.pk }}"{% if r.pk|stringformat:"s" == b_choice %} selected{% endif %}>{{ r.short_name }} &middot; {{ r.branch }} &middot; {{ r.state }}</option>{% endfor %}
+    </select>
+  </label>
+  <button>Compare</button>
+</form>
+{% if a %}
+  <h2>
+    A <a class="mono" href="{% url 'run' a.pk %}">{{ a.short_name }}</a> <span class="badge {{ a.state }}">{{ a.state }}</span> {{ a.branch }}
+    {% if b %} vs B <a class="mono" href="{% url 'run' b.pk %}">{{ b.short_name }}</a> <span class="badge {{ b.state }}">{{ b.state }}</span> {{ b.branch }}
+    {% elif b_choice == "baseline" %} vs each check's baseline{% endif %}
+  </h2>
+  {% if relation %}<p class="{% if 'unrelated' in relation %}note{% else %}muted{% endif %}">B is {{ relation }} of A.</p>{% endif %}
+  {% if missing_b %}<p class="note">{{ missing_b }}</p>{% endif %}
+  {% if comparison %}{% include "runs/_comparison.html" with branch=a.branch %}{% endif %}
+{% endif %}
+{% endblock %}
