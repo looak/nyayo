@@ -1,8 +1,9 @@
 # nyayo
 
 An orchestrator and reporting platform for chess engine smoke tests. It starts runs, collects their results into a
-database and shows how every check, metric and test position moves over time, commit by commit. The engine it was built for is Elephant
-(github.com/looak/elephant), but engine specifics belong in configuration, not code.
+database and shows how every check, metric and test position moves over time, commit by commit. The engine it was
+built for is Elephant (github.com/looak/elephant, sibling checkout at `../elephant`), but engine specifics belong in
+configuration, not code.
 
 ## What nyayo is not
 
@@ -18,28 +19,33 @@ database and shows how every check, metric and test position moves over time, co
 - **Python and Django** (ORM, migrations, the admin for browsing and purging runs, same stack as OpenBench). If
   something from bwawa is needed (PGN or fastchess parsing), import it as a package rather than copying it; bwawa has
   no `pyproject.toml` yet, so making it installable is a bwawa commit.
-- **One results contract.** Every run, wherever it executes, produces one `smoke-results.json`: a writer-generated run
-  UUID, source (`ci` or `dev`), commit SHA plus a dirty flag and diff hash, host, build, timestamps, and a list of
-  checks `{id, version, status, params{}, metrics{}, cases[], artifacts[]}`. Cases are per-position results (`WAC.297`
-  pass/fail, an optional STS `score`). That file is the only interface between workers and nyayo. Define and version
-  it (a `schema_version` field) before anything else; the script that writes it lives in the engine's repo, next to
-  the CI workflow.
-- **Two ways in, one ingest.** Push: anything on the LAN (the owner's dev machine, hunt) POSTs the file to
-  `/api/runs` with a per-machine bearer token. Pull: GitHub-hosted runners can't reach the home LAN, so nyayo polls
-  the GitHub API for finished workflow runs and downloads the results artifact; no public webhook endpoint. Both paths
-  call the same ingest function. The run UUID makes ingest idempotent, so a dev script can spool files and retry.
-- **Dev runs are second-class in history.** They appear on commit pages and in A/B comparisons but are off the main
-  timelines by default, and may have shorter retention. Their commit may exist only locally.
-- **Comparability.** Compare checks, not suites: two results are comparable only when check id, version and params
-  (including the suite file's hash) match. Tactical suites run at fixed nodes on one thread so results are identical
-  on any machine. A missing check or case is shown as missing, never as a pass.
-- **Baselines follow ancestry, not recency.** A run's baseline, per check, is the nearest ancestor commit (the commit
-  itself first) with a comparable result, preferring CI runs over dev runs, so parallel branches are never compared
-  with each other by accident. The results file carries the ancestry (`git rev-list --topo-order -n 300 HEAD`) because
-  dev commits may exist only locally. Manually picked A/B pairs are allowed and are labelled when they aren't related.
-- **Raw results are the source of truth.** Every ingested file is archived unchanged; the database is an index that
-  can be rebuilt from the archive. The archive (small JSON, not the `.db`) is what gets backed up off-machine, e.g.
-  pushed to a private git repo.
+- **One results contract, owned by nyayo:** `docs/results-schema.md`, schema version 1. A run is one JSON document:
+  the run (id, state, commit or tree, branch, ancestry, host, build, timestamps) and its checks, each with params,
+  metrics and per-position cases. It changes only by bumping `schema_version`, agreed with the owner. Elephant writes
+  it with `test/results.py` (see its `test/RESULTS.md`).
+- **Two ways in, one ingest.** `nyayo.runs.ingest.ingest()` archives the raw run, then indexes it. Push: machines on
+  the LAN `PUT /api/runs/{id}` with the whole run (usually gzipped) and a per-machine bearer token made and revoked
+  in the admin; `201` created, `200` updated, `401` bad token, `400`/`409` with a short plain-text reason the client
+  shows. Pull (not built yet): GitHub-hosted runners can't reach the LAN, so nyayo will poll for finished workflow
+  runs and ingest their `results-<os>` artifacts through the same function. No public webhook endpoint.
+- **Runs are wip, committed or published**, and only move forward. wip: a dirty tree, `commit` null, `tree` is the
+  tree the working copy would commit as. committed: a commit with exactly that tree exists, possibly only locally.
+  published: the commit is on a remote branch; only these are permanent history, and CI runs start here. The client
+  promotes runs; nyayo doesn't match trees. Under one run id only `state` (forward), `commit` (null to a sha, once),
+  `committed_at`, `published_at` and `ancestors` may change; anything else is `409` naming the field.
+- **Expiry** (`manage.py expire_runs`, a daily timer): wip runs never promoted go after `NYAYO_WIP_DAYS` (14),
+  committed runs not published after `NYAYO_COMMITTED_DAYS` (30). Published runs are never expired.
+- **Comparability.** Checks are comparable when id, version, limit, threads, hash, experiment and build (compiler,
+  config, assertions, exceptions, bits) match; `per_file` only picks positions. A position is compared when its id
+  and its EPD file's content hash match. `deterministic: false` checks (multi threaded) compare on totals only. A
+  missing check or case is shown as missing, never as a pass.
+- **Baselines follow ancestry, not recency.** Per check, the newest comparable run on the nearest commit in the run's
+  `ancestors` (`git rev-list --topo-order -n 300`, its own commit first), published before committed, never wip
+  unless picked by hand. So parallel branches are never compared by accident. The second comparison is the previous
+  run on the same branch, which may be wip. Manually picked A/B pairs are allowed and labelled when unrelated.
+- **Raw results are the source of truth.** Every ingested run is archived unchanged as `archive/<id>.json` (with a
+  `.meta.json` naming the machine), replaced on update; the database is an index that can be rebuilt from it. The
+  archive, not the `.db`, is what gets backed up off-machine, e.g. pushed to a private git repo.
 - **SQLite** to start: one user, one writer. Metrics go in a narrow table (run, name, value, unit) so a new metric needs
   no migration.
 - **Dispatch:** GitHub Actions `workflow_dispatch` for the extended smoke run (about 30 minutes: determinism, crashes,
@@ -59,7 +65,6 @@ database and shows how every check, metric and test position moves over time, co
 1. Exactly which suites and node budgets go in smoke (every push) versus extended (nightly / on demand).
 2. Where crashes are detected: suites under a sanitizer build, or separate fast self-play games.
 3. Which builds must agree for the determinism check (compilers, OSes, release vs sanitizer).
-4. One push token per machine or one shared.
 
 ## Environment
 
