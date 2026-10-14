@@ -10,7 +10,7 @@ Wants=network-online.target
 
 [Service]
 User=fischer
-WorkingDirectory=/home/fischer/nyayo
+WorkingDirectory=/home/fischer/dev/nyayo
 ExecStart=/home/fischer/miniconda3/envs/nyayo/bin/gunicorn nyayo.wsgi:application --bind 0.0.0.0:8001 --workers 2 --access-logfile -
 Restart=on-failure
 RestartSec=5

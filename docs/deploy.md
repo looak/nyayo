@@ -28,7 +28,7 @@ other.
 ### First install
 
 ```bash
-cd ~
+mkdir -p ~/dev && cd ~/dev
 git clone https://github.com/looak/nyayo.git        # or git@github.com:... if bobby has a deploy key
 cd nyayo
 conda create -n nyayo python=3.13 -y
@@ -36,14 +36,14 @@ conda activate nyayo
 pip install -e .
 ```
 
-Create `~/nyayo/.env`:
+Create `~/dev/nyayo/.env`:
 
 ```bash
 NYAYO_DEBUG=false
 NYAYO_SECRET_KEY=<output of: python -c "import secrets; print(secrets.token_urlsafe(50))">
 NYAYO_ALLOWED_HOSTS=172.16.100.11,bobby.home,localhost
 NYAYO_CSRF_TRUSTED_ORIGINS=http://172.16.100.11:8001,http://bobby.home:8001
-NYAYO_DATA_DIR=/home/fischer/nyayo-data
+NYAYO_DATA_DIR=/home/fischer/dev/nyayo-data
 ```
 
 Keeping the data directory outside the checkout means a fresh clone or `git clean` never touches it.
@@ -75,7 +75,7 @@ journalctl -u nyayo -f
 ### Updating
 
 ```bash
-cd ~/nyayo
+cd ~/dev/nyayo
 git pull
 conda activate nyayo
 pip install -e .
