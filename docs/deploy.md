@@ -61,28 +61,23 @@ Browse to http://172.16.100.11:8001/ and stop it with Ctrl-C.
 
 ### As a service
 
-`deploy/nyayo.service` is a systemd unit. Check the gunicorn path in `ExecStart` against `which gunicorn` with the env
-active, then:
-
 ```bash
-sudo cp deploy/nyayo.service /etc/systemd/system/nyayo.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now nyayo
-systemctl status nyayo
-journalctl -u nyayo -f
+deploy/install-service.sh
 ```
+
+It fills in `deploy/nyayo.service` for this checkout, user and conda env (found through `conda info --base`; set
+`NYAYO_CONDA_ENV` if the env isn't called `nyayo`), installs it with `sudo`, starts it and shows its status. Running it
+again reinstalls the unit, which is how a change to the unit file reaches the server. Follow the log with
+`journalctl -u nyayo -f`.
 
 ### Updating
 
 ```bash
-cd ~/dev/nyayo
-git pull
-conda activate nyayo
-pip install -e .
-python manage.py migrate
-python manage.py collectstatic --noinput
-sudo systemctl restart nyayo
+deploy/update.sh
 ```
+
+It pulls, reinstalls the package, migrates the database, collects static files and restarts the service. No need to
+activate the env first.
 
 ## Behind a reverse proxy later
 
