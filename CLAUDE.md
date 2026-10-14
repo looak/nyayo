@@ -33,6 +33,10 @@ database and shows how every check, metric and test position moves over time, co
 - **Comparability.** Compare checks, not suites: two results are comparable only when check id, version and params
   (including the suite file's hash) match. Tactical suites run at fixed nodes on one thread so results are identical
   on any machine. A missing check or case is shown as missing, never as a pass.
+- **Baselines follow ancestry, not recency.** A run's baseline, per check, is the nearest ancestor commit (the commit
+  itself first) with a comparable result, preferring CI runs over dev runs, so parallel branches are never compared
+  with each other by accident. The results file carries the ancestry (`git rev-list --topo-order -n 300 HEAD`) because
+  dev commits may exist only locally. Manually picked A/B pairs are allowed and are labelled when they aren't related.
 - **Raw results are the source of truth.** Every ingested file is archived unchanged; the database is an index that
   can be rebuilt from the archive. The archive (small JSON, not the `.db`) is what gets backed up off-machine, e.g.
   pushed to a private git repo.
