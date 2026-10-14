@@ -14,7 +14,17 @@ Elo maths from.
 
 ## Status
 
-A bare Django project that serves a placeholder page and the admin. Nothing is ingested yet. See
+nyayo receives smoke runs pushed from developer machines and shows them:
+
+- **Runs**, newest first, filtered by branch and state (wip, committed, published).
+- **A run**, every check against its baseline: the newest comparable run on the nearest commit it descends from.
+  Positions that newly fail or pass, STS points that moved, and positions that found another move.
+- **Compare** any two runs, or a run against its baselines or the previous run on its branch. Checks searched with
+  different settings are listed as not comparable, never counted as passing.
+- **A position** (`/case/epd.wac_new/WAC.297`) along a branch's history: since when it fails, when it last passed.
+
+Runs arrive as `PUT /api/runs/{id}` with a per-machine token; the format and the rules are in
+[docs/results-schema.md](docs/results-schema.md). Pulling CI runs from GitHub comes next. See
 [CLAUDE.md](CLAUDE.md) for the design and the open decisions.
 
 ## Running it
@@ -24,11 +34,13 @@ python -m venv .venv
 .venv/Scripts/python -m pip install -e .
 cp .env.example .env
 .venv/Scripts/python manage.py migrate
-.venv/Scripts/python manage.py runserver 127.0.0.1:8001
+.venv/Scripts/python manage.py createsuperuser
+.venv/Scripts/python manage.py runserver 127.0.0.1:8000
+.venv/Scripts/python manage.py test nyayo
 ```
 
-Installing it on a server (bobby, next to OpenBench, as a systemd service in a conda env) is described in
-[docs/deploy.md](docs/deploy.md).
+Add a machine in the admin to get a push token. Installing on a server (bobby, next to OpenBench, as a systemd
+service in a conda env) and connecting Elephant are described in [docs/deploy.md](docs/deploy.md).
 
 ## License
 

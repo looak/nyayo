@@ -1,0 +1,11 @@
+# Deletes runs that never became history, see manage.py expire_runs. Started daily by nyayo-expire.timer;
+# deploy/install-service.sh fills in User, WorkingDirectory and the python path like it does for nyayo.service.
+
+[Unit]
+Description=nyayo: expire wip and unpublished runs
+
+[Service]
+Type=oneshot
+User=fischer
+WorkingDirectory=/home/fischer/dev/nyayo
+ExecStart=/home/fischer/miniconda3/envs/nyayo/bin/python manage.py expire_runs

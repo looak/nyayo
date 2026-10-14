@@ -1,7 +1,7 @@
 # Running nyayo
 
-nyayo is a Django app with a SQLite database. All state (the database and, later, the raw results archive) lives in
-one data directory, `./data` unless `NYAYO_DATA_DIR` says otherwise. Configuration comes from a `.env` file in the
+nyayo is a Django app with a SQLite database. All state (the database and the raw results archive) lives in one data
+directory, `./data` unless `NYAYO_DATA_DIR` says otherwise. Configuration comes from a `.env` file in the
 repository root; `.env.example` lists every setting.
 
 ## Development on Windows
@@ -65,10 +65,17 @@ Browse to http://172.16.100.11:8001/ and stop it with Ctrl-C.
 deploy/install-service.sh
 ```
 
-It fills in `deploy/nyayo.service` for this checkout, user and conda env (found through `conda info --base`; set
-`NYAYO_CONDA_ENV` if the env isn't called `nyayo`), installs it with `sudo`, starts it and shows its status. Running it
-again reinstalls the unit, which is how a change to the unit file reaches the server. Follow the log with
-`journalctl -u nyayo -f`.
+It fills in the units in `deploy/` for this checkout, user and conda env (found through `conda info --base`; set
+`NYAYO_CONDA_ENV` if the env isn't called `nyayo`), installs them with `sudo`, starts them and shows their status:
+
+- `nyayo.service`, the site on port 8001;
+- `nyayo-expire.timer`, which runs `manage.py expire_runs` daily at 04:30 through `nyayo-expire.service`. It deletes
+  wip runs never promoted within 14 days and committed runs not published within 30 (`NYAYO_WIP_DAYS`,
+  `NYAYO_COMMITTED_DAYS` in `.env`). Published runs are kept. `python manage.py expire_runs --dry-run` shows what
+  it would delete.
+
+Running the script again reinstalls the units, which is how a change to a unit file reaches the server. Follow the
+log with `journalctl -u nyayo -f`.
 
 ### Updating
 
@@ -78,6 +85,23 @@ deploy/update.sh
 
 It pulls, reinstalls the package, migrates the database, collects static files and restarts the service. No need to
 activate the env first.
+
+## Machines and tokens
+
+Every machine that pushes runs has its own token, so a run can be traced to the box that sent it. In the admin
+(`/admin/`, Runs, Machines) add a machine; the token is shown once, at the top of the page, copy it then. To revoke
+one untick *active*; the *new token* action replaces a lost one.
+
+On the machine, in the Elephant checkout:
+
+```sh
+git config nyayo.url http://172.16.100.11:8001      # http://127.0.0.1:8000 for a local nyayo
+git config nyayo.token <the token>
+python test/results.py sync                         # uploads every run nyayo doesn't have yet
+```
+
+`test/smoke.sh` and Elephant's post-commit hook sync on their own after that. Deleting `logs/results/uploaded.json`
+makes the next sync upload everything again.
 
 ## Behind a reverse proxy later
 

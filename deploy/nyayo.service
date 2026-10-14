@@ -1,4 +1,4 @@
-# systemd unit for nyayo on bobby. deploy/install-service.sh fills in User, WorkingDirectory and the gunicorn path
+# systemd unit for nyayo on bobby. deploy/install-service.sh fills in User, WorkingDirectory and the env's bin path
 # for the checkout and conda env it runs from, then installs and starts it.
 
 [Unit]
