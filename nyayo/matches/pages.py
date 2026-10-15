@@ -103,11 +103,27 @@ def match_detail(request, match_id):
     entries = game_entries(match)
     groups = {name: [e for e in entries if e["state"] == name] for name in STATE_ORDER}
     return render(request, "matches/match_detail.html", {
-        "match": match, "summary": stats.summarize(match.results.all(), excluded), "excluded": excluded,
+        "match": match, "boards": live_boards(match, groups["playing"]), "summary": stats.summarize(match.results.all(), excluded), "excluded": excluded,
         "groups": groups, "entries": entries, "refresh": match.state == "running", "settings": match.settings,
         "host": match.host, "subject_name": engine_label(match.subject),
         "producer_url": (match.producer or {}).get("url"),
     })
+
+
+def live_boards(match, playing):
+    """The boards of the games being played, as they stand, for the match page to show at a glance."""
+    boards = []
+    for entry in playing:
+        raw = games.read_pgn(match.pk, entry["number"])
+        parsed = pgnview.load(raw) if raw else None
+        if parsed is None:
+            continue
+        plies = len(parsed.moves)
+        orientation = chess.BLACK if entry["colour"] == "black" else chess.WHITE
+        boards.append({"entry": entry, "plies": plies, "last": parsed.moves[-1] if parsed.moves else None,
+                       "white": parsed.headers.get("White", ""), "black": parsed.headers.get("Black", ""),
+                       "svg": pgnview.board_svg(parsed, plies, orientation, size=260)})
+    return boards
 
 
 def game_context(match, game, ply=None):

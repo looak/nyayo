@@ -136,6 +136,12 @@
   .outcome-win { color: var(--better); font-weight: 600; }
   .outcome-loss { color: var(--worse); font-weight: 600; }
   .outcome-draw { color: var(--muted); font-weight: 600; }
+  .boards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .75rem; }
+  .live-board { display: block; padding: .5rem; border: 1px solid var(--line); border-radius: 8px;
+                background: var(--card); color: var(--fg); }
+  .live-board:hover { border-color: var(--link); text-decoration: none; }
+  .live-board-svg svg { display: block; width: 100%; height: auto; }
+  .live-board-caption { margin-top: .4rem; font-size: .85rem; overflow-wrap: anywhere; }
   .moves-panel { flex: 1 1 20rem; min-width: 0; }
   .evalgraph { display: block; width: 100%; max-width: 420px; margin-top: .75rem; background: var(--code-bg);
                border-radius: 4px; }

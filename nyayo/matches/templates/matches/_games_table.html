@@ -7,9 +7,9 @@
   <tbody>
   {% for e in entries %}
     <tr>
-      <td class="num">{% if e.has_pgn %}<a href="{% url 'game' match.pk e.number %}">{{ e.number }}</a>{% else %}{{ e.number }}{% endif %}</td>
+      <td class="num">{% if e.has_pgn %}<a href="{% url 'game' match.pk e.number %}">{{ e.number }} {% if e.state == "playing" %}watch{% else %}view{% endif %}</a>{% else %}{{ e.number }}{% endif %}</td>
       <td class="num">{{ e.round|default_if_none:"" }}</td>
-      <td>{{ e.opponent_name }}</td>
+      <td>{{ e.opponent_name }}{% if e.opponent_name != e.opponent %} <span class="muted">{{ e.opponent }}</span>{% endif %}</td>
       <td>{{ e.colour|default:"" }}</td>
       <td>{% if e.state == "playing" %}<span class="badge running">playing</span>{% elif e.state == "finished" %}finished{% else %}<span class="muted">{{ e.state }}</span>{% endif %}</td>
       <td>{% if e.outcome %}<span class="outcome-{{ e.outcome }}">{{ e.outcome }}</span> <span class="muted">{{ e.result }}</span>{% elif e.result %}{{ e.result }}{% endif %}</td>

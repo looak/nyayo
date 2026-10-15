@@ -20,7 +20,8 @@ GRAPH_WIDTH, GRAPH_HEIGHT = 400, 90
 
 @dataclass
 class Move:
-    ply: int  # 1 for white's first move
+    ply: int  # 1 for the first move played, not necessarily white's: a game may start from a position
+    number: int  # the move number as a score sheet writes it
     san: str
     uci: str
     colour: str  # white | black
@@ -29,10 +30,6 @@ class Move:
     depth: int | None = None
     seconds: float | None = None
     comment: str = ""
-
-    @property
-    def number(self):
-        return (self.ply + 1) // 2
 
     @property
     def book(self):
@@ -75,7 +72,7 @@ def load(raw):
         score, pawns, depth, seconds = parse_comment(node.comment)
         if pawns is not None and colour == "black":
             pawns = -pawns
-        moves.append(Move(ply=len(moves) + 1, san=board.san(move), uci=move.uci(), colour=colour, score=score,
+        moves.append(Move(ply=len(moves) + 1, number=board.fullmove_number, san=board.san(move), uci=move.uci(), colour=colour, score=score,
                           pawns=pawns, depth=depth, seconds=seconds, comment=node.comment.strip()))
         board.push(move)
     return Parsed(dict(game.headers), moves, game.headers.get("Result", "*"), start)

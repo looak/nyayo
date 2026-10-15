@@ -180,3 +180,35 @@ class Pages(GameTestCase):
         self.put_game(pgn(white="Barbarossa 0.6.0", black="Elephant 1.0.0"))
         self.assertEqual(Match.objects.count(), 1)
         self.assertContains(self.client.get("/matches/gauntlet-test-1/games/1"), "<svg")
+
+
+FROM_A_POSITION = "\n".join([
+    '[White "Elephant 1.0.0"]',
+    '[Black "Barbarossa 0.6.0"]',
+    '[Result "*"]',
+    '[SetUp "1"]',
+    '[FEN "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"]',
+    "",
+    "2. Nf3 Nc6 3. Bb5 *",
+    "",
+]).encode()
+
+
+class FromAPosition(SimpleTestCase):
+    def test_move_numbers_follow_the_position(self):
+        parsed = pgnview.load(FROM_A_POSITION)
+        self.assertEqual([m.number for m in parsed.moves], [2, 2, 3])
+        self.assertEqual([row[0] for row in pgnview.pairs(parsed.moves)], [2, 3])
+
+
+class LiveBoards(GameTestCase):
+    def test_the_match_page_shows_the_boards_being_played(self):
+        self.put_match(scheduled())
+        self.put_game(COMMENTED, game="2")
+        response = self.client.get("/matches/gauntlet-test-1")
+        self.assertContains(response, "Playing now")
+        self.assertContains(response, 'class="live-board"')
+        self.assertContains(response, "<svg")
+
+    def test_no_boards_when_nothing_is_playing(self):
+        self.assertNotContains(self.client.get("/matches/gauntlet-test-1"), "Playing now")

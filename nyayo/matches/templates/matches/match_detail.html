@@ -26,6 +26,22 @@
   </dl>
 </div>
 
+{% if boards %}
+<h2>Playing now</h2>
+<div class="boards">
+  {% for b in boards %}
+  <a class="live-board" href="{% url 'game' match.pk b.entry.number %}">
+    <div class="live-board-svg">{{ b.svg|safe }}</div>
+    <div class="live-board-caption"><strong>Game {{ b.entry.number }}</strong>
+      <span class="muted">{{ b.entry.opponent }}, move {{ b.last.number|default:"–" }}</span><br>
+      {{ b.white }} <span class="muted">v</span> {{ b.black }}
+      {% if b.last and b.last.score %}<br><span class="mono">{{ b.last.san }} {{ b.last.score }}</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
 <h2>Results</h2>
 <form method="get">
 <div class="scroll">
