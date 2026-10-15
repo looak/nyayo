@@ -61,6 +61,13 @@ def store(match_id, game_id, raw):
     if not Match.objects.filter(pk=match_id).exists():
         raise IngestError(404, f"unknown match {match_id}, PUT the match document first")
 
+    # a sealed game is answered before anything is parsed
+    row = Game.objects.filter(match_id=match_id, game=game_id).order_by().first()
+    if row is not None and not row.live:
+        if read_pgn(match_id, game_id) == raw:
+            return False
+        raise IngestError(409, f"game {game_id} is sealed with result {row.result}, it can't change")
+
     headers, _ = parse(raw)
     result = headers.get("Result", "*")
     if result not in RESULTS:
@@ -69,11 +76,6 @@ def store(match_id, game_id, raw):
 
     # No transaction around this: the common case, one more move, only reads, and in SQLite an IMMEDIATE transaction
     # would take the write lock for it anyway.
-    row = Game.objects.filter(match_id=match_id, game=game_id).order_by().first()
-    if row is not None and not row.live:
-        if read_pgn(match_id, game_id) == raw:
-            return False
-        raise IngestError(409, f"game {game_id} is sealed with result {row.result}, it can't change")
     path = game_path(match_id, game_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(path, raw)

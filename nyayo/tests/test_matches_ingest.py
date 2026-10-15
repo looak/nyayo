@@ -324,9 +324,12 @@ class Schedule(MatchTestCase):
         later = scheduled()
         del later["games"][1]
         self.assertRefused(self.put_match(later), 409, "games[2] is gone")
+
+    def test_a_playing_game_may_be_scheduled_again_by_a_resume(self):
+        self.put_match(scheduled())
         later = scheduled()
         later["games"][1]["state"] = "scheduled"
-        self.assertRefused(self.put_match(later), 409, "can't go back to scheduled")
+        self.assertEqual(self.put_match(later).status_code, 200)
 
     def test_validation(self):
         document = scheduled()

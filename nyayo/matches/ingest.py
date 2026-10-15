@@ -252,7 +252,8 @@ def check_update(previous, document):
 
 def check_schedule(before, after):
     """A game that has started keeps its number, round, opponent and colour, and a finished one its result; the
-    schedule may grow, and a scheduled game may be corrected or dropped."""
+    schedule may grow, and a scheduled game may be corrected or dropped. A playing game may be reported as scheduled
+    again: a resumed gauntlet replays what was cut off."""
     if not before:
         return
     now = {game["number"]: game for game in after or []}
@@ -269,8 +270,6 @@ def check_schedule(before, after):
         if game.get("state") == "finished" and (current["state"], current.get("result")) != ("finished",
                                                                                            game.get("result")):
             raise IngestError(409, f"games[{number}] finished with {game.get('result')} and can't change")
-        if game.get("state") == "playing" and current["state"] == "scheduled":
-            raise IngestError(409, f"games[{number}] was playing, it can't go back to scheduled")
 
 
 def check_update_against(existing, document):
