@@ -1,0 +1,67 @@
+{% load runs_extras matches_extras %}
+{% if waiting %}
+<p class="muted">This game has not started yet{% if entry.round %} (round {{ entry.round }}, against {{ entry.opponent_name }}){% endif %}. This page updates when its first move arrives.</p>
+{% else %}
+<div class="game" data-ply="{{ ply }}" data-plies="{{ plies }}">
+  <p>
+    {% if live %}<span class="badge running">live</span>
+    {% elif cut_off %}<span class="badge stopped">cut off</span> <span class="muted">the match is {{ match.state }}, this game did not finish</span>
+    {% else %}<strong>{{ result }}</strong>{% if headers.Termination %} <span class="muted">{{ headers.Termination }}</span>{% endif %}{% endif %}
+    {% if entry.outcome %}<span class="outcome-{{ entry.outcome }}">{{ entry.outcome }} for the engine under test</span>{% endif %}
+    <span class="muted">move {{ ply }} of {{ plies }}</span>
+  </p>
+  <div class="position">
+    <div class="board">{{ board|safe }}
+      <p class="nowrap">
+        <a href="?ply=0" data-goto="0">⏮</a>
+        <a href="?ply={{ ply|add:"-1" }}" data-goto="{{ ply|add:"-1" }}">◀</a>
+        <a href="?ply={{ ply|add:"1" }}" data-goto="{{ ply|add:"1" }}">▶</a>
+        <a href="?ply={{ plies }}" data-goto="{{ plies }}">⏭</a>
+        {% if live and not at_end %}<span class="muted">behind the game</span>{% endif %}
+      </p>
+    </div>
+    <div class="moves-panel">
+      <dl class="facts">
+        <dt>White</dt><dd>{{ headers.White }}{% if subject_colour == "white" %} <span class="muted">(engine under test)</span>{% endif %}</dd>
+        <dt>Black</dt><dd>{{ headers.Black }}{% if subject_colour == "black" %} <span class="muted">(engine under test)</span>{% endif %}</dd>
+        {% if move %}<dt>Last move</dt><dd>{{ move.number }}{% if move.colour == "white" %}.{% else %}…{% endif %} {{ move.san }}
+          {% if move.score %}<span class="mono">{{ move.score }}</span> <span class="muted">depth {{ move.depth }}, {{ move.seconds|num }} s</span>{% elif move.book %}<span class="muted">book</span>{% endif %}</dd>{% endif %}
+      </dl>
+      {% if graph %}
+      <svg class="evalgraph" viewBox="0 0 {{ graph.width }} {{ graph.height }}" role="img"
+           aria-label="Evaluation from white's side, from black ahead at the bottom to white ahead at the top">
+        <line x1="0" x2="{{ graph.width }}" y1="{{ graph.mid }}" y2="{{ graph.mid }}" class="axis"/>
+        <polyline points="{{ graph.points }}" class="line"/>
+        {% if graph.cursor is not None %}<line x1="{{ graph.cursor|floatformat:1 }}" x2="{{ graph.cursor|floatformat:1 }}" y1="0" y2="{{ graph.height }}" class="cursor"/>{% endif %}
+      </svg>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="scroll">
+  <table class="moves">
+    <thead><tr><th class="num">#</th><th>White</th><th class="num">Score</th><th class="num">Depth</th><th class="num">Time</th>
+      <th>Black</th><th class="num">Score</th><th class="num">Depth</th><th class="num">Time</th></tr></thead>
+    <tbody>
+    {% for number, white, black in rows %}
+      <tr>
+        <td class="num">{{ number }}</td>
+        {% if white %}
+          <td{% if white.ply == ply %} class="here"{% endif %}><a href="?ply={{ white.ply }}" data-goto="{{ white.ply }}">{{ white.san }}</a></td>
+          <td class="num mono">{% if white.book %}book{% else %}{{ white.score }}{% endif %}</td>
+          <td class="num">{{ white.depth|default_if_none:"" }}</td><td class="num">{{ white.seconds|default_if_none:""|num }}</td>
+        {% else %}<td colspan="4" class="muted">…</td>{% endif %}
+        {% if black %}
+          <td{% if black.ply == ply %} class="here"{% endif %}><a href="?ply={{ black.ply }}" data-goto="{{ black.ply }}">{{ black.san }}</a></td>
+          <td class="num mono">{% if black.book %}book{% else %}{{ black.score }}{% endif %}</td>
+          <td class="num">{{ black.depth|default_if_none:"" }}</td><td class="num">{{ black.seconds|default_if_none:""|num }}</td>
+        {% else %}<td colspan="4"></td>{% endif %}
+      </tr>
+    {% empty %}
+      <tr><td colspan="9" class="muted">No moves yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}

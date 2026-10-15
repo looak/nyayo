@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}nyayo{% endblock %}</title>
+{% block head %}{% endblock %}
 <style>
   :root {
     --bg: #fbfbf9; --fg: #1d1f21; --muted: #6b6f76; --line: #e2e2dc; --card: #ffffff; --link: #2357b5;
@@ -128,12 +129,28 @@
   .dot.warn { background: var(--wip); }
   .dot.fail, .dot.error { background: var(--cell-fail); }
   .pager { margin-top: .75rem; display: flex; gap: 1rem; }
+  .badge.running { color: var(--better); background: var(--published-bg); }
+  .badge.finished { color: var(--committed); background: var(--committed-bg); }
+  .badge.stopped { color: var(--wip); background: var(--wip-bg); }
+  .badge.error { color: var(--worse); background: var(--error-bg); }
+  .outcome-win { color: var(--better); font-weight: 600; }
+  .outcome-loss { color: var(--worse); font-weight: 600; }
+  .outcome-draw { color: var(--muted); font-weight: 600; }
+  .moves-panel { flex: 1 1 20rem; min-width: 0; }
+  .evalgraph { display: block; width: 100%; max-width: 420px; margin-top: .75rem; background: var(--code-bg);
+               border-radius: 4px; }
+  .evalgraph .axis { stroke: var(--line); stroke-width: 1; }
+  .evalgraph .line { fill: none; stroke: var(--link); stroke-width: 1.5; }
+  .evalgraph .cursor { stroke: var(--fg); stroke-width: 1; stroke-dasharray: 3 3; }
+  table.moves td.here { background: var(--committed-bg); font-weight: 700; }
+  table.moves td, table.moves th { padding: .15rem .45rem; }
 </style>
 </head>
 <body>
 <header>
   <a class="brand" href="{% url 'runs' %}">nyayo</a>
   <a href="{% url 'runs' %}">Runs</a>
+  <a href="{% url 'matches' %}">Matches</a>
   <a href="{% url 'compare' %}">Compare</a>
   <a href="{% url 'admin:index' %}">Admin</a>
 </header>

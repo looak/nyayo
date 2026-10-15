@@ -1,0 +1,56 @@
+{% extends "runs/base.html" %}
+{% load matches_extras %}
+{% block title %}Matches · nyayo{% endblock %}
+{% block content %}
+<h1>Matches</h1>
+<form class="filters" method="get">
+  <label>Kind
+    <select name="kind" onchange="this.form.submit()">
+      <option value="">all kinds</option>
+      {% for k in kinds %}<option value="{{ k }}"{% if k == kind %} selected{% endif %}>{{ k }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>State
+    <select name="state" onchange="this.form.submit()">
+      <option value="">all states</option>
+      {% for s in states %}<option value="{{ s }}"{% if s == state %} selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Engine under test
+    <select name="engine" onchange="this.form.submit()">
+      <option value="">all engines</option>
+      {% for e in engines %}<option value="{{ e.pk }}"{% if e.pk|stringformat:"s" == engine %} selected{% endif %}>{{ e }}</option>{% endfor %}
+    </select>
+  </label>
+  <noscript><button>Filter</button></noscript>
+</form>
+{% if page.object_list %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Updated</th><th>Match</th><th>Kind</th><th>State</th><th>Engine</th><th class="num">Games</th>
+    <th class="num">Score</th><th class="num">Elo</th></tr></thead>
+  <tbody>
+  {% for match in page.object_list %}
+    <tr>
+      <td class="nowrap">{{ match.updated_at|date:"Y-m-d H:i" }}</td>
+      <td><a href="{% url 'match' match.pk %}">{{ match.name|default:match.pk }}</a></td>
+      <td><span class="tier">{{ match.kind }}</span></td>
+      <td><span class="badge {{ match.state }}">{{ match.state }}</span></td>
+      <td>{{ match.subject }}</td>
+      <td class="num">{{ match.summary.overall.games }}{% if match.progress.total %}<span class="muted">/{{ match.progress.total }}</span>{% endif %}</td>
+      <td class="num">{{ match.summary.overall.score|percent }}</td>
+      <td class="num">{{ match.summary.overall.elo|elo }} <span class="muted">{{ match.summary.overall.error|error }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<div class="pager">
+  {% if page.has_previous %}<a href="?kind={{ kind }}&state={{ state }}&engine={{ engine }}&page={{ page.previous_page_number }}">newer</a>{% endif %}
+  <span class="muted">page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?kind={{ kind }}&state={{ state }}&engine={{ engine }}&page={{ page.next_page_number }}">older</a>{% endif %}
+</div>
+{% else %}
+<p class="muted">No matches yet. A gauntlet runner reports them with <code>PUT /api/matches/{id}</code>.</p>
+{% endif %}
+{% endblock %}

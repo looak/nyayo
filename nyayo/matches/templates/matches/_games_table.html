@@ -1,0 +1,22 @@
+{% if entries %}
+{% if title %}<h3>{{ title }} <span class="muted">{{ entries|length }}</span></h3>{% endif %}
+<div class="scroll">
+<table>
+  <thead><tr><th class="num">Game</th><th class="num">Round</th><th>Opponent</th><th>Engine under test played</th>
+    <th>State</th><th>Result</th><th>Ended by</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+    <tr>
+      <td class="num">{% if e.has_pgn %}<a href="{% url 'game' match.pk e.number %}">{{ e.number }}</a>{% else %}{{ e.number }}{% endif %}</td>
+      <td class="num">{{ e.round|default_if_none:"" }}</td>
+      <td>{{ e.opponent_name }}</td>
+      <td>{{ e.colour|default:"" }}</td>
+      <td>{% if e.state == "playing" %}<span class="badge running">playing</span>{% elif e.state == "finished" %}finished{% else %}<span class="muted">{{ e.state }}</span>{% endif %}</td>
+      <td>{% if e.outcome %}<span class="outcome-{{ e.outcome }}">{{ e.outcome }}</span> <span class="muted">{{ e.result }}</span>{% elif e.result %}{{ e.result }}{% endif %}</td>
+      <td>{{ e.termination|default:"" }}{% if e.fault %} <span class="worse">{{ e.fault.kind }}, {{ e.fault.side }}</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
