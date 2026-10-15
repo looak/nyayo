@@ -7,6 +7,9 @@ from django.utils import timezone
 from . import chessboard
 
 STATES = ["wip", "committed", "published"]
+KINDS = ["smoke", "extended"]
+# a check's outcome from best to worst, a run is as good as its worst check
+OUTCOMES = ["pass", "none", "skipped", "warn", "fail", "error"]
 
 
 class Machine(models.Model):
@@ -74,6 +77,18 @@ class Run(models.Model):
     def short_name(self):
         head = self.commit[:10] if self.commit else "wip"
         return f"{head}-{self.kind}-{self.recorded_at.strftime('%Y%m%dT%H%M%S')}"
+
+    @property
+    def summary(self):
+        """Every check folded into one: the worst outcome, positions solved and the total over all checks, and each
+        check with its outcome for a per-check marker."""
+        checks = list(self.checks.all())
+        outcome = max((c.outcome for c in checks), key=lambda o: OUTCOMES.index(o) if o in OUTCOMES else 0,
+                      default=None)
+        solved = sum(c.metric("solved") or 0 for c in checks)
+        total = sum(c.metric("total") or 0 for c in checks)
+        return {"outcome": outcome, "checks": checks, "solved": solved, "total": total,
+                "percent": 100.0 * solved / total if total else 0.0}
 
     @property
     def revision(self):

@@ -16,17 +16,19 @@ Elo maths from.
 
 nyayo receives smoke runs pushed from developer machines and shows them:
 
-- **Runs**, newest first, filtered by branch and state (wip, committed, published).
+- **Runs**, newest first, filtered by branch, state (wip, committed, published) and kind (smoke, extended). Each is
+  named by its branch and commit and sums up its checks: the worst verdict, positions solved over all of them and a
+  marker per check, plus how long the run took.
 - **A run**, every check against its baseline: the newest comparable run on the nearest commit it descends from.
-  Each check shows its verdict, its settings, when it ran and how long it took, its score as a bar split into positions that pass, newly pass, newly
-  fail and fail (with the suite's minimum and the baseline's score marked), and a grid of every position linking to
-  its history. Then the positions that newly fail or pass, STS points that moved, and positions that found another
+  Each check shows its verdict, its settings, when it ran and how long it took, its score as a bar split into
+  positions that pass, newly pass, newly fail and fail (with the suite's minimum and the baseline's score marked), and
+  a grid of every position linking to its history. Then the positions that newly fail or pass, STS points that moved, and positions that found another
   move.
 - **Compare** any two runs, or a run against its baselines or the previous run on its branch. Checks searched with
   different settings are listed as not comparable, never counted as passing.
 - **A position** (`/case/epd.wac_new/WAC.297`) on a board with arrows for the expected move (and moves to avoid), then
-  every attempt along a branch's history with its time, the move played in SAN and how long the search took: since when it fails, when it last
-  passed.
+  every attempt along a branch's history with its time, the move played in SAN and how long the search took: since
+  when it fails, when it last passed.
 
 Runs arrive as `PUT /api/runs/{id}` with a per-machine token; the format and the rules are in
 [docs/results-schema.md](docs/results-schema.md). Pulling CI runs from GitHub comes next. See

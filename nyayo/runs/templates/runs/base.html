@@ -111,6 +111,16 @@
   .board { width: 100%; max-width: 360px; }
   .board svg { display: block; width: 100%; height: auto; }
   .nowrap { white-space: nowrap; }
+  .run-summary { display: flex; flex-wrap: wrap; gap: .3rem .75rem; align-items: center; }
+  .run-summary .outcome { min-width: 7.5rem; text-align: center; }
+  .mini-bar { display: inline-flex; width: 8rem; height: 8px; border-radius: 3px; overflow: hidden;
+              background: var(--cell-fail); }
+  .mini-figure { font-variant-numeric: tabular-nums; min-width: 5.5rem; }
+  .check-dots { display: inline-flex; gap: 3px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--muted); }
+  .dot.pass { background: var(--cell-pass); }
+  .dot.warn { background: var(--wip); }
+  .dot.fail, .dot.error { background: var(--cell-fail); }
   .pager { margin-top: .75rem; display: flex; gap: 1rem; }
 </style>
 </head>

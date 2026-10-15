@@ -16,32 +16,41 @@
       {% for s in states %}<option value="{{ s }}"{% if s == state %} selected{% endif %}>{{ s }}</option>{% endfor %}
     </select>
   </label>
+  <label>Kind
+    <select name="kind" onchange="this.form.submit()">
+      <option value="">all kinds</option>
+      {% for k in kinds %}<option value="{{ k }}"{% if k == kind %} selected{% endif %}>{{ k }}</option>{% endfor %}
+    </select>
+  </label>
   <noscript><button>Filter</button></noscript>
 </form>
 {% if page.object_list %}
 <div class="scroll">
 <table>
-  <thead><tr><th>Run</th><th>State</th><th>Branch</th><th>Commit / tree</th><th>Machine</th><th>Checks</th><th class="num">Took</th><th>Recorded</th></tr></thead>
+  <thead><tr><th>Recorded</th><th>Run</th><th>State</th><th>Checks</th><th class="num">Took</th></tr></thead>
   <tbody>
-  {% for run in page.object_list %}
+  {% for run in page.object_list %}{% with summary=run.summary %}
     <tr>
-      <td class="mono"><a href="{% url 'run' run.pk %}">{{ run.short_name }}</a></td>
+      <td class="nowrap">{{ run.recorded_at|date:"Y-m-d H:i" }}</td>
+      <td><a href="{% url 'run' run.pk %}">{{ run.branch|default:"(no branch)" }} <span class="mono">{{ run.revision|sha:7 }}</span></a> <span class="muted">{{ run.kind }}</span></td>
       <td><span class="badge {{ run.state }}">{{ run.state }}</span></td>
-      <td>{{ run.branch }}</td>
-      <td class="mono">{% if run.commit %}{{ run.commit|sha }}{% else %}<span class="muted">tree</span> {{ run.tree|sha }}{% endif %}</td>
-      <td>{{ run.machine|default:"" }}<div class="muted">{{ run.host_name }}</div></td>
-      <td>{% for check in run.checks.all %}<div>{{ check.name|default:check.check_id }} <span class="muted">{{ check.totals }}</span>{% if check.status != "pass" %} <span class="status-error">{{ check.status }}</span>{% endif %}</div>{% endfor %}</td>
+      <td>{% if summary.checks %}
+        <div class="run-summary">
+          <span class="outcome {{ summary.outcome }}">{{ summary.outcome|outcome_label }}</span>
+          {% if summary.total %}<span class="mini-bar" role="img" aria-label="{{ summary.solved|num }} of {{ summary.total|num }} positions solved"><span class="seg pass" style="width: {{ summary.percent|stringformat:".3f" }}%"></span></span>
+          <span class="mini-figure">{{ summary.solved|num }}<span class="muted">/{{ summary.total|num }}</span></span>{% endif %}
+          <span class="check-dots">{% for check in summary.checks %}<i class="dot {{ check.outcome }}" title="{{ check.name|default:check.check_id }}: {{ check.outcome|outcome_label }}{% if check.totals %}, {{ check.totals }}{% endif %}{% if check.duration is not None %}, {{ check.duration|seconds }}{% endif %}"></i>{% endfor %}</span>
+        </div>{% else %}<span class="muted">no checks</span>{% endif %}</td>
       <td class="num nowrap">{{ run.duration|seconds }}</td>
-      <td class="muted">{{ run.recorded_at|date:"Y-m-d H:i" }}</td>
     </tr>
-  {% endfor %}
+  {% endwith %}{% endfor %}
   </tbody>
 </table>
 </div>
 <div class="pager">
-  {% if page.has_previous %}<a href="?branch={{ branch|urlencode }}&state={{ state }}&page={{ page.previous_page_number }}">newer</a>{% endif %}
+  {% if page.has_previous %}<a href="?branch={{ branch|urlencode }}&state={{ state }}&kind={{ kind|urlencode }}&page={{ page.previous_page_number }}">newer</a>{% endif %}
   <span class="muted">page {{ page.number }} of {{ page.paginator.num_pages }}</span>
-  {% if page.has_next %}<a href="?branch={{ branch|urlencode }}&state={{ state }}&page={{ page.next_page_number }}">older</a>{% endif %}
+  {% if page.has_next %}<a href="?branch={{ branch|urlencode }}&state={{ state }}&kind={{ kind|urlencode }}&page={{ page.next_page_number }}">older</a>{% endif %}
 </div>
 {% else %}
 <p class="muted">No runs yet. Push one from Elephant with <code>python test/results.py sync</code>.</p>

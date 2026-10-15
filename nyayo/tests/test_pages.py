@@ -23,10 +23,14 @@ class Pages(NyayoTestCase):
 
     def test_runs_list(self):
         page = self.get("/")
-        self.assertIn("d695c0979c-smoke-20261014T015748", page)
+        self.assertLess(page.index(self.child["run"]["id"]), page.index(self.real["run"]["id"]))
+        self.assertIn('herd-smoke-report <span class="mono">d695c09</span></a> <span class="muted">smoke</span>', page)
         self.assertIn('class="badge committed"', page)
-        self.assertIn("260/300", page)
-        self.assertIn("133/325, 1707/3250 pts", page)
+        self.assertIn('<span class="outcome pass">passed</span>', page)
+        self.assertIn('657<span class="muted">/925</span>', page)
+        self.assertIn('title="Smoke_STS: passed, 133/325, 1707/3250 pts, 12.8 s"', page)
+        self.assertNotIn(self.real["run"]["id"], self.get("/?kind=extended"))
+        self.assertIn(self.real["run"]["id"], self.get("/?kind=smoke"))
         self.assertIn('<td class="num nowrap">41.0 s</td>', page)
         self.assertNotIn(self.real["run"]["id"], self.get("/?state=wip"))
         self.assertIn(self.real["run"]["id"], self.get("/?branch=herd-smoke-report&state=committed"))

@@ -11,7 +11,7 @@ from django.views.decorators.http import require_http_methods
 
 from . import chessboard, compare
 from .ingest import IngestError, ingest
-from .models import STATES, Machine, Run
+from .models import KINDS, STATES, Machine, Run
 
 
 def text(status, body):
@@ -61,15 +61,18 @@ def run_queryset():
 
 
 def runs_list(request):
-    runs = run_queryset()
-    branch, state = request.GET.get("branch", ""), request.GET.get("state", "")
+    runs = run_queryset().order_by("-recorded_at")
+    branch, state, kind = request.GET.get("branch", ""), request.GET.get("state", ""), request.GET.get("kind", "")
     if branch:
         runs = runs.filter(branch=branch)
     if state in STATES:
         runs = runs.filter(state=state)
+    if kind:
+        runs = runs.filter(kind=kind)
+    kinds = KINDS + sorted(set(Run.objects.values_list("kind", flat=True)) - set(KINDS))
     page = Paginator(runs, 50).get_page(request.GET.get("page"))
     return render(request, "runs/runs_list.html", {
-        "page": page, "branch": branch, "state": state, "states": STATES,
+        "page": page, "branch": branch, "state": state, "states": STATES, "kind": kind, "kinds": kinds,
         "branches": Run.objects.order_by("branch").values_list("branch", flat=True).distinct(),
     })
 
