@@ -2,7 +2,7 @@
 {% load runs_extras %}
 {% block title %}{{ run.short_name }} · nyayo{% endblock %}
 {% block content %}
-<h1>{{ run.branch|default:"(no branch)" }} <span class="mono">{{ run.revision|sha:7 }}</span> <span class="muted">{{ run.kind }}</span> <span class="badge {{ run.state }}">{{ run.state }}</span></h1>
+<h1>{{ run.branch|default:"(no branch)" }} <span class="mono">{{ run.revision|sha:7 }}</span> <span class="tier {{ run.kind }}">{{ run.kind }}</span> <span class="badge {{ run.state }}">{{ run.state }}</span></h1>
 <dl class="facts">
   <dt>Branch</dt><dd>{{ run.branch }}</dd>
   {% if run.commit %}<dt>Commit</dt><dd class="mono">{{ run.commit }}</dd>{% endif %}

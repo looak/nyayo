@@ -11,6 +11,7 @@
     --published: #1f7a3d; --published-bg: #dff3e5; --worse: #b3261e; --better: #1f7a3d; --error-bg: #fde7e5;
     --code-bg: #f1f1ec; --cell-pass: #2da44e; --cell-fail: #cf222e; --cell-newly-failing: #8250df;
     --cell-newly-passing: #0969da;
+    --smoke: #6a3fb5; --smoke-bg: #efe7fb; --extended: #a12a7a; --extended-bg: #fbe6f3;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -20,6 +21,7 @@
       --published: #7fd49a; --published-bg: #173222; --worse: #f28b82; --better: #7fd49a; --error-bg: #3b1f1d;
       --code-bg: #26282c; --cell-pass: #2ea043; --cell-fail: #da3633; --cell-newly-failing: #a371f7;
       --cell-newly-passing: #388bfd;
+      --smoke: #c4a7f5; --smoke-bg: #2d2342; --extended: #f0a3d6; --extended-bg: #3d1f33;
       color-scheme: dark;
     }
   }
@@ -45,6 +47,10 @@
   .badge.wip { color: var(--wip); background: var(--wip-bg); }
   .badge.committed { color: var(--committed); background: var(--committed-bg); }
   .badge.published { color: var(--published); background: var(--published-bg); }
+  .tier { display: inline-block; padding: 0 .45rem; border-radius: 4px; font-size: .78rem; font-weight: 600;
+          color: var(--muted); background: var(--code-bg); }
+  .tier.smoke { color: var(--smoke); background: var(--smoke-bg); }
+  .tier.extended { color: var(--extended); background: var(--extended-bg); }
   .status-fail, .status-error, .worse { color: var(--worse); }
   .status-pass, .better { color: var(--better); }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .75rem 1rem; margin: .75rem 0; }

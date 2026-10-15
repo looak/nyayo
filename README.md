@@ -16,7 +16,7 @@ Elo maths from.
 
 nyayo receives smoke runs pushed from developer machines and shows them:
 
-- **Runs**, newest first, filtered by branch, state (wip, committed, published) and kind (smoke, extended). Each is
+- **Runs**, newest first, filtered by branch, state (wip, committed, published) and tier (smoke, extended). Each is
   named by its branch and commit and sums up its checks: the worst verdict, positions solved over all of them and a
   marker per check, plus how long the run took.
 - **A run**, every check against its baseline: the newest comparable run on the nearest commit it descends from.

@@ -62,7 +62,7 @@ def run_queryset():
 
 def runs_list(request):
     runs = run_queryset().order_by("-recorded_at")
-    branch, state, kind = request.GET.get("branch", ""), request.GET.get("state", ""), request.GET.get("kind", "")
+    branch, state, kind = request.GET.get("branch", ""), request.GET.get("state", ""), request.GET.get("tier", "")
     if branch:
         runs = runs.filter(branch=branch)
     if state in STATES:
