@@ -11,6 +11,7 @@
   <dt>Version</dt><dd>{{ run.version }} <span class="muted">{{ run.kind }}, {{ run.source }}, {{ run.trigger }}</span></dd>
   <dt>Machine</dt><dd>{{ run.machine|default:"" }} <span class="muted">{{ run.host.name }} &middot; {{ run.host.os }} &middot; {{ run.host.logical_cores }} threads</span></dd>
   <dt>Build</dt><dd>{{ run.build.compiler }} {{ run.build.config }}, {{ run.build.bits }}-bit{% if run.build.assertions %}, assertions{% endif %}</dd>
+  {% if run.started_at %}<dt>Ran</dt><dd>{{ run.started_at|date:"Y-m-d H:i:s" }}{% if run.finished_at %} &ndash; {{ run.finished_at|date:"H:i:s" }} <span class="muted">{{ run.duration|seconds }}</span>{% endif %}</dd>{% endif %}
   <dt>Recorded</dt><dd>{{ run.recorded_at|date:"Y-m-d H:i:s" }}{% if run.committed_at %} &middot; committed {{ run.committed_at|date:"Y-m-d H:i" }}{% endif %}{% if run.published_at %} &middot; published {{ run.published_at|date:"Y-m-d H:i" }}{% endif %}</dd>
   <dt>Compare</dt>
   <dd><a href="{% url 'compare' %}?a={{ run.pk }}&amp;b=baseline">with its baselines</a>

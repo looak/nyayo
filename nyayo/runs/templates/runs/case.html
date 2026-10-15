@@ -40,7 +40,7 @@
   {% endif %}
   <div class="scroll">
   <table>
-    <thead><tr><th>Recorded</th><th>Run</th><th>State</th><th>Commit</th><th>Result</th><th>Played</th><th class="num">Points</th><th class="num">Nodes</th></tr></thead>
+    <thead><tr><th>Recorded</th><th>Run</th><th>State</th><th>Commit</th><th>Result</th><th>Played</th><th class="num">Points</th><th class="num">Nodes</th><th class="num">Time</th></tr></thead>
     <tbody>
     {% for row in current.rows %}
       <tr>
@@ -52,8 +52,9 @@
         <td class="mono" title="{{ row.case.got }}">{{ row.case.played }}</td>
         <td class="num">{% if row.case.points is not None %}{{ row.case.points }}/{{ row.case.max_points }}{% endif %}</td>
         <td class="num">{{ row.case.nodes|default:"" }}</td>
+        <td class="num nowrap">{{ row.case.time_ms|millis }}</td>
       </tr>
-      {% if row.file_changed %}<tr><td colspan="8" class="muted">The EPD file changed below this line; older rows searched a different version of it.</td></tr>{% endif %}
+      {% if row.file_changed %}<tr><td colspan="9" class="muted">The EPD file changed below this line; older rows searched a different version of it.</td></tr>{% endif %}
     {% endfor %}
     </tbody>
   </table>

@@ -27,6 +27,7 @@ class Pages(NyayoTestCase):
         self.assertIn('class="badge committed"', page)
         self.assertIn("260/300", page)
         self.assertIn("133/325, 1707/3250 pts", page)
+        self.assertIn('<td class="num nowrap">41.0 s</td>', page)
         self.assertNotIn(self.real["run"]["id"], self.get("/?state=wip"))
         self.assertIn(self.real["run"]["id"], self.get("/?branch=herd-smoke-report&state=committed"))
 
@@ -36,8 +37,10 @@ class Pages(NyayoTestCase):
         self.assertIn("/case/epd.wac_new/WAC.001?branch=herd-smoke-report", page)
         self.assertIn('<span class="outcome pass">passed</span>', page)
         self.assertIn("<code>nodes 150000</code><code>1 thread</code><code>64 MB</code>", page)
-        self.assertIn('<a class="cell newly-failing" href="/case/epd.wac_new/WAC.001?branch=herd-smoke-report" title="WAC.001: fail"',
-                      page)
+        self.assertIn('<a class="cell newly-failing" href="/case/epd.wac_new/WAC.001?branch=herd-smoke-report" '
+                      'title="WAC.001: fail, 52 ms"', page)
+        self.assertIn("never compared\">13.7 s</span>", page)
+        self.assertIn("2026-10-14 01:57:07 &ndash; 01:57:48 <span class=\"muted\">41.0 s</span>", page)
         self.assertIn('<span class="mono">STS1.epd</span> <span class="muted">', page)
         self.assertIn('<span class="score-value">259<span class="score-total">/300</span></span>', page)
         self.assertIn('<span class="delta worse">−1</span>', page)
@@ -63,6 +66,7 @@ class Pages(NyayoTestCase):
         self.assertIn("Smoke_WinAtChess_4Threads", page)
         self.assertIn("<svg", page)
         self.assertIn('title="g3g6">Qg6<', page)
+        self.assertIn('<td class="num nowrap">52 ms</td>', page)
         self.assertIn("Undermine.001", self.get("/case/epd.sts/Undermine.001"))
         self.assertEqual(self.client.get("/case/epd.wac_new/NOPE.999").status_code, 404)
 

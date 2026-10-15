@@ -111,6 +111,7 @@ second comparison is the previous run on the same branch, which may be wip.
                    "points": { "value": 1707 }, "max_points": { "value": 3250 },   // scored suites (STS)
                    "duration": { "value": 14.2, "unit": "s" } },
       "engine_verdict": { "baseline": 260, "minimum": 252, "repeatable": true, "result": "pass" },
+      "started_at": "2026-10-14T01:57:08Z", "finished_at": "2026-10-14T01:57:22Z",          // optional
       "build": { "...": "as run.build" },
       "cases": [
         { "id": "WAC.001", "file": "wac_new.epd", "fen": "...", "status": "pass",   // pass | fail | error
@@ -127,6 +128,10 @@ A case passes when the move played is one of `expected` (bm, SAN) and none of `a
 in coordinate notation. For STS it earns the points of its c0 list, and `status` still says whether it was the best
 move. `error` is a case the harness couldn't run as written, a FEN or a bm/am the parsers rejected. `engine_verdict`
 is the suite's own baseline and minimum, for information: whether a change is a regression is worked out from history.
+
+**Timing** is shown, never compared: the run's and each check's `started_at` and `finished_at`, the `duration`
+metric and each case's `time_ms` depend on what else the machine is doing. They're there to spot a suite that suddenly
+takes five times as long. Timestamps are ISO 8601 with a timezone.
 
 Metrics are free-form: any name with a numeric `value` and an optional `unit` is stored, so a new metric needs no
 change in nyayo. Checks without positions (bench, unit tests) leave `cases` out.

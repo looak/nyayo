@@ -3,6 +3,9 @@
 <section class="card">
   <div class="card-head">
     <h3>{{ pair.check.name|default:pair.check.check_id }}</h3>
+    {% with check=pair.check %}{% if check.started_at or check.duration is not None %}
+    <span class="timing muted" title="Machine load decides this, it's never compared">{% if check.started_at %}{{ check.started_at|date:"H:i:s" }}{% if check.finished_at %} &ndash; {{ check.finished_at|date:"H:i:s" }}{% endif %} &middot; {% endif %}{{ check.duration|seconds }}</span>
+    {% endif %}{% endwith %}
     <span class="outcome {{ pair.check.outcome }}">{{ pair.check.outcome|outcome_label }}</span>
     <div class="params">
       <code>{{ pair.check.check_id }} v{{ pair.check.version }}</code>

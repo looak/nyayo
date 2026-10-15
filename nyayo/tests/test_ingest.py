@@ -29,6 +29,17 @@ class CreateAndUpdate(NyayoTestCase):
         self.assertEqual((undermine.points, undermine.max_points, undermine.got), (10, 10, "f4f5"))
         self.assertEqual(undermine.file_sha256, sts.params["file_sha256"]["STS1.epd"])
         self.assertTrue(Metric.objects.filter(name="duration", unit="s").exists())
+        self.assertEqual(run.duration, 41)
+        self.assertEqual(sts.duration, 12.8)
+
+    def test_check_timestamps(self):
+        document = real_run()
+        document["checks"][1].update(started_at="2026-10-14T01:57:21Z", finished_at="2026-10-14T01:57:31+00:00")
+        del document["checks"][1]["metrics"]["duration"]
+        self.put(document)
+        check = Check.objects.get(name="Smoke_WinAtChess_4Threads")
+        self.assertEqual((check.started_at.second, check.finished_at.second), (21, 31))
+        self.assertEqual(check.duration, 10)
 
     def test_archive_holds_the_raw_bytes(self):
         document = real_run()
@@ -165,6 +176,11 @@ class Refused(NyayoTestCase):
         document = real_run()
         document["checks"].append(document["checks"][0])
         self.assertRefused(document, b"searched exactly like checks[0]")
+
+    def test_check_timestamp_without_timezone(self):
+        document = real_run()
+        document["checks"][2]["started_at"] = "2026-10-14T01:57:21"
+        self.assertRefused(document, b"checks[2].started_at has no timezone")
 
     def test_bad_case_status(self):
         document = real_run()

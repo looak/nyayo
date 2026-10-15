@@ -36,3 +36,25 @@ def outcome_label(value):
     return {"pass": "passed", "fail": "failed", "warn": "below baseline", "none": "no threshold",
             "error": "harness error"}.get(value, value)
 
+
+
+@register.filter
+def seconds(value):
+    """A duration in seconds as 850 ms, 13.7 s, 4 m 05 s or 1 h 02 m; empty when there is none."""
+    if value is None:
+        return ""
+    if value < 1:
+        return f"{value * 1000:.0f} ms"
+    if value < 60:
+        return f"{value:.1f} s"
+    minutes, rest = divmod(round(value), 60)
+    if minutes < 60:
+        return f"{minutes} m {rest:02d} s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} h {minutes:02d} m"
+
+
+@register.filter
+def millis(value):
+    """A duration in milliseconds, as seconds() shows it."""
+    return "" if value is None else seconds(value / 1000)

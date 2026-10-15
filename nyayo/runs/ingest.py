@@ -111,17 +111,17 @@ def invalid(reason):
     return IngestError(400, reason)
 
 
-def timestamp(r, name, required=False):
+def timestamp(r, name, required=False, where="run"):
     value = r.get(name)
     if value is None:
         if required:
-            raise invalid(f"run.{name} is missing")
+            raise invalid(f"{where}.{name} is missing")
         return None
     parsed = parse_datetime(value) if isinstance(value, str) else None
     if parsed is None:
-        raise invalid(f"run.{name} isn't an ISO 8601 timestamp: {value!r}")
+        raise invalid(f"{where}.{name} isn't an ISO 8601 timestamp: {value!r}")
     if timezone.is_naive(parsed):
-        raise invalid(f"run.{name} has no timezone: {value!r}")
+        raise invalid(f"{where}.{name} has no timezone: {value!r}")
     return parsed
 
 
@@ -181,6 +181,8 @@ def validate(document, run_id=None):
             if not isinstance(metric, dict) or not isinstance(metric.get("value"), (int, float)) \
                     or isinstance(metric.get("value"), bool):
                 raise invalid(f"{where}.metrics.{name} needs a numeric value")
+        for name in ("started_at", "finished_at"):
+            timestamp(check, name, where=where)
         cases = check.get("cases", [])
         if not isinstance(cases, list):
             raise invalid(f"{where}.cases must be a list")
@@ -302,7 +304,8 @@ def create_run(document, machine):
             compiler=build.get("compiler") or "", config=build.get("config") or "",
             assertions=build.get("assertions"), exceptions=build.get("exceptions"), bits=build.get("bits"),
             key=check_key(c, run.build), per_file=params.get("per_file"), params=params, build=build,
-            engine_verdict=c.get("engine_verdict"),
+            engine_verdict=c.get("engine_verdict"), started_at=timestamp(c, "started_at"),
+            finished_at=timestamp(c, "finished_at"),
         )
         for name, metric in (c.get("metrics") or {}).items():
             metrics.append(Metric(check_result=check, name=name, value=metric["value"], unit=metric.get("unit") or ""))

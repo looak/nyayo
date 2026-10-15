@@ -1,4 +1,4 @@
-{% with groups=pair.case_groups check=pair.check %}{% if groups %}
+{% load runs_extras %}{% with groups=pair.case_groups check=pair.check %}{% if groups %}
 <details class="positions">
   <summary>Positions <span class="muted">({{ check.totals }})</span></summary>
   <div class="legend muted">
@@ -8,7 +8,7 @@
   {% for file, cells, passed in groups %}
   <div class="cell-row">
     {% if groups|length > 1 %}<div class="cell-label"><span class="mono">{{ file }}</span> <span class="muted">{{ passed }}/{{ cells|length }}</span></div>{% endif %}
-    <div class="cells">{% for case, state in cells %}<a class="cell {{ state }}" href="{% url 'case' check.check_id case.case_id %}?branch={{ branch|urlencode }}" title="{{ case.case_id }}: {{ case.status }}" aria-label="{{ case.case_id }}: {{ case.status }}"></a>{% endfor %}</div>
+    <div class="cells">{% for case, state in cells %}<a class="cell {{ state }}" href="{% url 'case' check.check_id case.case_id %}?branch={{ branch|urlencode }}" title="{{ case.case_id }}: {{ case.status }}{% if case.time_ms is not None %}, {{ case.time_ms|millis }}{% endif %}" aria-label="{{ case.case_id }}: {{ case.status }}"></a>{% endfor %}</div>
   </div>
   {% endfor %}
 </details>

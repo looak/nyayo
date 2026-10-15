@@ -21,7 +21,7 @@
 {% if page.object_list %}
 <div class="scroll">
 <table>
-  <thead><tr><th>Run</th><th>State</th><th>Branch</th><th>Commit / tree</th><th>Machine</th><th>Checks</th><th>Recorded</th></tr></thead>
+  <thead><tr><th>Run</th><th>State</th><th>Branch</th><th>Commit / tree</th><th>Machine</th><th>Checks</th><th class="num">Took</th><th>Recorded</th></tr></thead>
   <tbody>
   {% for run in page.object_list %}
     <tr>
@@ -31,6 +31,7 @@
       <td class="mono">{% if run.commit %}{{ run.commit|sha }}{% else %}<span class="muted">tree</span> {{ run.tree|sha }}{% endif %}</td>
       <td>{{ run.machine|default:"" }}<div class="muted">{{ run.host_name }}</div></td>
       <td>{% for check in run.checks.all %}<div>{{ check.name|default:check.check_id }} <span class="muted">{{ check.totals }}</span>{% if check.status != "pass" %} <span class="status-error">{{ check.status }}</span>{% endif %}</div>{% endfor %}</td>
+      <td class="num nowrap">{{ run.duration|seconds }}</td>
       <td class="muted">{{ run.recorded_at|date:"Y-m-d H:i" }}</td>
     </tr>
   {% endfor %}

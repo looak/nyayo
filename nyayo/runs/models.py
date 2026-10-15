@@ -85,6 +85,15 @@ class Run(models.Model):
         """Commits this run descends from, nearest first: its commit (or base commit while wip) then its ancestors."""
         return self.ancestors or [c for c in (self.commit or self.base_commit,) if c]
 
+    @property
+    def duration(self):
+        """Seconds from start to finish, None when either is missing. Shown, never compared."""
+        return elapsed(self.started_at, self.finished_at)
+
+
+def elapsed(started, finished):
+    return (finished - started).total_seconds() if started and finished else None
+
 
 class Check(models.Model):
     run = models.ForeignKey(Run, on_delete=models.CASCADE, related_name="checks")
@@ -110,6 +119,8 @@ class Check(models.Model):
     params = models.JSONField(default=dict)
     build = models.JSONField(default=dict)
     engine_verdict = models.JSONField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["run", "ordinal"]
@@ -132,6 +143,13 @@ class Check(models.Model):
         if points is not None and max_points is not None:
             text += f", {points:g}/{max_points:g} pts"
         return text
+
+    @property
+    def duration(self):
+        """Seconds the suite took: its duration metric, else its start to finish. Machine load decides it, so it's
+        shown as a sanity check and never compared."""
+        seconds = self.metric("duration")
+        return seconds if seconds is not None else elapsed(self.started_at, self.finished_at)
 
     @property
     def settings_parts(self):
