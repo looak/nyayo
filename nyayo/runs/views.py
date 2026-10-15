@@ -35,17 +35,25 @@ def decompress(body, encoding):
     return data
 
 
+def machine_for(request):
+    """The machine whose bearer token the request carries, None for a missing, unknown or revoked one."""
+    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+    return Machine.for_token(token.strip()) if scheme.lower() == "bearer" else None
+
+
+def unauthorized():
+    response = text(401, "missing, unknown or revoked token")
+    response["WWW-Authenticate"] = "Bearer"
+    return response
+
+
 @csrf_exempt
 @require_http_methods(["PUT"])
 def api_run(request, run_id):
     """PUT /api/runs/{id}: the whole run, created (201) or promoted (200). Errors are a short plain-text reason."""
-    header = request.headers.get("Authorization", "")
-    scheme, _, token = header.partition(" ")
-    machine = Machine.for_token(token.strip()) if scheme.lower() == "bearer" else None
+    machine = machine_for(request)
     if machine is None:
-        response = text(401, "missing, unknown or revoked token")
-        response["WWW-Authenticate"] = "Bearer"
-        return response
+        return unauthorized()
     try:
         raw = decompress(request.body, request.headers.get("Content-Encoding"))
         result = ingest(raw, machine, run_id)
