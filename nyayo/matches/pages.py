@@ -1,8 +1,9 @@
 """The pages: the match list, a match, and a game, live."""
 
 import chess
+from django.conf import settings
 from django.core.paginator import Paginator
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 
@@ -148,25 +149,42 @@ def game_context(match, game, ply=None):
     }
 
 
+def version_token(match_id, game, state, ply):
+    """What a live page has seen of a game: the PGN's fingerprint, the match's state (a stopped match turns a live
+    game into a cut off one without the PGN changing) and the move being looked at."""
+    return f"{games.stamp(match_id, game)}.{state}.{'' if ply is None else ply}"
+
+
+def requested_ply(request):
+    value = request.GET.get("ply", "")
+    return int(value) if value.lstrip("-").isdigit() else None
+
+
 def game_page(request, match_id, game):
     match = get_object_or_404(match_queryset(), pk=match_id)
-    ply = int(request.GET["ply"]) if request.GET.get("ply", "").lstrip("-").isdigit() else None
+    ply = requested_ply(request)
     context = game_context(match, game, ply)
     if context is None:
         raise Http404("no such game")
+    context.update(version=version_token(match_id, game, match.state, ply), pinned=ply is not None,
+                   poll_ms=settings.NYAYO_GAME_POLL_MS)
     return render(request, "matches/game.html", context)
 
 
 def game_fragment(request, match_id, game):
-    """The part of the game page that changes as it is played, for the page to poll."""
+    """The part of the game page that changes as it is played, for the page to poll. Polled many times a second, so
+    when the client says it already has this version (v) the answer is an empty 204 before anything is parsed."""
+    state = Match.objects.filter(pk=match_id).values_list("state", flat=True).first()
+    if state is None:
+        raise Http404("no such match")
+    ply = requested_ply(request)
+    token = version_token(match_id, game, state, ply)
+    if request.GET.get("v") == token:
+        return HttpResponse(status=204)
     match = get_object_or_404(match_queryset(), pk=match_id)
-    try:
-        ply = int(request.GET["ply"]) if "ply" in request.GET else None
-    except ValueError:
-        raise Http404("bad ply")
     context = game_context(match, game, ply)
     if context is None:
         raise Http404("no such game")
     html = render_to_string("matches/_game_body.html", context, request=request)
     return JsonResponse({"html": html, "live": bool(context.get("live")), "plies": context.get("plies", 0),
-                         "waiting": bool(context.get("waiting"))})
+                         "waiting": bool(context.get("waiting")), "v": token})

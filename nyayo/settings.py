@@ -47,6 +47,10 @@ NYAYO_ARCHIVE_DIR = DATA_DIR / "archive"
 # (manage.py purge_games) without touching a match's results.
 NYAYO_GAMES_DIR = DATA_DIR / "games"
 
+# How often a game page asks whether its game has moved. The answer to "nothing new" is empty and costs a stat and a
+# one row query, so this can be fast; raise it if nyayo's workers are busy with many viewers.
+NYAYO_GAME_POLL_MS = int(os.environ.get("NYAYO_GAME_POLL_MS", 100))
+
 # Runs that never became history expire (manage.py expire_runs): wip runs this many days after being recorded,
 # committed runs this many days after being committed if they weren't published by then.
 NYAYO_WIP_DAYS = int(os.environ.get("NYAYO_WIP_DAYS", 14))

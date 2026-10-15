@@ -3,7 +3,8 @@
 {% block content %}
 <p class="muted"><a href="{% url 'match' match.pk %}">← {{ match.name|default:match.pk }}</a></p>
 <h1>Game {{ game }}{% if headers %}: {{ headers.White }} <span class="muted">v</span> {{ headers.Black }}{% endif %}</h1>
-<div id="game-body" data-url="{% url 'game_fragment' match.pk game %}"
+<div id="game-body" data-url="{% url 'game_fragment' match.pk game %}" data-version="{{ version }}"
+     data-poll="{{ poll_ms }}" data-pinned="{% if pinned %}1{% endif %}" data-ply="{{ ply|default_if_none:'' }}"
      data-live="{% if live or waiting %}1{% endif %}">
 {% include "matches/_game_body.html" %}
 </div>
@@ -11,9 +12,14 @@
 (function () {
   var body = document.getElementById("game-body");
   var url = body.dataset.url;
-  var following = true;   // at the newest move, the board moves along with the game
-  var shown = null;       // the ply being looked at
+  var poll = parseInt(body.dataset.poll, 10) || 100;
+  var version = body.dataset.version || "";
+  // following: the board stays on the newest move as the game goes on. A page opened at ?ply=N starts pinned there.
+  var pinned = body.dataset.pinned === "1" && body.dataset.ply !== "";
+  var following = !pinned;
+  var shown = pinned ? parseInt(body.dataset.ply, 10) : null;
   var timer = null;
+  var busy = false;
 
   function current() {
     var root = body.querySelector("[data-ply]");
@@ -23,27 +29,44 @@
     var root = body.querySelector("[data-plies]");
     return root ? parseInt(root.dataset.plies, 10) : 0;
   }
-  function load(ply) {
-    var query = ply === null ? "" : "?ply=" + ply;
-    return fetch(url + query, {headers: {"Accept": "application/json"}})
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) {
-        if (!d) return;
-        body.innerHTML = d.html;
-        body.dataset.live = d.live || d.waiting ? "1" : "";
-        schedule();
+  // Asks for the game at a ply. When it's only a poll the server is told what this page already shows and answers 204
+  // if nothing changed, so a fast poll costs a file stat and nothing is redrawn.
+  function load(ply, isPoll) {
+    if (busy) return;
+    busy = true;
+    var query = [];
+    if (ply !== null) query.push("ply=" + ply);
+    if (isPoll && version) query.push("v=" + encodeURIComponent(version));
+    fetch(url + (query.length ? "?" + query.join("&") : ""), {cache: "no-store", headers: {"Accept": "application/json"}})
+      .then(function (r) {
+        if (r.status === 204) return {same: true};
+        return r.ok ? r.json() : {failed: true};
       })
-      .catch(function () { schedule(); });
+      .then(function (d) {
+        busy = false;
+        if (d.failed) return schedule(1000);
+        if (!d.same) {
+          body.innerHTML = d.html;
+          version = d.v;
+          body.dataset.live = d.live || d.waiting ? "1" : "";
+        }
+        schedule(poll);
+      })
+      .catch(function () { busy = false; schedule(1000); });
   }
-  function schedule() {
+  function schedule(delay) {
     clearTimeout(timer);
-    if (body.dataset.live) timer = setTimeout(function () { load(following ? null : shown); }, 2000);
+    if (!body.dataset.live) return;
+    // a tab nobody is looking at doesn't need ten checks a second
+    if (document.hidden) delay = Math.max(delay, 2000);
+    timer = setTimeout(function () { load(following ? null : shown, true); }, delay);
   }
   function go(ply) {
     ply = Math.max(0, Math.min(ply, plies()));
     following = ply === plies();
     shown = ply;
-    load(following ? null : ply);
+    busy = false;
+    load(following ? null : ply, false);
   }
   body.addEventListener("click", function (event) {
     var link = event.target.closest("a[data-goto]");
@@ -59,7 +82,8 @@
     else if (event.key === "Home") { event.preventDefault(); go(0); }
     else if (event.key === "End") { event.preventDefault(); go(plies()); }
   });
-  schedule();
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) schedule(0); });
+  schedule(poll);
 })();
 </script>
 {% endblock %}

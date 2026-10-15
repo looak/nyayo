@@ -41,6 +41,18 @@ def read_pgn(match_id, game):
         return None
 
 
+def stamp(match_id, game):
+    """A cheap fingerprint of a game's stored PGN, changing whenever it's replaced; "" for none. A live page asks the
+    server for this before anything is parsed or drawn."""
+    if not (valid_id(match_id, MATCH_ID_MAX) and valid_id(game, GAME_ID_MAX)):
+        return ""
+    try:
+        info = game_path(match_id, game).stat()
+    except OSError:
+        return ""
+    return f"{info.st_mtime_ns}-{info.st_size}"
+
+
 def delete_files(match_id):
     shutil.rmtree(games_dir() / match_id, ignore_errors=True)
 

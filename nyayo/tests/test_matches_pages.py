@@ -212,3 +212,64 @@ class LiveBoards(GameTestCase):
 
     def test_no_boards_when_nothing_is_playing(self):
         self.assertNotContains(self.client.get("/matches/gauntlet-test-1"), "Playing now")
+
+
+class FastPolling(GameTestCase):
+    URL = "/matches/gauntlet-test-1/games/1/live"
+
+    def fragment(self, **query):
+        return self.client.get(self.URL, query)
+
+    def test_the_fragment_carries_a_version(self):
+        self.put_game(COMMENTED)
+        data = json.loads(self.fragment().content)
+        self.assertTrue(data["v"])
+
+    def test_nothing_new_is_an_empty_204_without_parsing(self):
+        self.put_game(COMMENTED)
+        version = json.loads(self.fragment().content)["v"]
+        with self.assertNumQueries(1):  # the match's state, nothing else
+            response = self.fragment(v=version)
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.content, b"")
+
+    def test_a_new_move_changes_the_version(self):
+        self.put_game(COMMENTED)
+        version = json.loads(self.fragment().content)["v"]
+        self.put_game(COMMENTED.replace(b"Nc6 {book} *", b"Nc6 {book} 3. Bb5 *"))
+        response = self.fragment(v=version)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertNotEqual(data["v"], version)
+        self.assertEqual(data["plies"], 5)
+
+    def test_a_stopped_match_changes_the_version(self):
+        self.put_game(COMMENTED)
+        version = json.loads(self.fragment().content)["v"]
+        document = gauntlet()
+        document["match"]["state"] = "stopped"
+        self.put_match(document)
+        data = json.loads(self.fragment(v=version).content)
+        self.assertFalse(data["live"])
+
+    def test_the_version_is_per_ply(self):
+        self.put_game(COMMENTED)
+        end = json.loads(self.fragment().content)["v"]
+        self.assertEqual(self.fragment(v=end, ply="2").status_code, 200)
+
+    def test_the_page_starts_from_the_same_version(self):
+        self.put_game(COMMENTED)
+        page = self.client.get("/matches/gauntlet-test-1/games/1").content.decode()
+        version = json.loads(self.fragment().content)["v"]
+        self.assertIn(f'data-version="{version}"', page)
+        self.assertEqual(self.fragment(v=version).status_code, 204)
+
+    def test_the_interval_is_configurable(self):
+        self.put_game(COMMENTED)
+        self.assertContains(self.client.get("/matches/gauntlet-test-1/games/1"), 'data-poll="100"')
+        with self.settings(NYAYO_GAME_POLL_MS=250):
+            self.assertContains(self.client.get("/matches/gauntlet-test-1/games/1"), 'data-poll="250"')
+
+    def test_ids_that_climb_are_not_found(self):
+        self.assertEqual(self.client.get("/matches/gauntlet-test-1/games/../live").status_code, 404)
+        self.assertEqual(self.client.get("/matches/ghost/games/1/live").status_code, 404)
