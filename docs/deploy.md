@@ -68,7 +68,8 @@ deploy/install-service.sh
 It fills in the units in `deploy/` for this checkout, user and conda env (found through `conda info --base`; set
 `NYAYO_CONDA_ENV` if the env isn't called `nyayo`), installs them with `sudo`, starts them and shows their status:
 
-- `nyayo.service`, the site on port 8001;
+- `nyayo.service`, the site on port 8001, four sync workers: live game pages poll ten times a second and a gauntlet
+  runner PUTs every move, so a couple of slow pages must not queue them;
 - `nyayo-expire.timer`, which runs `manage.py expire_runs` daily at 04:30 through `nyayo-expire.service`. It deletes
   wip runs never promoted within 14 days and committed runs not published within 30 (`NYAYO_WIP_DAYS`,
   `NYAYO_COMMITTED_DAYS` in `.env`). Published runs are kept. `python manage.py expire_runs --dry-run` shows what
