@@ -26,7 +26,8 @@ nyayo receives smoke runs pushed from developer machines and shows them:
   move.
 - **Compare** any two runs, or a run against its baselines or the previous run on its branch. Checks searched with
   different settings are listed as not comparable, never counted as passing.
-- **A position** (`/case/epd.wac_new/WAC.297`) on a board with arrows for the expected move (and moves to avoid), then
+- **A position** (`/case/epd.wac_new/WAC.297`) on a board with arrows for the expected move (and moves to avoid) and a
+  link to lichess.org's analysis board, then
   every attempt along a branch's history with its time, the move played in SAN and how long the search took: since
   when it fails, when it last passed.
 

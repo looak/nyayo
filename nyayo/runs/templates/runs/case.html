@@ -15,7 +15,8 @@
 <div class="position">
 {% if board %}<div class="board">{{ board }}</div>{% endif %}
 <dl class="facts">
-  <dt>FEN</dt><dd class="mono">{{ position.fen }}</dd>
+  <dt>FEN</dt><dd><span class="mono">{{ position.fen }}</span>
+    <div><a href="https://lichess.org/analysis/{{ position.fen|urlencode:"/" }}" target="_blank" rel="noopener">Analyse on lichess.org</a></div></dd>
   {% if position.expected %}<dt>Best move</dt><dd class="mono">{{ position.expected|join:", " }}</dd>{% endif %}
   {% if position.avoid %}<dt>Avoid</dt><dd class="mono">{{ position.avoid|join:", " }}</dd>{% endif %}
   <dt>File</dt><dd>{{ position.file }} <span class="muted mono">{{ position.file_sha256|sha:12 }}</span></dd>

@@ -69,6 +69,8 @@ class Pages(NyayoTestCase):
         self.assertIn("Failing", page)
         self.assertIn("Smoke_WinAtChess_4Threads", page)
         self.assertIn("<svg", page)
+        self.assertIn('href="https://lichess.org/analysis/2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1%20w%20-%20-%200%201"',
+                      page)
         self.assertIn('title="g3g6">Qg6<', page)
         self.assertIn('<td class="num nowrap">52 ms</td>', page)
         self.assertIn("Undermine.001", self.get("/case/epd.sts/Undermine.001"))
