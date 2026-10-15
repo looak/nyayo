@@ -1,10 +1,17 @@
 """A game's PGN for people: its moves with what the engines said about them, the clocks they imply, and the board at
 any ply.
 
-The comments are fastchess's (and cutechess's): `{+0.35/18 1.204s}`, an engine's score from its own side, the depth it
-reached and the time it took, or `{+M5/22 0.4s}` for a mate in 5, or `{book}`. When the runner has fastchess write
-more (nodes, nps, the principal variation) they are read too, as `nodes=N` / `n=N`, `nps=N` and `pv=...` in the
-comment; nothing breaks when they aren't there, the page just has less to show.
+The comments are fastchess's, as its -pgnout options write them:
+
+    {+0.28/11 0.116s, n=278950, nps=0, pv="g1f3 d7d5 b1c3"}        score/depth time, then the options asked for
+    {+0.02/12 0.185s, tl=1.855s, latency=0.000s, n=450656, sd=0, nps=0, hashfull=0, tbhits=0, pv="g1f3 g8f6"}
+    {+M3/3 0.000s, n=227, nps=0, pv="e2h2 g8f8 h2h8"}               a mate, the distance in plies
+    {+M1/1 0.000s, n=19, nps=0, pv="h2h8", White mates}             the reason for the end comes last
+    {/0 0.116s}   a move with no score        {book}   a book move
+
+The score is the mover's, in pawns; 0.00 has no sign. A value the engine didn't report is written as 0, so n=0 and
+nps=0 are read as not reported. The PV is UCI moves in double quotes, shown here as SAN. tl= is the time left after the
+move and, when present, the clocks use it instead of reconstructing them.
 """
 
 import io
@@ -16,10 +23,12 @@ import chess
 import chess.pgn
 import chess.svg
 
-COMMENT = re.compile(r"^\s*([+-]?)(M?)(\d+(?:\.\d+)?)\s*/\s*(\d+)\s+(\d+(?:\.\d+)?)\s*s")
-NODES = re.compile(r"\b(?:nodes|n)\s*=\s*(\d+)|\bnodes\s+(\d+)", re.I)
-NPS = re.compile(r"\bnps\s*[= ]\s*(\d+)", re.I)
-PV = re.compile(r"\bpv\s*[= ]\s*([^,}]+)", re.I)
+COMMENT = re.compile(r"^\s*(?:([+-]?)(M?)(\d+(?:\.\d+)?))?\s*/\s*(\d+)\s+(\d+(?:\.\d+)?)\s*s")
+NODES = re.compile(r"\bn\s*=\s*(\d+)")
+NPS = re.compile(r"\bnps\s*=\s*(\d+)")
+SELDEPTH = re.compile(r"\bsd\s*=\s*(\d+)")
+TIME_LEFT = re.compile(r"\btl\s*=\s*(-?\d+(?:\.\d+)?)\s*s")
+PV = re.compile(r'\bpv\s*=\s*(?:"([^"]*)"|([^,}]+))')
 TIME_CONTROL = re.compile(r"^\s*(?:\d+/)?(\d+(?:\.\d+)?)(?:\+(\d+(?:\.\d+)?))?\s*$")
 
 # the evaluation graph's range is held to this many pawns either way, a mate is drawn as the limit
@@ -42,7 +51,8 @@ class Move:
     seconds: float | None = None
     nodes: int | None = None
     nps: int | None = None
-    pv: str = ""
+    pv: str = ""  # as SAN from the position the move was played in
+    time_left: float | None = None  # seconds the mover had left after the move, when fastchess wrote it
     comment: str = ""
 
     @property
@@ -59,25 +69,48 @@ class Parsed:
 
 
 def parse_comment(text):
-    """(score text, pawns from the mover's side, depth, seconds), or Nones for a comment that isn't an engine's."""
+    """(score text, pawns from the mover's side, depth, seconds), or Nones for a comment that isn't an engine's.
+
+    A mate's distance is in plies in the comment (+M9 is mate in 5) and shown in moves. A move with no score
+    (`/0 0.116s`) has no score and no depth, only the time."""
     found = COMMENT.match(text or "")
     if not found:
         return "", None, None, None
     sign, mate, number, depth, seconds = found.groups()
+    depth, seconds = int(depth) or None, float(seconds)
+    if number is None:
+        return "", None, depth, seconds
     sign = sign or "+"
     if mate:
         pawns = GRAPH_LIMIT * 2 if sign == "+" else -GRAPH_LIMIT * 2
-        return f"{sign}M{number}", pawns, int(depth), float(seconds)
+        return f"{sign}M{(int(float(number)) + 1) // 2}", pawns, depth, seconds
     value = float(number)
-    return f"{sign}{number}", value if sign == "+" else -value, int(depth), float(seconds)
+    return f"{sign}{number}", value if sign == "+" else -value, depth, seconds
 
 
 def parse_extras(text):
-    """(nodes, nps, pv) from the rest of a comment, None and "" where it doesn't say."""
+    """(nodes, nps, pv as UCI moves, time left in seconds) from the rest of a comment; None, None, [] and None where
+    it doesn't say, and for the zeros fastchess writes for what the engine didn't report."""
     text = text or ""
-    nodes, nps, pv = NODES.search(text), NPS.search(text), PV.search(text)
-    return (int(nodes.group(1) or nodes.group(2)) if nodes else None, int(nps.group(1)) if nps else None,
-            pv.group(1).strip() if pv else "")
+    nodes, nps, pv, left = NODES.search(text), NPS.search(text), PV.search(text), TIME_LEFT.search(text)
+    return (int(nodes.group(1)) or None if nodes else None, int(nps.group(1)) or None if nps else None,
+            ((pv.group(1) if pv.group(1) is not None else pv.group(2)).split() if pv else []),
+            float(left.group(1)) if left else None)
+
+
+def pv_as_san(board, uci_moves):
+    """A principal variation as SAN from board, up to the first move that isn't legal there."""
+    board, out = board.copy(), []
+    for text in uci_moves:
+        try:
+            move = chess.Move.from_uci(text)
+        except ValueError:
+            break
+        if move not in board.legal_moves:
+            break
+        out.append(board.san(move))
+        board.push(move)
+    return " ".join(out)
 
 
 def parse_time_control(text):
@@ -100,11 +133,12 @@ def load(raw):
         move = node.move
         colour = "white" if board.turn == chess.WHITE else "black"
         score, own, depth, seconds = parse_comment(node.comment)
-        nodes, nps, pv = parse_extras(node.comment)
+        nodes, nps, pv, left = parse_extras(node.comment)
         moves.append(Move(
             ply=len(moves) + 1, number=board.fullmove_number, san=board.san(move), uci=move.uci(), colour=colour,
             score=score, pawns=None if own is None else (own if colour == "white" else -own), own_pawns=own,
-            depth=depth, seconds=seconds, nodes=nodes, nps=nps, pv=pv, comment=node.comment.strip()))
+            depth=depth, seconds=seconds, nodes=nodes, nps=nps, pv=pv_as_san(board, pv), time_left=left,
+            comment=node.comment.strip()))
         board.push(move)
     return Parsed(dict(game.headers), moves, game.headers.get("Result", "*"), start)
 
@@ -144,16 +178,18 @@ def pairs(moves):
 def clocks(moves, control, ply):
     """What each side has left after ply plies, in milliseconds, from the time control and the time each move took:
     the base time, plus the increment per move, minus what the moves used. Book moves carry no time and cost none.
-    A reconstruction, not a reading of the engines' clocks; None when the time control isn't known."""
-    if control is None:
-        return None
-    base, increment = control
-    left = {"white": base * 1000, "black": base * 1000}
+    A reconstruction, not a reading of the engines' clocks, except for a side whose latest move says tl= (what
+    fastchess left in its own PGN), which wins; None when the time control isn't known and no move says."""
+    base, increment = control if control is not None else (None, 0.0)
+    left = {"white": None if base is None else base * 1000, "black": None if base is None else base * 1000}
     for move in moves[:ply]:
-        if move.seconds is None:
-            continue
-        left[move.colour] += (increment - move.seconds) * 1000
-    return {colour: max(0.0, value) for colour, value in left.items()}
+        if move.time_left is not None:
+            left[move.colour] = move.time_left * 1000
+        elif move.seconds is not None and left[move.colour] is not None:
+            left[move.colour] += (increment - move.seconds) * 1000
+    if all(value is None for value in left.values()):
+        return None
+    return {colour: None if value is None else max(0.0, value) for colour, value in left.items()}
 
 
 def last_moves(moves, ply):

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import chess
@@ -55,8 +56,11 @@ class Comments(SimpleTestCase):
     def test_scores_depth_and_time(self):
         self.assertEqual(pgnview.parse_comment("+0.30/18 1.204s"), ("+0.30", 0.30, 18, 1.204))
         self.assertEqual(pgnview.parse_comment("-1.50/9 0.1s")[1], -1.5)
-        score, pawns, *_ = pgnview.parse_comment("-M3/30 0.2s")
-        self.assertEqual((score, pawns < 0), ("-M3", True))
+        score, pawns, *_ = pgnview.parse_comment("-M8/30 0.2s")  # mate in 4, written in plies
+        self.assertEqual((score, pawns < 0), ("-M4", True))
+        self.assertEqual(pgnview.parse_comment("+M9/3 0.0s")[0], "+M5")
+        self.assertEqual(pgnview.parse_comment("0.00/16 1.202s")[:3], ("+0.00", 0.0, 16))
+        self.assertEqual(pgnview.parse_comment("/0 0.116s"), ("", None, None, 0.116))
 
     def test_other_comments_are_ignored(self):
         self.assertEqual(pgnview.parse_comment("book"), ("", None, None, None))
@@ -133,7 +137,7 @@ class Pages(GameTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "<svg")
         self.assertContains(response, "Nf3")
-        self.assertContains(response, "+M5")
+        self.assertContains(response, "+M3")
         self.assertContains(response, 'data-plies="4"')
         self.assertContains(response, "live")
 
@@ -278,7 +282,7 @@ class FastPolling(GameTestCase):
 
 EXTRAS = "\n".join([
     '[White "Elephant 1.0.0"]', '[Black "Barbarossa 0.6.0"]', '[Result "*"]', '[TimeControl "60+1"]', "",
-    "1. e4 {+0.30/18 2.000s, n=1200000, nps=600000, pv=e4 e5 Nf3} e5 {-0.25/16 3.500s} 2. Nf3 {+0.40/19 1.000s} *",
+    "1. e4 {+0.30/18 2.000s, n=1200000, nps=600000, tl=50.0s, pv=\"e2e4 e7e5 g1f3\"} e5 {-0.25/16 3.500s} 2. Nf3 {+0.40/19 1.000s} *",
     "",
 ]).encode()
 
@@ -294,7 +298,8 @@ class Clocks(SimpleTestCase):
     def test_remaining_is_base_plus_increments_minus_time_spent(self):
         parsed = pgnview.load(EXTRAS)
         left = pgnview.clocks(parsed.moves, (60.0, 1.0), 3)
-        self.assertEqual(left["white"], (60 + 1 - 2.0 + 1 - 1.0) * 1000)
+        # white's first move says tl=50.0s, which wins; its second is then reconstructed from there
+        self.assertEqual(left["white"], (50 + 1 - 1.0) * 1000)
         self.assertEqual(left["black"], (60 + 1 - 3.5) * 1000)
 
     def test_a_book_move_costs_nothing(self):
@@ -308,7 +313,7 @@ class Clocks(SimpleTestCase):
         self.assertIsNone(pgnview.clocks([], None, 0))
 
     def test_never_below_zero(self):
-        parsed = pgnview.load(EXTRAS)
+        parsed = pgnview.load(COMMENTED)  # white spends 1.6 s of a 1 s clock
         self.assertEqual(pgnview.clocks(parsed.moves, (1.0, 0.0), 3)["white"], 0.0)
 
 
@@ -367,3 +372,61 @@ class GamePageLayout(GameTestCase):
         page = self.client.get("/matches/gauntlet-test-1/games/1").content.decode()
         self.assertNotIn('class="badge running thinking-badge"', page)
         self.assertIn('data-running=""', page)
+
+
+FIXTURE = Path(__file__).parent / "fixtures" / "fastchess-pgnout-options.pgn"
+
+
+class RealFastchessOutput(SimpleTestCase):
+    """fastchess v1.8.2-alpha with -pgnout nodes=true nps=true pv=true, as uwanja ran it (from its tests/data)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        text = FIXTURE.read_text(encoding="utf-8")
+        cls.games = [pgnview.load(("[Event" + chunk).encode()) for chunk in text.split("[Event")[1:]]
+
+    def test_every_game_and_move_parses(self):
+        self.assertEqual(len(self.games), 4)
+        for parsed in self.games:
+            self.assertGreater(len(parsed.moves), 20)
+            self.assertIn(parsed.result, ("1-0", "0-1", "1/2-1/2"))
+
+    def test_scores_depth_time_and_nodes(self):
+        for parsed in self.games:
+            for move in parsed.moves:
+                if move.score:
+                    self.assertIsNotNone(move.depth, move)
+                    self.assertIsNotNone(move.seconds, move)
+                    self.assertGreater(move.nodes or 1, 0)
+
+    def test_nps_zero_is_not_reported(self):
+        self.assertTrue(all(move.nps is None for parsed in self.games for move in parsed.moves))
+
+    def test_the_pv_starts_with_the_move_played(self):
+        checked = 0
+        for parsed in self.games:
+            for move in parsed.moves:
+                if move.pv:
+                    self.assertEqual(move.pv.split()[0], move.san, move)
+                    checked += 1
+        self.assertGreater(checked, 100)
+
+    def test_the_game_starts_from_its_position_and_black_may_open(self):
+        first = self.games[0]
+        self.assertEqual((first.moves[0].number, first.moves[0].colour), (2, "white"))
+
+    def test_the_time_control_gives_clocks(self):
+        parsed = self.games[0]
+        self.assertEqual(pgnview.parse_time_control(parsed.headers["TimeControl"]), (1.0, 0.01))
+        left = pgnview.clocks(parsed.moves, (1.0, 0.01), len(parsed.moves))
+        self.assertTrue(0 <= left["white"] <= 1000 + 0.01 * 1000 * len(parsed.moves))
+
+    def test_graphs_for_everything_the_options_wrote(self):
+        keys = [g["key"] for g in pgnview.graphs(self.games[0].moves)]
+        self.assertEqual(keys, ["eval", "depth", "time", "nodes"])  # no nps line: it's all zeros, not reported
+
+    def test_the_page_shows_nodes_and_the_pv(self):
+        parsed = self.games[0]
+        middle = parsed.moves[20]
+        self.assertTrue(middle.pv)
