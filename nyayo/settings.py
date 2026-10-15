@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "nyayo",
     "nyayo.runs",
+    "nyayo.matches",
 ]
 
 MIDDLEWARE = [
