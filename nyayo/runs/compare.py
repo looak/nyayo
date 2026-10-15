@@ -125,6 +125,22 @@ def diff_cases(check, base):
 
 
 @dataclass
+class Bar:
+    """One score drawn as a bar: segments are (state, count, percent, title) side by side, markers (kind, label,
+    value, percent) are levels drawn across it."""
+    label: str
+    value: float
+    total: float
+    delta: float | None = None
+    segments: list = field(default_factory=list)
+    markers: list = field(default_factory=list)
+
+
+def percent(value, total):
+    return max(0.0, min(100.0, 100.0 * value / total))
+
+
+@dataclass
 class Pair:
     check: Check
     base: Check | None
@@ -136,6 +152,51 @@ class Pair:
         """The same tree and build searched differently: a determinism failure."""
         return bool(self.diff and self.diff.changed and self.check.run.tree
                     and self.check.run.tree == self.base.run.tree)
+
+    def case_groups(self):
+        """The check's positions by EPD file, in the order they ran: (file, [(case, state)], how many passed). state is
+        pass or fail, or newly-passing / newly-failing against the baseline when positions were compared."""
+        newly = {}
+        if self.diff:
+            newly.update((change.case.pk, "newly-failing") for change in self.diff.newly_failing)
+            newly.update((change.case.pk, "newly-passing") for change in self.diff.newly_passing)
+        groups = {}
+        for case in self.check.cases.all():
+            state = newly.get(case.pk) or ("pass" if case.status == "pass" else "fail")
+            groups.setdefault(case.file, []).append((case, state))
+        return [(file, cells, sum(case.status == "pass" for case, _ in cells)) for file, cells in groups.items()]
+
+    def bars(self):
+        """Positions solved, then points for a scored suite. Solved splits into the positions that pass in both runs,
+        newly pass, newly fail and fail in both, when positions were compared. The suite's own minimum and expected
+        level mark the score it's judged on (points when there are any), the baseline run marks both."""
+        verdict = self.check.engine_verdict or {}
+        judged = "points" if self.check.metric("points") is not None else "solved"
+        bars = []
+        for name, total_name in (("solved", "total"), ("points", "max_points")):
+            value, total = self.check.metric(name), self.check.metric(total_name)
+            if value is None or not total:
+                continue
+            bar = Bar(name, value, total, self.delta(name))
+            if name == "points":
+                counts = [("pass", value, "points earned"), ("unearned", total - value, "points not earned")]
+            elif self.diff and self.diff.compared:
+                gained, lost = len(self.diff.newly_passing), len(self.diff.newly_failing)
+                counts = [("pass", value - gained, "passed in both"), ("newly-passing", gained, "passed, failed before"),
+                          ("newly-failing", lost, "failed, passed before"), ("fail", total - value - lost, "failed in both")]
+            else:
+                counts = [("pass", value, "passed"), ("fail", total - value, "failed")]
+            bar.segments = [(state, count, percent(count, total), f"{count:g} {title}")
+                            for state, count, title in counts if count > 0]
+            if name == judged:
+                for kind, label in (("minimum", "minimum"), ("baseline", "expected")):
+                    if verdict.get(kind):
+                        bar.markers.append((kind, label, verdict[kind], percent(verdict[kind], total)))
+            then = self.base.metric(name) if self.base else None
+            if then is not None:
+                bar.markers.append(("base", "baseline run", then, percent(then, total)))
+            bars.append(bar)
+        return bars
 
     def delta(self, name):
         if self.base is None:

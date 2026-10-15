@@ -1,0 +1,15 @@
+{% with groups=pair.case_groups check=pair.check %}{% if groups %}
+<details class="positions">
+  <summary>Positions <span class="muted">({{ check.totals }})</span></summary>
+  <div class="legend muted">
+    <span><i class="cell pass"></i>passed</span><span><i class="cell fail"></i>failed</span>
+    {% if pair.diff %}<span><i class="cell newly-failing"></i>failed, passed before</span><span><i class="cell newly-passing"></i>passed, failed before</span>{% endif %}
+  </div>
+  {% for file, cells, passed in groups %}
+  <div class="cell-row">
+    {% if groups|length > 1 %}<div class="cell-label"><span class="mono">{{ file }}</span> <span class="muted">{{ passed }}/{{ cells|length }}</span></div>{% endif %}
+    <div class="cells">{% for case, state in cells %}<a class="cell {{ state }}" href="{% url 'case' check.check_id case.case_id %}?branch={{ branch|urlencode }}" title="{{ case.case_id }}: {{ case.status }}" aria-label="{{ case.case_id }}: {{ case.status }}"></a>{% endfor %}</div>
+  </div>
+  {% endfor %}
+</details>
+{% endif %}{% endwith %}

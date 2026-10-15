@@ -142,7 +142,7 @@ class Scenarios(NyayoTestCase):
         page = self.client.get(f"/runs/{self.runs['m5'].pk}").content.decode()
         self.assertIn("the suite file changed (wac_new.epd)", page)
         self.assertIn("130 positions missing", page)
-        self.assertIn("harness: error", page)
+        self.assertIn('<span class="outcome error">harness error</span>', page)
         page = self.client.get(f"/runs/{self.runs['m4'].pk}").content.decode()
         self.assertIn("a new check", page)
         self.assertIn("missing, the baseline", page)

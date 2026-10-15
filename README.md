@@ -18,7 +18,10 @@ nyayo receives smoke runs pushed from developer machines and shows them:
 
 - **Runs**, newest first, filtered by branch and state (wip, committed, published).
 - **A run**, every check against its baseline: the newest comparable run on the nearest commit it descends from.
-  Positions that newly fail or pass, STS points that moved, and positions that found another move.
+  Each check shows its verdict, its settings, its score as a bar split into positions that pass, newly pass, newly
+  fail and fail (with the suite's minimum and the baseline's score marked), and a grid of every position linking to
+  its history. Then the positions that newly fail or pass, STS points that moved, and positions that found another
+  move.
 - **Compare** any two runs, or a run against its baselines or the previous run on its branch. Checks searched with
   different settings are listed as not comparable, never counted as passing.
 - **A position** (`/case/epd.wac_new/WAC.297`) on a board with arrows for the expected move (and moves to avoid), then

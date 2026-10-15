@@ -13,6 +13,7 @@ class Pages(NyayoTestCase):
         self.real = self.ingest(real_run())
         child = derived(parents=self.real["run"]["ancestors"], minutes=10)
         case(child, 0, "WAC.001").update(status="fail", got="a2a3")
+        child["checks"][0]["metrics"]["solved"]["value"] = 259
         self.child = self.ingest(child)
 
     def get(self, url):
@@ -33,6 +34,17 @@ class Pages(NyayoTestCase):
         page = self.get(f"/runs/{self.child['run']['id']}")
         self.assertIn("Newly failing", page)
         self.assertIn("/case/epd.wac_new/WAC.001?branch=herd-smoke-report", page)
+        self.assertIn('<span class="outcome pass">passed</span>', page)
+        self.assertIn("<code>nodes 150000</code><code>1 thread</code><code>64 MB</code>", page)
+        self.assertIn('<a class="cell newly-failing" href="/case/epd.wac_new/WAC.001?branch=herd-smoke-report" title="WAC.001: fail"',
+                      page)
+        self.assertIn('<span class="mono">STS1.epd</span> <span class="muted">', page)
+        self.assertIn('<span class="score-value">259<span class="score-total">/300</span></span>', page)
+        self.assertIn('<span class="delta worse">−1</span>', page)
+        self.assertIn('title="1 failed, passed before"', page)
+        self.assertIn('title="minimum 252"', page)
+        self.assertIn('title="baseline run 260"', page)
+        self.assertIn('title="1707 points earned"', page)
         self.assertIn("compared on totals only", page)
 
     def test_compare_page(self):

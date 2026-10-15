@@ -3,29 +3,15 @@
 <section class="card">
   <div class="card-head">
     <h3>{{ pair.check.name|default:pair.check.check_id }}</h3>
-    <span class="muted mono">{{ pair.check.check_id }} v{{ pair.check.version }}</span>
-    <span class="muted">{{ pair.check.settings }}{% if not pair.check.deterministic %}, not deterministic{% endif %}</span>
-    {% if pair.check.status != "pass" %}<span class="status-error">harness: {{ pair.check.status }}</span>{% endif %}
+    <span class="outcome {{ pair.check.outcome }}">{{ pair.check.outcome|outcome_label }}</span>
+    <div class="params">
+      <code>{{ pair.check.check_id }} v{{ pair.check.version }}</code>
+      {% for part in pair.check.settings_parts %}<code>{{ part }}</code>{% endfor %}
+      {% if not pair.check.deterministic %}<code>not deterministic</code>{% endif %}
+    </div>
   </div>
-  <dl class="facts">
-    <dt>Now</dt><dd>{{ pair.check.totals }}</dd>
-    {% if pair.base %}
-    <dt>Against</dt>
-    <dd>{{ pair.base.totals }}
-      {% with d=pair|delta_of:"solved" %}{% if d is not None %}&middot; solved <span class="{{ d|trend }}">{{ d|signed }}</span>{% endif %}{% endwith %}
-      {% with d=pair|delta_of:"points" %}{% if d is not None %}&middot; points <span class="{{ d|trend }}">{{ d|signed }}</span>{% endif %}{% endwith %}
-      <div class="muted">
-        <a class="mono" href="{% url 'run' pair.base.run.pk %}">{{ pair.base.run.short_name }}</a>
-        <span class="badge {{ pair.base.run.state }}">{{ pair.base.run.state }}</span> {{ pair.base.run.branch }}
-      </div>
-    </dd>
-    {% endif %}
-    {% if pair.check.engine_verdict %}
-    <dt>Engine verdict</dt>
-    <dd><span class="status-{{ pair.check.engine_verdict.result }}">{{ pair.check.engine_verdict.result }}</span>
-      <span class="muted">baseline {{ pair.check.engine_verdict.baseline }}, minimum {{ pair.check.engine_verdict.minimum }}</span></dd>
-    {% endif %}
-  </dl>
+  {% include "runs/_score.html" %}
+  {% include "runs/_positions.html" %}
   {% if pair.note %}<p class="muted">{{ pair.note }}</p>{% endif %}
   {% if pair.base and not pair.diff %}<p class="muted">Not deterministic, compared on totals only.</p>{% endif %}
   {% if pair.diff %}

@@ -134,14 +134,26 @@ class Check(models.Model):
         return text
 
     @property
-    def settings(self):
-        limit = f"{self.limit_type} {self.limit_value}" if self.limit_type else "?"
-        text = f"{limit}, {self.threads} thread{'s' if self.threads != 1 else ''}, {self.hash_mb} MB"
+    def settings_parts(self):
+        parts = [f"{self.limit_type} {self.limit_value}" if self.limit_type else "?",
+                 f"{self.threads} thread{'s' if self.threads != 1 else ''}", f"{self.hash_mb} MB"]
         if self.per_file:
-            text += f", {self.per_file} per file"
+            parts.append(f"{self.per_file} per file")
         if self.experiment:
-            text += ", experiment"
-        return text
+            parts.append("experiment")
+        return parts
+
+    @property
+    def settings(self):
+        return ", ".join(self.settings_parts)
+
+    @property
+    def outcome(self):
+        """The suite's own verdict: pass, warn (below its baseline), fail (below its minimum) or none (it has no
+        minimum); error or skipped when the harness didn't run it through."""
+        if self.status != "pass":
+            return self.status
+        return (self.engine_verdict or {}).get("result") or "pass"
 
 
 class Metric(models.Model):

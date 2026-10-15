@@ -1,0 +1,23 @@
+{% load runs_extras %}
+<div class="score">
+  {% for bar in pair.bars %}
+  <div class="score-row">
+    <div class="score-figure">
+      <span class="score-value">{{ bar.value|num }}<span class="score-total">/{{ bar.total|num }}</span></span>
+      <span class="score-label muted">{{ bar.label }}</span>
+      {% if bar.delta is not None %}<span class="delta {{ bar.delta|trend }}">{% if bar.delta %}{{ bar.delta|signed }}{% else %}&plusmn;0{% endif %}</span>{% endif %}
+    </div>
+    <div class="bar-wrap">
+      <div class="bar" role="img" aria-label="{{ bar.value|num }} of {{ bar.total|num }} {{ bar.label }}">
+        {% for state, count, width, title in bar.segments %}<span class="seg {{ state }}" style="width: {{ width|stringformat:".3f" }}%" title="{{ title }}"></span>{% endfor %}
+        {% for kind, label, value, left in bar.markers %}<span class="mark {{ kind }}" style="left: {{ left|stringformat:".3f" }}%" title="{{ label }} {{ value|num }}"></span>{% endfor %}
+      </div>
+      {% if bar.markers %}<div class="marks muted">{% for kind, label, value, left in bar.markers %}<span><i class="mark-key {{ kind }}"></i>{{ label }} {{ value|num }}</span>{% endfor %}</div>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  {% if pair.base %}
+  <div class="score-base muted">vs <a class="mono" href="{% url 'run' pair.base.run.pk %}">{{ pair.base.run.short_name }}</a>
+    <span class="badge {{ pair.base.run.state }}">{{ pair.base.run.state }}</span> {{ pair.base.run.branch }}</div>
+  {% endif %}
+</div>

@@ -13,6 +13,12 @@ def signed(value):
 
 
 @register.filter
+def num(value):
+    """A metric without a trailing .0."""
+    return f"{value:g}" if isinstance(value, float) else value
+
+
+@register.filter
 def sha(value, length=10):
     return (value or "")[: int(length)]
 
@@ -26,5 +32,7 @@ def trend(value):
 
 
 @register.filter
-def delta_of(pair, name):
-    return pair.delta(name)
+def outcome_label(value):
+    return {"pass": "passed", "fail": "failed", "warn": "below baseline", "none": "no threshold",
+            "error": "harness error"}.get(value, value)
+
