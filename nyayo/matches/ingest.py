@@ -26,6 +26,11 @@ SCHEMA_VERSION = 1
 ID = re.compile(ID_PATTERN)
 COUNTS = ("games", "wins", "draws", "losses")
 SIDES = ("timelosses", "crashes", "illegal")
+GAME_STATES = ("scheduled", "playing", "finished")
+GAME_RESULTS = ("1-0", "0-1", "1/2-1/2")
+# of a scheduled game, the runner may still correct anything (fastchess has the last word on colours); once it has
+# started these are fixed, the rest of the entry is what happens to it
+STARTED_FIXED = ("round", "opponent", "subject_colour")
 
 
 @dataclass
@@ -144,6 +149,38 @@ def validate(document, match_id=None):
         raise invalid("sprt.llr must be a number")
     if not isinstance(document.get("machines", []), list):
         raise invalid("machines must be a list")
+    validate_schedule(document, known)
+
+
+def validate_schedule(document, opponents):
+    progress = document.get("progress")
+    if progress is not None and (not isinstance(progress, dict) or not all(is_count(v) for v in progress.values())):
+        raise invalid("progress must map total, played and playing to whole numbers")
+    games = document.get("games")
+    if games is None:
+        return
+    if not isinstance(games, list):
+        raise invalid("games must be a list")
+    numbers = set()
+    for i, game in enumerate(games):
+        where = f"games[{i}]"
+        if not isinstance(game, dict):
+            raise invalid(f"{where} must be an object")
+        if not isinstance(game.get("number"), int) or isinstance(game["number"], bool) or game["number"] < 0:
+            raise invalid(f"{where}.number must be a whole number")
+        if game["number"] in numbers:
+            raise invalid(f"{where}.number {game['number']} is used twice")
+        numbers.add(game["number"])
+        if game.get("opponent") not in opponents:
+            raise invalid(f"{where}.opponent {game.get('opponent')!r} isn't in opponents")
+        if game.get("subject_colour") not in ("white", "black"):
+            raise invalid(f"{where}.subject_colour must be white or black")
+        if game.get("state") not in GAME_STATES:
+            raise invalid(f"{where}.state must be one of {', '.join(GAME_STATES)}")
+        if game.get("result") is not None and game["result"] not in GAME_RESULTS:
+            raise invalid(f"{where}.result must be one of {', '.join(GAME_RESULTS)} or null")
+        if game["state"] == "finished" and game.get("result") is None:
+            raise invalid(f"{where} is finished and has no result")
 
 
 def validate_engine(engine, where):
@@ -188,7 +225,7 @@ def validate_result(row, where, opponents, seen):
 def fixed_part(document):
     """The document without what a producer may change as the match goes on."""
     fixed = copy.deepcopy(document)
-    for name in ("results", "machines", "pgn"):
+    for name in ("results", "machines", "pgn", "progress", "games"):
         fixed.pop(name, None)
     m = fixed.get("match") or {}
     for name in ("state", "updated_at", "finished_at"):
@@ -204,6 +241,7 @@ def check_update(previous, document):
     if changed:
         raise IngestError(409, f"{changed.lstrip('.')} changed, only the state, counts and the producer's LLR and "
                                f"result may change on a recorded match")
+    check_schedule(previous.get("games"), document.get("games"))
     old = {row["opponent"]: row for row in previous.get("results") or [] if isinstance(row, dict)}
     new = {row["opponent"]: row for row in document["results"]}
     for opponent, before in old.items():
@@ -212,8 +250,32 @@ def check_update(previous, document):
         check_counts_grow(opponent, before, new[opponent])
 
 
+def check_schedule(before, after):
+    """A game that has started keeps its number, round, opponent and colour, and a finished one its result; the
+    schedule may grow, and a scheduled game may be corrected or dropped."""
+    if not before:
+        return
+    now = {game["number"]: game for game in after or []}
+    for game in before:
+        if not isinstance(game, dict) or game.get("state") == "scheduled":
+            continue
+        number = game.get("number")
+        current = now.get(number)
+        if current is None:
+            raise IngestError(409, f"games[{number}] is gone, a started game stays in the schedule")
+        for name in STARTED_FIXED:
+            if current[name] != game.get(name):
+                raise IngestError(409, f"games[{number}].{name} changed, a started game's {name} is fixed")
+        if game.get("state") == "finished" and (current["state"], current.get("result")) != ("finished",
+                                                                                           game.get("result")):
+            raise IngestError(409, f"games[{number}] finished with {game.get('result')} and can't change")
+        if game.get("state") == "playing" and current["state"] == "scheduled":
+            raise IngestError(409, f"games[{number}] was playing, it can't go back to scheduled")
+
+
 def check_update_against(existing, document):
     """Without the archived version, at least hold that counts only grow."""
+    check_schedule(existing.schedule, document.get("games"))
     new = {row["opponent"]: row for row in document["results"]}
     for result in existing.results.all():
         if result.opponent not in new:
@@ -298,7 +360,8 @@ def create_match(document, machine):
         finished_at=timestamp(m, "finished_at"), host_name=host.get("name") or "", host=host,
         settings=m.get("settings") or {}, subject=engine_for(document["subject"]),
         subject_info=participant_info(document["subject"], "branch", "repo", "bench", "options"),
-        sprt=document.get("sprt"), machines=document.get("machines") or [], received_at=now,
+        sprt=document.get("sprt"), machines=document.get("machines") or [], schedule=document.get("games") or [],
+        progress=document.get("progress"), received_at=now,
         updated_at=timestamp(m, "updated_at"),
     )
     rows = {row["opponent"]: row for row in document["results"]}
@@ -318,7 +381,9 @@ def update_match(match, document):
     match.updated_at = timestamp(m, "updated_at")
     match.sprt = document.get("sprt")
     match.machines = document.get("machines") or []
-    match.save(update_fields=["state", "finished_at", "updated_at", "sprt", "machines"])
+    match.schedule = document.get("games") or []
+    match.progress = document.get("progress")
+    match.save(update_fields=["state", "finished_at", "updated_at", "sprt", "machines", "schedule", "progress"])
     rows = {row["opponent"]: row for row in document["results"]}
     for result in match.results.all():
         row = rows.get(result.opponent)

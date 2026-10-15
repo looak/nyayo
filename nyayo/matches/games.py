@@ -81,7 +81,7 @@ def store(match_id, game_id, raw):
     now = timezone.now()
     if row is None:
         match = Match.objects.select_related("subject").get(pk=match_id)
-        opponent, colour = identify(match, headers)
+        opponent, colour = identify(match, game_id, headers)
         Game.objects.create(
             match=match, game=game_id, opponent=opponent, colour=colour, white=headers.get("White", "")[:200],
             black=headers.get("Black", "")[:200], result=result, termination=termination, started_at=now,
@@ -118,8 +118,12 @@ def labels(engine, opponent=None):
     return specific, {engine.name}
 
 
-def identify(match, headers):
+def identify(match, game_id, headers):
     """(opponent id, subject's colour) for a game, blank where the PGN doesn't say and the names can't tell."""
+    # the runner's schedule says it outright when the match has one
+    for entry in match.schedule:
+        if str(entry.get("number")) == game_id and entry.get("opponent") and entry.get("subject_colour"):
+            return entry["opponent"], entry["subject_colour"]
     opponents = list(match.results.select_related("engine"))
     ids = {r.opponent for r in opponents}
     colour, opponent = headers.get("Subject", "").lower(), headers.get("Opponent", "")

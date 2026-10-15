@@ -51,6 +51,9 @@ class Match(models.Model):
     # SPRT bounds and the producer's own LLR and result, kind sprt only
     sprt = models.JSONField(null=True, blank=True)
     machines = models.JSONField(default=list)
+    # a gauntlet's whole schedule from its first report on, and { total, played, playing }; see ingest.validate_games
+    schedule = models.JSONField(default=list)
+    progress = models.JSONField(null=True, blank=True)
     received_at = models.DateTimeField(default=timezone.now)
     # when the producer last said anything, from the document; received_at is when nyayo heard it
     updated_at = models.DateTimeField(default=timezone.now, db_index=True)

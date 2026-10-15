@@ -261,3 +261,91 @@ class FixedAfterReceived(MatchTestCase):
         grown = gauntlet(results__0__games=11, results__0__wins=6)
         response = self.put_match(grown)
         self.assertEqual(response.status_code, 200, response.content)
+
+
+def scheduled():
+    document = gauntlet()
+    document["progress"] = {"total": 4, "played": 1, "playing": 1}
+    document["games"] = [
+        {"number": 1, "round": 1, "opponent": "barbarossa", "subject_colour": "white", "state": "finished",
+         "result": "1-0", "termination": "adjudication", "fault": None},
+        {"number": 2, "round": 1, "opponent": "barbarossa", "subject_colour": "black", "state": "playing",
+         "result": None, "termination": None, "fault": None},
+        {"number": 3, "round": 2, "opponent": "belette", "subject_colour": "white", "state": "scheduled",
+         "result": None, "termination": None, "fault": None},
+        {"number": 4, "round": 2, "opponent": "belette", "subject_colour": "black", "state": "scheduled",
+         "result": None, "termination": None, "fault": None},
+    ]
+    return document
+
+
+class Schedule(MatchTestCase):
+    def test_the_schedule_is_indexed(self):
+        self.assertEqual(self.put_match(scheduled()).status_code, 201)
+        match = Match.objects.get()
+        self.assertEqual(len(match.schedule), 4)
+        self.assertEqual(match.progress, {"total": 4, "played": 1, "playing": 1})
+
+    def test_games_move_forward(self):
+        self.put_match(scheduled())
+        later = scheduled()
+        later["progress"] = {"total": 4, "played": 2, "playing": 1}
+        later["games"][1].update(state="finished", result="1/2-1/2", termination="repetition")
+        later["games"][2]["state"] = "playing"
+        response = self.put_match(later)
+        self.assertEqual(response.status_code, 200, response.content)
+        match = Match.objects.get()
+        self.assertEqual([g["state"] for g in match.schedule], ["finished", "finished", "playing", "scheduled"])
+        self.assertEqual(match.progress["played"], 2)
+
+    def test_a_scheduled_game_may_be_corrected_and_the_list_extended(self):
+        self.put_match(scheduled())
+        later = scheduled()
+        later["games"][3]["subject_colour"] = "white"
+        later["games"].append({"number": 5, "round": 3, "opponent": "belette", "subject_colour": "black",
+                               "state": "scheduled", "result": None, "termination": None, "fault": None})
+        self.assertEqual(self.put_match(later).status_code, 200)
+        self.assertEqual(len(Match.objects.get().schedule), 5)
+
+    def test_a_started_game_keeps_its_colour(self):
+        self.put_match(scheduled())
+        later = scheduled()
+        later["games"][1]["subject_colour"] = "white"
+        self.assertRefused(self.put_match(later), 409, "games[2].subject_colour changed")
+
+    def test_a_finished_game_keeps_its_result(self):
+        self.put_match(scheduled())
+        later = scheduled()
+        later["games"][0]["result"] = "0-1"
+        self.assertRefused(self.put_match(later), 409, "games[1] finished with 1-0")
+
+    def test_a_started_game_cant_vanish_or_unstart(self):
+        self.put_match(scheduled())
+        later = scheduled()
+        del later["games"][1]
+        self.assertRefused(self.put_match(later), 409, "games[2] is gone")
+        later = scheduled()
+        later["games"][1]["state"] = "scheduled"
+        self.assertRefused(self.put_match(later), 409, "can't go back to scheduled")
+
+    def test_validation(self):
+        document = scheduled()
+        document["games"][0]["opponent"] = "ghost"
+        self.assertRefused(self.put_match(document), 400, "games[0].opponent")
+        document = scheduled()
+        document["games"][1]["number"] = 1
+        self.assertRefused(self.put_match(document), 400, "used twice")
+        document = scheduled()
+        document["games"][0]["result"] = None
+        self.assertRefused(self.put_match(document), 400, "no result")
+
+    def test_the_schedule_names_a_games_opponent_and_colour(self):
+        from nyayo.matches.models import Game
+        self.put_match(scheduled())
+        pgn = b'[White "?"]\n[Black "?"]\n[Result "*"]\n\n1. e4 *\n'
+        response = self.client.put("/api/matches/gauntlet-test-1/games/4", data=pgn,
+                                   content_type="application/x-chess-pgn",
+                                   headers={"Authorization": f"Bearer {self.token}"})
+        self.assertEqual(response.status_code, 201, response.content)
+        game = Game.objects.get()
+        self.assertEqual((game.opponent, game.colour), ("belette", "black"))
