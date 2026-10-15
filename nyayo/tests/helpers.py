@@ -68,7 +68,9 @@ class NyayoTestCase(TestCase):
     def setUp(self):
         self.archive = Path(tempfile.mkdtemp(prefix="nyayo-archive-"))
         self.addCleanup(shutil.rmtree, self.archive, ignore_errors=True)
-        overrides = override_settings(NYAYO_ARCHIVE_DIR=self.archive)
+        self.games = Path(tempfile.mkdtemp(prefix="nyayo-games-"))
+        self.addCleanup(shutil.rmtree, self.games, ignore_errors=True)
+        overrides = override_settings(NYAYO_ARCHIVE_DIR=self.archive, NYAYO_GAMES_DIR=self.games)
         overrides.enable()
         self.addCleanup(overrides.disable)
         self.machine = Machine(name="babylon")

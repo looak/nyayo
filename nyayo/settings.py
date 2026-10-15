@@ -43,6 +43,10 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 # Raw results as uploaded, a file per run id; the database is an index of these.
 NYAYO_ARCHIVE_DIR = DATA_DIR / "archive"
 
+# Games of matches, one PGN file per game under <match id>/; apart from the archive so they can be purged on their own
+# (manage.py purge_games) without touching a match's results.
+NYAYO_GAMES_DIR = DATA_DIR / "games"
+
 # Runs that never became history expire (manage.py expire_runs): wip runs this many days after being recorded,
 # committed runs this many days after being committed if they weren't published by then.
 NYAYO_WIP_DAYS = int(os.environ.get("NYAYO_WIP_DAYS", 14))

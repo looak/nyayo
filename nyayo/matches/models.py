@@ -10,8 +10,9 @@ RESULTS = ["1-0", "0-1", "1/2-1/2", "*"]
 # Ids end up in urls and file names (games/<match id>/<game>.pgn), so they're held to a safe alphabet.
 MATCH_ID_MAX = 128
 GAME_ID_MAX = 64
-ID_PATTERN = r"^[A-Za-z0-9._-]+$"
-id_validator = RegexValidator(ID_PATTERN, "Only letters, digits, dot, underscore and hyphen.")
+# starting with a letter or digit keeps "." and ".." out, which would climb out of the games directory
+ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]*$"
+id_validator = RegexValidator(ID_PATTERN, "Letters, digits, . _ -, starting with a letter or digit.")
 
 
 class Engine(models.Model):

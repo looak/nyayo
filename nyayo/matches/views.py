@@ -1,9 +1,11 @@
+from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from nyayo.runs.ingest import IngestError
 from nyayo.runs.views import decompress, machine_for, text, unauthorized
 
+from . import games
 from .ingest import ingest
 
 
@@ -21,3 +23,24 @@ def api_match(request, match_id):
     except IngestError as error:
         return text(error.status, error.reason)
     return text(201 if result.created else 200, "created" if result.created else "updated")
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PUT"])
+def api_game(request, match_id, game):
+    """PUT /api/matches/{id}/games/{game}: the PGN so far, replacing the last (201 first time, 200 after). GET is the
+    stored PGN, open like the pages so a viewer can poll it."""
+    if request.method == "GET":
+        pgn = games.read_pgn(match_id, game)
+        if pgn is None:
+            return text(404, "no such game")
+        return HttpResponse(pgn, content_type="application/x-chess-pgn; charset=utf-8")
+    machine = machine_for(request)
+    if machine is None:
+        return unauthorized()
+    try:
+        raw = decompress(request.body, request.headers.get("Content-Encoding"))
+        created = games.store(match_id, game, raw)
+    except IngestError as error:
+        return text(error.status, error.reason)
+    return text(201 if created else 200, "created" if created else "updated")

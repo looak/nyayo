@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from . import games
 from .ingest import delete_archived
 from .models import Engine, Match
 
@@ -30,10 +31,12 @@ class MatchAdmin(admin.ModelAdmin):
 
     def delete_model(self, request, match):
         delete_archived(match.pk)
+        games.delete_files(match.pk)
         super().delete_model(request, match)
 
     @admin.action(description="Delete the selected matches and their archived files")
     def delete_with_archive(self, request, queryset):
         for match in queryset:
             delete_archived(match.pk)
+            games.delete_files(match.pk)
         queryset.delete()
