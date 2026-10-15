@@ -66,6 +66,14 @@ configuration, not code.
 2. Where crashes are detected: suites under a sanitizer build, or separate fast self-play games.
 3. Which builds must agree for the determinism check (compilers, OSes, release vs sanitizer).
 
+## Specs
+
+The specs for nyayo and its neighbours live in ramani (github.com/looak/ramani, private, sibling checkout at
+`../ramani`): `nyayo.md` for this repo, `test-pipeline.md` for the client that pushes runs, and the README's table of
+which repo owns which contract. Each spec has a Current section (as built, the code wins when they disagree) and a
+Direction section (planned work, open decisions). When a change here alters a contract (the results schema, the
+upload API, comparability rules) or settles an open decision, update `nyayo.md` in ramani in the same piece of work.
+
 ## Environment
 
 - **Deployment host: bobby** (172.16.100.11, user `fischer`), an Ubuntu VM with 8 GB on a Synology DS923+, the same
