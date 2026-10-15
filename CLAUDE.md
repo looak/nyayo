@@ -1,9 +1,10 @@
 # nyayo
 
-An orchestrator and reporting platform for chess engine smoke tests. It starts runs, collects their results into a
-database and shows how every check, metric and test position moves over time, commit by commit. The engine it was
-built for is Elephant (github.com/looak/elephant, sibling checkout at `../elephant`), but engine specifics belong in
-configuration, not code.
+An orchestrator, reporting platform and live viewer for chess engine testing. It starts runs, collects their results
+into a database and shows how every check, metric and test position moves over time, commit by commit. It also
+receives matches (gauntlets first, later SPRTs) and their games as they are played, and shows them live. The engine it
+was built for is Elephant (github.com/looak/elephant, sibling checkout at `../elephant`), but engine specifics belong
+in configuration, not code.
 
 ## What nyayo is not
 
@@ -11,14 +12,32 @@ configuration, not code.
   machine; nyayo dispatches it and ingests what comes back.
 - **Not an Elo or speed tracker.** Elo testing lives on OpenBench and stays there; NPS is measured elsewhere. nyayo
   tracks deterministic checks: determinism (bench signature), crashes and tactical suites (WAC, Arasan, STS).
-- **Not a live viewer.** That is [bwawa](https://github.com/looak/bwawa) (sibling checkout at `../bwawa`). nyayo links to
-  a bwawa instance for live games instead of rebuilding that.
+- **Not a game runner.** Matches are played by [uwanja](https://github.com/looak/uwanja) (the gauntlet runner, sibling
+  checkout at `../uwanja`) driving fastchess, or by OpenBench; they report to nyayo, which only stores and shows them.
 
 ## Settled decisions
 
-- **Python and Django** (ORM, migrations, the admin for browsing and purging runs, same stack as OpenBench). If
-  something from bwawa is needed (PGN or fastchess parsing), import it as a package rather than copying it; bwawa has
-  no `pyproject.toml` yet, so making it installable is a bwawa commit.
+- **nyayo is a live viewer.** It replaces [bwawa](https://github.com/looak/bwawa) (sibling checkout at `../bwawa`),
+  which is being retired (`../ramani/plans/retire-bwawa.md`): the SPRT maths and progress view come here, the game
+  tracker and fastchess log parsing go to uwanja. Don't link out to bwawa; port what's needed, bwawa is not a
+  dependency.
+- **Matches are a second contract, next to runs:** `docs/match-schema.md`, its own schema version 1, approved by the
+  owner (draft in `../ramani/plans/match-schema.md`). `PUT /api/matches/{id}` with the whole match document, same
+  tokens and responses as runs; ids are `[A-Za-z0-9._-]`, at most 128 characters. No match state is final, counts
+  only grow, everything else but state and timestamps is fixed once received (`409` naming the field). Results schema
+  v1 is untouched. Counts are from the subject's side; statistics (Elo, LLR, performance rating) are computed here,
+  never trusted from the producer.
+- **Games stream in whole.** `PUT /api/matches/{id}/games/{game}` with the whole PGN so far
+  (`application/x-chess-pgn`), re-sent after every move; a game with a final result is sealed and further PUTs are
+  `409`. `{game}` is uwanja's game number, stable across a resume. PGNs are files under `games/<match id>/<game>.pgn`,
+  apart from results so `manage.py purge_games` can remove them; the index row is touched only when result or
+  termination changes, not on every move, to keep SQLite writes few. Viewers poll; no websockets. Live pages need no
+  login, as the run pages. Gunicorn needs 4 or more sync workers for this; propose it in `docs/deploy.md`.
+- **Gauntlet slice first.** Match document, per-opponent counts, games and live game pages. SPRT, OpenBench reports
+  and the progress projection come after. Opponent ratings are trusted as sent and stored with the match.
+
+- **Python and Django** (ORM, migrations, the admin for browsing and purging runs, same stack as OpenBench). PGN
+  parsing uses python-chess.
 - **One results contract, owned by nyayo:** `docs/results-schema.md`, schema version 1. A run is one JSON document:
   the run (id, state, commit or tree, branch, ancestry, host, build, timestamps) and its checks, each with params,
   metrics and per-position cases. It changes only by bumping `schema_version`, agreed with the owner. Elephant writes
@@ -69,8 +88,8 @@ configuration, not code.
 ## Specs
 
 The specs for nyayo and its neighbours live in ramani (github.com/looak/ramani, private, sibling checkout at
-`../ramani`): `nyayo.md` for this repo, `test-pipeline.md` for the client that pushes runs, and the README's table of
-which repo owns which contract. Each spec has a Current section (as built, the code wins when they disagree) and a
+`../ramani`): `nyayo.md` for this repo, `test-pipeline.md` for the client that pushes runs, `plans/gauntlet-runner.md` and
+`plans/match-schema.md` for uwanja and the match contract, and the README's table of which repo owns which contract. Each spec has a Current section (as built, the code wins when they disagree) and a
 Direction section (planned work, open decisions). When a change here alters a contract (the results schema, the
 upload API, comparability rules) or settles an open decision, update `nyayo.md` in ramani in the same piece of work.
 
