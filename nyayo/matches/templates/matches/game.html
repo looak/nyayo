@@ -1,8 +1,9 @@
 {% extends "runs/base.html" %}
 {% block title %}Game {{ game }} · {{ match.name|default:match.pk }} · nyayo{% endblock %}
+{% block head %}<style>main { max-width: 1760px; }</style>{% endblock %}
 {% block content %}
-<p class="muted"><a href="{% url 'match' match.pk %}">← {{ match.name|default:match.pk }}</a></p>
-<h1>Game {{ game }}{% if headers %}: {{ headers.White }} <span class="muted">v</span> {{ headers.Black }}{% endif %}</h1>
+<p class="muted"><a href="{% url 'match' match.pk %}">← {{ match.name|default:match.pk }}</a>
+  · game {{ game }}{% if headers %}: {{ headers.White }} <span class="muted">v</span> {{ headers.Black }}{% endif %}</p>
 <div id="game-body" data-url="{% url 'game_fragment' match.pk game %}" data-version="{{ version }}"
      data-poll="{{ poll_ms }}" data-pinned="{% if pinned %}1{% endif %}" data-ply="{{ ply|default_if_none:'' }}"
      data-live="{% if live or waiting %}1{% endif %}">
@@ -20,17 +21,78 @@
   var shown = pinned ? parseInt(body.dataset.ply, 10) : null;
   var timer = null;
   var busy = false;
+  // what the viewer picked survives the page being redrawn as the game goes on
+  var tab = "moves";
+  var metric = null;
 
   function current() {
-    var root = body.querySelector("[data-ply]");
+    var root = body.querySelector(".game");
     return root ? parseInt(root.dataset.ply, 10) : null;
   }
   function plies() {
-    var root = body.querySelector("[data-plies]");
+    var root = body.querySelector(".game");
     return root ? parseInt(root.dataset.plies, 10) : 0;
   }
-  // Asks for the game at a ply. When it's only a poll the server is told what this page already shows and answers 204
-  // if nothing changed, so a fast poll costs a file stat and nothing is redrawn.
+
+  // --- tabs, graph buttons, the moves list ---
+  function applyView() {
+    var panels = body.querySelectorAll("[data-panel]");
+    if (!body.querySelector('[data-panel="' + tab + '"]')) tab = "moves";
+    panels.forEach(function (p) { p.hidden = p.dataset.panel !== tab; });
+    body.querySelectorAll("[data-tab]").forEach(function (a) { a.classList.toggle("current", a.dataset.tab === tab); });
+    var buttons = body.querySelectorAll("[data-metric]");
+    if (buttons.length) {
+      var keys = Array.prototype.map.call(buttons, function (b) { return b.dataset.metric; });
+      if (keys.indexOf(metric) < 0) metric = keys[0];
+      buttons.forEach(function (b) { b.classList.toggle("current", b.dataset.metric === metric); });
+      body.querySelectorAll("[data-graph]").forEach(function (g) { g.hidden = g.dataset.graph !== metric; });
+    }
+    var here = body.querySelector("td.here");
+    var box = body.querySelector(".moves-scroll");
+    if (here && box && tab === "moves") {
+      box.scrollTop = here.offsetTop - box.clientHeight / 2 + here.offsetHeight / 2;
+    }
+  }
+
+  // --- clocks: reconstructed server side, run down locally between posts ---
+  var base = {white: null, black: null};
+  var running = "";
+  var started = 0;
+  function readClocks() {
+    var root = body.querySelector(".game");
+    if (!root) return;
+    base.white = root.dataset.clockWhite === undefined ? null : parseFloat(root.dataset.clockWhite);
+    base.black = root.dataset.clockBlack === undefined ? null : parseFloat(root.dataset.clockBlack);
+    running = root.dataset.running || "";
+    started = performance.now() - (parseFloat(root.dataset.age) || 0);
+  }
+  function fmt(ms) {
+    var s = Math.max(0, ms) / 1000;
+    if (s < 20) return "0:" + (s < 10 ? "0" : "") + s.toFixed(1);
+    var whole = Math.floor(s), h = Math.floor(whole / 3600), m = Math.floor(whole % 3600 / 60), r = whole % 60;
+    return (h ? h + ":" + (m < 10 ? "0" : "") : "") + m + ":" + (r < 10 ? "0" : "") + r;
+  }
+  function tick() {
+    var elapsed = running ? performance.now() - started : 0;
+    ["white", "black"].forEach(function (colour) {
+      var value = base[colour];
+      if (value === null) return;
+      var left = colour === running ? value - elapsed : value;
+      body.querySelectorAll('.clock[data-colour="' + colour + '"]').forEach(function (e) { e.textContent = fmt(left); });
+      body.querySelectorAll('.thinking[data-colour="' + colour + '"]').forEach(function (e) {
+        e.textContent = (elapsed / 1000).toFixed(1) + " s";
+      });
+    });
+  }
+  setInterval(tick, 100);
+
+  function shownNow() {
+    readClocks();
+    applyView();
+    tick();
+  }
+
+  // --- polling: ask what changed, redraw only when something did ---
   function load(ply, isPoll) {
     if (busy) return;
     busy = true;
@@ -49,6 +111,7 @@
           body.innerHTML = d.html;
           version = d.v;
           body.dataset.live = d.live || d.waiting ? "1" : "";
+          shownNow();
         }
         schedule(poll);
       })
@@ -68,11 +131,24 @@
     busy = false;
     load(following ? null : ply, false);
   }
+
   body.addEventListener("click", function (event) {
     var link = event.target.closest("a[data-goto]");
-    if (!link) return;
-    event.preventDefault();
-    go(parseInt(link.dataset.goto, 10));
+    if (link) {
+      event.preventDefault();
+      return go(parseInt(link.dataset.goto, 10));
+    }
+    var picked = event.target.closest("[data-tab]");
+    if (picked) {
+      event.preventDefault();
+      tab = picked.dataset.tab;
+      return applyView();
+    }
+    var button = event.target.closest("[data-metric]");
+    if (button) {
+      metric = button.dataset.metric;
+      applyView();
+    }
   });
   document.addEventListener("keydown", function (event) {
     var now = current();
@@ -83,6 +159,8 @@
     else if (event.key === "End") { event.preventDefault(); go(plies()); }
   });
   document.addEventListener("visibilitychange", function () { if (!document.hidden) schedule(0); });
+
+  shownNow();
   schedule(poll);
 })();
 </script>

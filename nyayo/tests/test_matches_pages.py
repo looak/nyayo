@@ -67,11 +67,11 @@ class Comments(SimpleTestCase):
         self.assertEqual(parsed.moves[0].pawns, 0.30)    # white's own +0.30
         self.assertEqual(parsed.moves[1].pawns, 0.25)    # black's -0.25 is white's +0.25
         self.assertTrue(parsed.moves[3].book)
-        self.assertIsNotNone(pgnview.graph(parsed.moves, 2))
+        self.assertEqual([g["key"] for g in pgnview.graphs(parsed.moves, 2)], ["eval", "depth", "time"])
 
     def test_board_at_a_ply(self):
         parsed = pgnview.load(COMMENTED)
-        board, last = pgnview.board_at(parsed, 1)
+        board, last = pgnview.position(parsed, 1)
         self.assertEqual(last.uci(), "e2e4")
         self.assertIsNotNone(board.piece_at(chess.E4))
         self.assertTrue(pgnview.board_svg(parsed, 0).startswith("<svg"))
@@ -273,3 +273,97 @@ class FastPolling(GameTestCase):
     def test_ids_that_climb_are_not_found(self):
         self.assertEqual(self.client.get("/matches/gauntlet-test-1/games/../live").status_code, 404)
         self.assertEqual(self.client.get("/matches/ghost/games/1/live").status_code, 404)
+
+
+
+EXTRAS = "\n".join([
+    '[White "Elephant 1.0.0"]', '[Black "Barbarossa 0.6.0"]', '[Result "*"]', '[TimeControl "60+1"]', "",
+    "1. e4 {+0.30/18 2.000s, n=1200000, nps=600000, pv=e4 e5 Nf3} e5 {-0.25/16 3.500s} 2. Nf3 {+0.40/19 1.000s} *",
+    "",
+]).encode()
+
+
+class Clocks(SimpleTestCase):
+    def test_time_controls(self):
+        self.assertEqual(pgnview.parse_time_control("120+1"), (120.0, 1.0))
+        self.assertEqual(pgnview.parse_time_control("300"), (300.0, 0.0))
+        self.assertEqual(pgnview.parse_time_control("0.5+0.05"), (0.5, 0.05))
+        self.assertIsNone(pgnview.parse_time_control("tournament"))
+        self.assertIsNone(pgnview.parse_time_control(None))
+
+    def test_remaining_is_base_plus_increments_minus_time_spent(self):
+        parsed = pgnview.load(EXTRAS)
+        left = pgnview.clocks(parsed.moves, (60.0, 1.0), 3)
+        self.assertEqual(left["white"], (60 + 1 - 2.0 + 1 - 1.0) * 1000)
+        self.assertEqual(left["black"], (60 + 1 - 3.5) * 1000)
+
+    def test_a_book_move_costs_nothing(self):
+        parsed = pgnview.load(COMMENTED)
+        before = pgnview.clocks(parsed.moves, (60.0, 1.0), 3)["black"]
+        after = pgnview.clocks(parsed.moves, (60.0, 1.0), 4)["black"]  # the fourth ply is a book move
+        self.assertEqual(before, after)
+        self.assertAlmostEqual(after, (60 + 1 - 0.9) * 1000)
+
+    def test_unknown_time_control(self):
+        self.assertIsNone(pgnview.clocks([], None, 0))
+
+    def test_never_below_zero(self):
+        parsed = pgnview.load(EXTRAS)
+        self.assertEqual(pgnview.clocks(parsed.moves, (1.0, 0.0), 3)["white"], 0.0)
+
+
+class Detail(SimpleTestCase):
+    def test_nodes_nps_and_pv_are_read_when_present(self):
+        parsed = pgnview.load(EXTRAS)
+        first = parsed.moves[0]
+        self.assertEqual((first.nodes, first.nps, first.pv), (1200000, 600000, "e4 e5 Nf3"))
+        self.assertEqual((parsed.moves[1].nodes, parsed.moves[1].pv), (None, ""))
+
+    def test_graphs_only_for_what_the_game_has(self):
+        keys = [g["key"] for g in pgnview.graphs(pgnview.load(EXTRAS).moves)]
+        self.assertEqual(keys, ["eval", "depth", "time"])  # nodes and nps have one value each, not a line
+
+    def test_a_line_per_engine(self):
+        graph = pgnview.graphs(pgnview.load(EXTRAS).moves)[0]
+        self.assertEqual([line["colour"] for line in graph["lines"]], ["white", "black"])
+        self.assertEqual(len(graph["lines"][0]["dots"]), 2)
+
+    def test_eval_is_each_engines_own_view(self):
+        moves = pgnview.load(EXTRAS).moves
+        self.assertEqual([m.own_pawns for m in moves], [0.30, -0.25, 0.40])
+        self.assertEqual(moves[1].pawns, 0.25)  # white's side, as before
+
+
+class GamePageLayout(GameTestCase):
+    def test_clocks_and_engine_figures(self):
+        self.put_game(EXTRAS)
+        page = self.client.get("/matches/gauntlet-test-1/games/1").content.decode()
+        self.assertIn('data-clock-white="', page)
+        self.assertIn('class="clock"', page)
+        self.assertIn("Reconstructed", page)
+        self.assertIn('data-running="black"', page)  # three plies played, black is on the move
+        self.assertIn("thinking", page)
+
+    def test_tabs_and_graph_buttons(self):
+        self.put_game(EXTRAS)
+        page = self.client.get("/matches/gauntlet-test-1/games/1").content.decode()
+        self.assertIn('data-tab="graphs"', page)
+        self.assertIn('data-metric="eval"', page)
+        self.assertIn('data-metric="time"', page)
+        self.assertNotIn('data-metric="nps"', page)
+
+    def test_nodes_column_only_with_detail(self):
+        self.put_game(EXTRAS)
+        self.assertContains(self.client.get("/matches/gauntlet-test-1/games/1"), "<dt>Nodes</dt>")
+        self.put_game(pgn(moves="1. e4 e5 2. Nf3"), game="2")
+        self.assertNotContains(self.client.get("/matches/gauntlet-test-1/games/2"), "<dt>Nodes</dt>")
+
+    def test_a_game_without_a_known_time_control_has_no_clocks(self):
+        self.put_game(pgn("1. e4 e5", TimeControl="tournament"))
+        self.assertNotContains(self.client.get("/matches/gauntlet-test-1/games/1"), 'class="clock"')
+
+    def test_nobody_is_thinking_in_a_finished_game(self):
+        self.put_game(EXTRAS.replace(b'"*"', b'"1-0"').replace(b"2. Nf3 {+0.40/19 1.000s} *", b"2. Nf3 {+0.40/19 1.000s} 1-0"))
+        page = self.client.get("/matches/gauntlet-test-1/games/1").content.decode()
+        self.assertNotIn('class="badge running thinking-badge"', page)
+        self.assertIn('data-running=""', page)

@@ -1,0 +1,5 @@
+{% load matches_extras %}<div class="player-bar {{ side.colour }}{% if side.to_move and live %} on-move{% endif %}">
+  <span><i class="swatch {{ side.colour }}"></i> <strong>{{ side.name|default:side.colour }}</strong>
+    {% if side.subject %}<span class="muted">engine under test</span>{% endif %}</span>
+  {% if has_clocks %}<span class="clock" data-colour="{{ side.colour }}" title="Reconstructed from the time control and each move's time, not read from the engine">{{ side.clock|clock }}</span>{% endif %}
+</div>

@@ -1,6 +1,7 @@
 """The pages: the match list, a match, and a game, live."""
 
 import chess
+import chess.svg
 from django.conf import settings
 from django.core.paginator import Paginator
 from django.http import Http404, HttpResponse, JsonResponse
@@ -140,12 +141,32 @@ def game_context(match, game, ply=None):
     ply = plies if ply is None else max(0, min(ply, plies))
     colour = (entry or {}).get("colour") or ""
     live = parsed.result == "*" and match.state == "running"
+    bottom = "black" if colour == "black" else "white"
+
+    board, last = pgnview.position(parsed, ply)
+    control = pgnview.parse_time_control(parsed.headers.get("TimeControl") or (match.settings or {}).get("tc"))
+    left = pgnview.clocks(parsed.moves, control, ply)
+    latest = pgnview.last_moves(parsed.moves, ply)
+    # only the end of a live game has someone thinking; a move being looked back at has nobody
+    to_move = "white" if board.turn == chess.WHITE else "black"
+    running = to_move if live and ply == plies else None
+    sides = {}
+    for side in ("white", "black"):
+        sides[side] = {"colour": side, "name": parsed.headers.get(side.capitalize(), ""), "subject": colour == side,
+                       "clock": left[side] if left else None, "last": latest[side],
+                       "to_move": to_move == side and ply == plies and parsed.result == "*"}
+    top = "white" if bottom == "black" else "black"
     return {
         "match": match, "game": game, "entry": entry, "headers": parsed.headers, "result": parsed.result,
         "live": live, "cut_off": parsed.result == "*" and not live, "plies": plies, "ply": ply,
-        "board": pgnview.board_svg(parsed, ply, chess.BLACK if colour == "black" else chess.WHITE),
-        "rows": pgnview.pairs(parsed.moves), "graph": pgnview.graph(parsed.moves, ply), "at_end": ply == plies,
+        "board": chess.svg.board(board, orientation=chess.BLACK if bottom == "black" else chess.WHITE, lastmove=last,
+                                 check=board.king(board.turn) if board.is_check() else None, size=720),
+        "rows": pgnview.pairs(parsed.moves), "graphs": pgnview.graphs(parsed.moves, ply), "at_end": ply == plies,
         "move": parsed.moves[ply - 1] if ply else None, "subject_colour": colour,
+        "sides": [sides["white"], sides["black"]], "top": sides[top], "bottom": sides[bottom],
+        "control": control, "running": running or "", "age_ms": games.age_ms(match.pk, game) if running else 0,
+        "has_clocks": left is not None,
+        "has_detail": any(m.nodes is not None or m.nps is not None or m.pv for m in parsed.moves),
     }
 
 

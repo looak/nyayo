@@ -13,6 +13,7 @@
     --code-bg: #f1f1ec; --cell-pass: #2da44e; --cell-fail: #cf222e; --cell-newly-failing: #8250df;
     --cell-newly-passing: #0969da;
     --smoke: #6a3fb5; --smoke-bg: #efe7fb; --extended: #a12a7a; --extended-bg: #fbe6f3;
+    --series-white: #2357b5; --series-black: #c2561a;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -23,6 +24,7 @@
       --code-bg: #26282c; --cell-pass: #2ea043; --cell-fail: #da3633; --cell-newly-failing: #a371f7;
       --cell-newly-passing: #388bfd;
       --smoke: #c4a7f5; --smoke-bg: #2d2342; --extended: #f0a3d6; --extended-bg: #3d1f33;
+      --series-white: #8ab4f8; --series-black: #f0a35e;
       color-scheme: dark;
     }
   }
@@ -150,6 +152,56 @@
   .evalgraph .cursor { stroke: var(--fg); stroke-width: 1; stroke-dasharray: 3 3; }
   table.moves td.here { background: var(--committed-bg); font-weight: 700; }
   table.moves td, table.moves th { padding: .15rem .45rem; }
+
+  /* the game page: a board as big as the window allows, the engines' figures and the moves and graphs beside it */
+  .game-layout { display: grid; gap: 1rem 1.5rem; align-items: start;
+                 grid-template-columns: minmax(300px, min(62%, calc(100vh - 12rem))) minmax(320px, 1fr); }
+  @media (max-width: 900px) { .game-layout { grid-template-columns: minmax(0, 1fr); } }
+  .game-status { margin: 0 0 .5rem; }
+  .board-frame svg { display: block; width: 100%; height: auto; }
+  .board-nav { margin: .4rem 0 0; font-size: 1.1rem; display: flex; gap: .9rem; align-items: baseline; }
+  .player-bar { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .3rem .6rem;
+                background: var(--card); border: 1px solid var(--line); }
+  .player-bar:first-child { border-radius: 8px 8px 0 0; border-bottom: 0; }
+  .player-bar:last-of-type { border-radius: 0 0 8px 8px; border-top: 0; }
+  .player-bar.on-move { box-shadow: inset 3px 0 0 var(--published); }
+  .clock { font: 700 1.3rem ui-monospace, "Cascadia Mono", Consolas, monospace; font-variant-numeric: tabular-nums;
+           padding: 0 .55rem; border-radius: 4px; background: var(--code-bg); }
+  .on-move .clock { color: var(--better); background: var(--published-bg); }
+  .swatch { display: inline-block; width: .75rem; height: .75rem; border-radius: 50%; vertical-align: -1px;
+            border: 1px solid var(--muted); }
+  .swatch.white { background: var(--series-white); }
+  .swatch.black { background: var(--series-black); }
+  .engine { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .5rem .75rem;
+            margin-bottom: .6rem; }
+  .engine-head { display: flex; flex-wrap: wrap; gap: .1rem .6rem; align-items: baseline; }
+  .thinking-badge { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr)); gap: .25rem .75rem;
+           margin: .4rem 0 0; }
+  .stats dt { color: var(--muted); font-size: .75rem; }
+  .stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .pv { margin-top: .4rem; font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+  .moves-scroll { max-height: 34vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;
+                  background: var(--card); position: relative; }
+  .moves-scroll table.moves { margin: 0; }
+  table.moves td.num { color: var(--muted); width: 2.5rem; }
+  table.moves td.mv a { font-weight: 600; color: var(--fg); }
+  table.moves td.mv span { font-size: .75rem; margin-left: .35rem; }
+  .metrics { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-bottom: .4rem; }
+  .metric { border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 6px;
+            padding: .15rem .7rem; cursor: pointer; }
+  .metric.current { background: var(--committed-bg); border-color: var(--committed); font-weight: 600; }
+  .legend-lines { margin-left: auto; display: flex; flex-wrap: wrap; gap: .2rem .9rem; font-size: .85rem; }
+  .chart { display: block; width: 100%; height: auto; background: var(--card); border: 1px solid var(--line);
+           border-radius: 8px; }
+  .chart .grid { stroke: var(--line); stroke-width: 1; }
+  .chart .tick { fill: var(--muted); font-size: 11px; }
+  .chart .cursor { stroke: var(--fg); stroke-width: 1; stroke-dasharray: 3 3; }
+  .chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; }
+  .chart .series.white { stroke: var(--series-white); }
+  .chart .series.black { stroke: var(--series-black); }
+  .chart .dot-white { fill: var(--series-white); }
+  .chart .dot-black { fill: var(--series-black); }
 </style>
 </head>
 <body>

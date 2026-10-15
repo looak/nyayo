@@ -11,6 +11,7 @@ matched against the match's engines, and left blank when that's ambiguous.
 
 import io
 import shutil
+import time
 from pathlib import Path
 
 import chess.pgn
@@ -51,6 +52,18 @@ def stamp(match_id, game):
     except OSError:
         return ""
     return f"{info.st_mtime_ns}-{info.st_size}"
+
+
+def age_ms(match_id, game):
+    """Milliseconds since the PGN was last replaced, which is when the engine to move started thinking, give or take
+    the runner's latency; 0 when there's none."""
+    if not (valid_id(match_id, MATCH_ID_MAX) and valid_id(game, GAME_ID_MAX)):
+        return 0
+    try:
+        info = game_path(match_id, game).stat()
+    except OSError:
+        return 0
+    return max(0, (time.time_ns() - info.st_mtime_ns) // 1_000_000)
 
 
 def delete_files(match_id):
