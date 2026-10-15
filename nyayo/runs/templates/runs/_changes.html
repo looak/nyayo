@@ -9,8 +9,8 @@
       <tr>
         <td class="mono"><a href="{% url 'case' change.case.check_result.check_id change.case.case_id %}?branch={{ branch|urlencode }}">{{ change.case.case_id }}</a></td>
         <td class="muted">{{ change.case.file }}</td>
-        <td><span class="status-{{ change.before.status }}">{{ change.before.status }}</span> <span class="mono">{{ change.before.got }}</span></td>
-        <td><span class="status-{{ change.case.status }}">{{ change.case.status }}</span> <span class="mono">{{ change.case.got }}</span></td>
+        <td><span class="status-{{ change.before.status }}">{{ change.before.status }}</span> <span class="mono">{{ change.before.played }}</span></td>
+        <td><span class="status-{{ change.case.status }}">{{ change.case.status }}</span> <span class="mono">{{ change.case.played }}</span></td>
         <td class="num">{% if change.case.points is not None %}{{ change.before.points }} &rarr; {{ change.case.points }} <span class="{{ change.points_delta|trend }}">{{ change.points_delta|signed }}</span>{% endif %}</td>
       </tr>
     {% endfor %}

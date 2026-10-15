@@ -5,10 +5,11 @@ from django.conf import settings
 from django.core.paginator import Paginator
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils.safestring import mark_safe
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from . import compare
+from . import chessboard, compare
 from .ingest import IngestError, ingest
 from .models import STATES, Machine, Run
 
@@ -122,8 +123,10 @@ def case_page(request, check_id, case_id):
     current = next((s for s in series if s.key == chosen), series[0] if series else None)
     if not series and not Run.objects.filter(checks__check_id=check_id, checks__cases__case_id=case_id).exists():
         raise Http404("no such position")
+    position = current.rows[0].case if current and current.rows else None
+    board = position and chessboard.board_svg(position.fen, position.expected, position.avoid)
     return render(request, "runs/case.html", {
         "check_id": check_id, "case_id": case_id, "branch": branch, "branches": branches, "head": head,
         "series": series, "current": current, "summary": current.summary() if current else None,
-        "position": current.rows[0].case if current and current.rows else None,
+        "position": position, "board": mark_safe(board) if board else None,
     })

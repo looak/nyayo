@@ -4,6 +4,8 @@ import secrets
 from django.db import models
 from django.utils import timezone
 
+from . import chessboard
+
 STATES = ["wip", "committed", "published"]
 
 
@@ -175,3 +177,8 @@ class Case(models.Model):
     def identity(self):
         """A position is the same position when its id and its EPD file's content match."""
         return (self.case_id, self.file_sha256)
+
+    @property
+    def played(self):
+        """The move the engine chose, in SAN."""
+        return chessboard.san(self.fen, self.got)

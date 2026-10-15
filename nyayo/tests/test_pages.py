@@ -49,6 +49,8 @@ class Pages(NyayoTestCase):
         self.assertIn("2rr3k/pp3pp1/1nnqbN1p/3pN3/2pP4/2P3Q1/PPB4P/R4RK1 w - - 0 1", page)
         self.assertIn("Failing", page)
         self.assertIn("Smoke_WinAtChess_4Threads", page)
+        self.assertIn("<svg", page)
+        self.assertIn('title="g3g6">Qg6<', page)
         self.assertIn("Undermine.001", self.get("/case/epd.sts/Undermine.001"))
         self.assertEqual(self.client.get("/case/epd.wac_new/NOPE.999").status_code, 404)
 

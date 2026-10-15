@@ -12,12 +12,15 @@
   <noscript><button>Show</button></noscript>
 </form>
 {% if position %}
+<div class="position">
+{% if board %}<div class="board">{{ board }}</div>{% endif %}
 <dl class="facts">
   <dt>FEN</dt><dd class="mono">{{ position.fen }}</dd>
   {% if position.expected %}<dt>Best move</dt><dd class="mono">{{ position.expected|join:", " }}</dd>{% endif %}
   {% if position.avoid %}<dt>Avoid</dt><dd class="mono">{{ position.avoid|join:", " }}</dd>{% endif %}
   <dt>File</dt><dd>{{ position.file }} <span class="muted mono">{{ position.file_sha256|sha:12 }}</span></dd>
 </dl>
+</div>
 {% endif %}
 {% if series|length > 1 %}
 <div class="tabs">
@@ -37,19 +40,20 @@
   {% endif %}
   <div class="scroll">
   <table>
-    <thead><tr><th>Run</th><th>State</th><th>Commit</th><th>Result</th><th>Played</th><th class="num">Points</th><th class="num">Nodes</th></tr></thead>
+    <thead><tr><th>Recorded</th><th>Run</th><th>State</th><th>Commit</th><th>Result</th><th>Played</th><th class="num">Points</th><th class="num">Nodes</th></tr></thead>
     <tbody>
     {% for row in current.rows %}
       <tr>
+        <td class="nowrap">{{ row.run.recorded_at|date:"Y-m-d H:i" }}</td>
         <td class="mono"><a href="{% url 'run' row.run.pk %}">{{ row.run.short_name }}</a></td>
         <td><span class="badge {{ row.run.state }}">{{ row.run.state }}</span></td>
         <td class="mono">{% if row.run.commit %}{{ row.run.commit|sha }}{% else %}<span class="muted">on</span> {{ row.run.base_commit|sha }}{% endif %}</td>
         <td class="status-{{ row.case.status }}">{{ row.case.status }}</td>
-        <td class="mono">{{ row.case.got }}</td>
+        <td class="mono" title="{{ row.case.got }}">{{ row.case.played }}</td>
         <td class="num">{% if row.case.points is not None %}{{ row.case.points }}/{{ row.case.max_points }}{% endif %}</td>
         <td class="num">{{ row.case.nodes|default:"" }}</td>
       </tr>
-      {% if row.file_changed %}<tr><td colspan="7" class="muted">The EPD file changed below this line; older rows searched a different version of it.</td></tr>{% endif %}
+      {% if row.file_changed %}<tr><td colspan="8" class="muted">The EPD file changed below this line; older rows searched a different version of it.</td></tr>{% endif %}
     {% endfor %}
     </tbody>
   </table>
