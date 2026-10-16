@@ -200,6 +200,30 @@
   .chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; }
   .chart .series.white { stroke: var(--series-white); }
   .chart .series.black { stroke: var(--series-black); }
+  /* a match: its progress card, and the opponents as cards in two columns */
+  .seg.draw { background: var(--muted); opacity: .55; }
+  .key { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; margin-right: .35rem;
+         vertical-align: -1px; }
+  .key.pass { background: var(--cell-pass); }
+  .key.fail { background: var(--cell-fail); }
+  .key.draw { background: var(--muted); opacity: .55; }
+  .key.newly-passing { background: var(--cell-newly-passing); }
+  .key.unearned { border: 1px solid var(--line); }
+  .outcome.running { color: var(--committed); background: var(--committed-bg); }
+  .outcome.finished { color: var(--better); background: var(--published-bg); }
+  .outcome.stopped { color: var(--wip); background: var(--wip-bg); }
+  .outcome.card-state { text-transform: none; font-weight: 600; letter-spacing: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: .4rem 2rem; margin: .5rem 0 0; }
+  .chips dt { color: var(--muted); font-size: .8rem; }
+  .chips dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .match-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+  .match-grid > .card { margin: 0; }
+  .match-grid .span-all { grid-column: 1 / -1; }
+  @media (max-width: 800px) { .match-grid { grid-template-columns: minmax(0, 1fr); } }
+  .card.excluded { opacity: .55; }
+  .faults { display: flex; flex-wrap: wrap; gap: .1rem 1rem; margin-top: .5rem; font-size: .85rem; }
+  .facts-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem 2rem; }
+  @media (max-width: 800px) { .facts-cols { grid-template-columns: minmax(0, 1fr); } }
   .chart .hit { fill: transparent; cursor: pointer; }
   .chart .hit:hover { fill: var(--fg); fill-opacity: .07; }
   .chart .series, .chart .dot-white, .chart .dot-black { pointer-events: none; }

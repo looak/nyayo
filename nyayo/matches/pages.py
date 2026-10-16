@@ -8,7 +8,9 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 
-from . import games, pgnview, stats
+from django.utils import timezone
+
+from . import games, pgnview, stats, timing
 from .models import KINDS, STATES, Engine, Game, Match
 
 OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): "loss", ("1-0", "black"): "loss",
@@ -104,8 +106,16 @@ def match_detail(request, match_id):
     excluded = {o for o in request.GET.getlist("exclude") if o}
     entries = game_entries(match)
     groups = {name: [e for e in entries if e["state"] == name] for name in STATE_ORDER}
+    total = (match.progress or {}).get("total") or len(match.schedule) or None
+    durations = timing.game_durations(
+        match.games.exclude(result="*").values_list("started_at", "finished_at"))
     return render(request, "matches/match_detail.html", {
-        "match": match, "boards": live_boards(match, groups["playing"]), "summary": stats.summarize(match.results.all(), excluded), "excluded": excluded,
+        "match": match, "boards": live_boards(match, groups["playing"]),
+        "summary": stats.summarize(match.results.all(), excluded), "excluded": excluded,
+        "timing": timing.summarize(
+            match.state, match.started_at or match.received_at, match.finished_at, match.updated_at, total,
+            len(groups["finished"]), len(groups["playing"]), durations, (match.settings or {}).get("concurrency"),
+            timezone.now()),
         "groups": groups, "entries": entries, "refresh": match.state == "running", "settings": match.settings,
         "host": match.host, "subject_name": engine_label(match.subject),
         "producer_url": (match.producer or {}).get("url"),

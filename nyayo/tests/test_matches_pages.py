@@ -1,11 +1,12 @@
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 import chess
 from django.test import SimpleTestCase
 
-from nyayo.matches import pgnview, stats
+from nyayo.matches import pgnview, stats, timing
 from nyayo.matches.models import Match
 
 from .test_games import GameTestCase, pgn
@@ -448,3 +449,91 @@ class ClickableGraphs(GameTestCase):
         # only the first graph is shown, the others carry the hidden attribute
         self.assertEqual(page.count('" hidden>'), 3)  # the graphs panel, and of its graphs depth and time
         self.assertIn("[hidden] { display: none !important; }", page)
+
+
+class Timing(SimpleTestCase):
+    NOW = datetime(2026, 10, 16, 12, 0, tzinfo=timezone.utc)
+
+    def summary(self, **kwargs):
+        values = dict(state="running", started_at=self.NOW - timedelta(hours=1), finished_at=None,
+                      updated_at=self.NOW - timedelta(seconds=10), total=100, finished=20, playing=4,
+                      durations=[], concurrency=4, now=self.NOW)
+        values.update(kwargs)
+        return timing.summarize(**values)
+
+    def test_durations_drop_what_makes_no_sense(self):
+        start = self.NOW
+        rows = [(start, start + timedelta(seconds=90)), (start, None), (None, start), (start, start),
+                (start, start + timedelta(hours=7)), (start, start - timedelta(seconds=5))]
+        self.assertEqual(timing.game_durations(rows), [90.0])
+
+    def test_pace_and_eta_after_a_few_games(self):
+        s = self.summary()  # 20 games in an hour, 80 to go
+        self.assertAlmostEqual(s["per_hour"], 20.0)
+        self.assertAlmostEqual(s["eta_seconds"], 4 * 3600)
+        self.assertEqual(s["eta_at"], self.NOW + timedelta(hours=4))
+        self.assertEqual(s["eta_basis"], "the pace so far")
+        self.assertAlmostEqual(s["percent_finished"], 20.0)
+        self.assertAlmostEqual(s["percent_playing"], 4.0)
+
+    def test_eta_from_game_time_before_there_is_a_pace(self):
+        s = self.summary(finished=2, durations=[600.0, 800.0], total=10, started_at=self.NOW - timedelta(minutes=20))
+        self.assertAlmostEqual(s["average_game"], 700.0)
+        self.assertAlmostEqual(s["eta_seconds"], 8 * 700 / 4)  # eight to go, four at a time
+        self.assertIn("4 games at a time", s["eta_basis"])
+
+    def test_no_eta_before_anything_has_finished(self):
+        s = self.summary(finished=0, durations=[])
+        self.assertIsNone(s["eta_seconds"])
+        self.assertIsNone(s["eta_at"])
+
+    def test_no_eta_for_a_match_that_is_not_running(self):
+        s = self.summary(state="stopped", finished_at=self.NOW - timedelta(minutes=30))
+        self.assertIsNone(s["eta_seconds"])
+        self.assertAlmostEqual(s["elapsed"], 30 * 60.0)  # until it stopped, not until now
+
+    def test_a_finished_match_has_no_remaining_games(self):
+        s = self.summary(state="finished", finished=100, playing=0, finished_at=self.NOW)
+        self.assertEqual(s["remaining"], 0)
+        self.assertIsNone(s["eta_seconds"])
+
+    def test_a_running_match_that_stopped_reporting_is_stale(self):
+        self.assertIsNone(self.summary()["stale_seconds"])
+        self.assertAlmostEqual(self.summary(updated_at=self.NOW - timedelta(minutes=9))["stale_seconds"], 540.0)
+
+    def test_without_a_schedule_there_is_no_total(self):
+        s = self.summary(total=None)
+        self.assertIsNone(s["remaining"])
+        self.assertIsNone(s["eta_seconds"])
+        self.assertEqual(s["percent_finished"], 0.0)
+
+
+class MatchHeader(GameTestCase):
+    def test_progress_card_for_a_scheduled_gauntlet(self):
+        self.put_match(scheduled())
+        self.put_game(pgn("1. e4 e5", result="1-0"), game="1")
+        page = self.client.get("/matches/gauntlet-test-1").content.decode()
+        self.assertIn("games played", page)
+        self.assertIn('aria-label="1 of 4 games played', page)
+        self.assertIn("Estimated finish", page)
+        self.assertIn("Last report", page)
+
+    def test_results_are_cards_with_a_bar(self):
+        page = self.client.get("/matches/gauntlet-test-1").content.decode()
+        self.assertIn('class="match-grid"', page)
+        self.assertIn('aria-label="5 wins, 3 draws, 2 losses"', page)
+        self.assertIn("65.0%", page)
+
+    def test_a_stale_running_match_says_so(self):
+        document = gauntlet()
+        document["match"]["updated_at"] = "2020-01-01T00:00:00Z"
+        self.put_match(document)
+        self.assertContains(self.client.get("/matches/gauntlet-test-1"), "No report for")
+
+    def test_a_finished_match_shows_when_it_ended(self):
+        document = gauntlet()
+        document["match"].update(state="finished", finished_at="2026-10-15T10:00:00Z")
+        self.put_match(document)
+        page = self.client.get("/matches/gauntlet-test-1").content.decode()
+        self.assertIn("Ended", page)
+        self.assertNotIn("Estimated finish", page)

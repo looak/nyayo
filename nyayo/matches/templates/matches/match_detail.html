@@ -6,24 +6,44 @@
 <h1>{{ match.name|default:match.pk }}
   <span class="tier">{{ match.kind }}</span> <span class="badge {{ match.state }}">{{ match.state }}</span></h1>
 
-{% if match.progress %}
-<p>{{ match.progress.played|default:0 }} of {{ match.progress.total|default:0 }} games played{% if match.progress.playing %}, {{ match.progress.playing }} playing now{% endif %}.
-  {% if match.state != "running" %}<span class="muted">The match is {{ match.state }}.</span>{% endif %}</p>
-{% endif %}
-
+{# the match as a whole, in the style of a check on a run: a verdict, when and how long, a bar and its figures #}
 <div class="card">
-  <dl class="facts">
-    <dt>Engine under test</dt><dd>{{ subject_name }}{% if match.subject.commit %} <span class="mono">{{ match.subject.commit|sha:10 }}</span>{% endif %}
-      {% if match.subject_info.options %}<span class="muted">{% for k, v in match.subject_info.options.items %}{{ k }}={{ v }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</dd>
-    {% if settings.tc %}<dt>Time control</dt><dd>{{ settings.tc }}</dd>{% endif %}
-    {% if settings.book %}<dt>Book</dt><dd>{{ settings.book }}</dd>{% endif %}
-    {% if settings.concurrency %}<dt>Concurrency</dt><dd>{{ settings.concurrency }}</dd>{% endif %}
-    {% if host.name %}<dt>Host</dt><dd>{{ host.name }}{% if host.logical_cores %} <span class="muted">{{ host.logical_cores }} threads</span>{% endif %}</dd>{% endif %}
-    <dt>Producer</dt><dd>{% if producer_url %}<a href="{{ producer_url }}">{{ match.producer_name }}</a>{% else %}{{ match.producer_name }}{% endif %}{% if match.producer.version %} <span class="muted">{{ match.producer.version }}</span>{% endif %}</dd>
-    {% if match.started_at %}<dt>Started</dt><dd>{{ match.started_at|date:"Y-m-d H:i" }}</dd>{% endif %}
-    <dt>Last report</dt><dd>{{ match.updated_at|date:"Y-m-d H:i:s" }}</dd>
-    {% if match.finished_at %}<dt>Finished</dt><dd>{{ match.finished_at|date:"Y-m-d H:i" }}</dd>{% endif %}
+  <div class="card-head">
+    <h3>Games</h3>
+    <span class="muted">{{ settings.tc }}{% if settings.concurrency %} · {{ settings.concurrency }} at a time{% endif %}</span>
+    <span class="outcome {{ match.state }} card-state">{{ match.state }}</span>
+    {% if timing.elapsed is not None %}<span class="timing muted">{% if timing.running %}running for{% else %}ran for{% endif %} {{ timing.elapsed|seconds }}</span>{% endif %}
+  </div>
+  <div class="score">
+    <div class="score-row">
+      <div class="score-figure">
+        <span class="score-value">{{ timing.finished }}{% if timing.total %}<span class="score-total">/{{ timing.total }}</span>{% endif %}</span>
+        <span class="score-label muted">games played</span>
+      </div>
+      {% if timing.total %}
+      <div class="bar-wrap">
+        <div class="bar" role="img" aria-label="{{ timing.finished }} of {{ timing.total }} games played, {{ timing.playing }} playing">
+          <span class="seg pass" style="width: {{ timing.percent_finished|stringformat:".3f" }}%" title="{{ timing.finished }} played"></span>
+          <span class="seg newly-passing" style="width: {{ timing.percent_playing|stringformat:".3f" }}%" title="{{ timing.playing }} playing"></span>
+        </div>
+        <div class="marks muted">
+          <span><i class="key pass"></i>{{ timing.finished }} played</span>
+          <span><i class="key newly-passing"></i>{{ timing.playing }} playing</span>
+          <span><i class="key unearned"></i>{{ timing.remaining }} to play</span>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <dl class="chips">
+    {% if timing.average_game is not None %}<div><dt>Average game</dt><dd title="over {{ timing.sampled }} finished games, wall clock">{{ timing.average_game|seconds }}</dd></div>{% endif %}
+    {% if timing.per_hour is not None %}<div><dt>Pace</dt><dd>{{ timing.per_hour|floatformat:1 }} games/h</dd></div>{% endif %}
+    {% if timing.eta_at %}<div><dt>Estimated finish</dt><dd title="from {{ timing.eta_basis }}">{{ timing.eta_at|date:"D H:i" }} <span class="muted">in {{ timing.eta_seconds|seconds }}</span></dd></div>
+    {% elif timing.running and timing.remaining %}<div><dt>Estimated finish</dt><dd class="muted">after the first games</dd></div>{% endif %}
+    {% if match.finished_at and not timing.running %}<div><dt>Ended</dt><dd>{{ match.finished_at|date:"D H:i" }}</dd></div>{% endif %}
+    <div><dt>Last report</dt><dd{% if timing.stale_seconds %} class="worse"{% endif %}>{{ match.updated_at|date:"H:i:s" }}{% if timing.stale_seconds %} <span class="muted">{{ timing.stale_seconds|seconds }} ago</span>{% endif %}</dd></div>
   </dl>
+  {% if timing.stale_seconds %}<p class="note">No report for {{ timing.stale_seconds|seconds }}. The runner may have stopped without saying so; the figures above are as of the last report.</p>{% endif %}
 </div>
 
 {% if boards %}
@@ -44,47 +64,103 @@
 
 <h2>Results</h2>
 <form method="get">
-<div class="scroll">
-<table>
-  <thead><tr><th>Opponent</th><th class="num">Rating</th><th class="num">Games</th><th class="num">+</th>
-    <th class="num">=</th><th class="num">−</th><th class="num">Score</th><th class="num">Elo</th>
-    <th>Pentanomial</th><th>Time losses</th><th>Crashes</th><th>Illegal</th><th>In total</th></tr></thead>
-  <tbody>
-  {% for row in summary.rows %}{% with r=row.result %}
-    <tr{% if r.opponent in excluded %} class="muted"{% endif %}>
-      <td>{{ r.engine }} <span class="muted">{{ r.opponent }}</span></td>
-      <td class="num">{% if r.rating %}{{ r.rating.value|num }}{% if r.rating.list %} <span class="muted" title="{{ r.rating.list }}{% if r.rating.as_of %}, {{ r.rating.as_of }}{% endif %}">{{ r.rating.list|truncatechars:12 }}</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
-      <td class="num">{{ r.games }}</td>
-      <td class="num">{{ r.wins }}</td><td class="num">{{ r.draws }}</td><td class="num">{{ r.losses }}</td>
-      <td class="num">{{ row.rating.score|percent }}</td>
-      <td class="num">{{ row.rating.elo|elo }} <span class="muted">{{ row.rating.error|error }}</span></td>
-      <td class="mono">{% if r.penta %}{{ r.penta|join:" " }}{% else %}<span class="muted">–</span>{% endif %}</td>
-      <td>{{ r.timelosses|pair:"subject" }} / {{ r.timelosses|pair:"opponent" }}</td>
-      <td>{{ r.crashes|pair:"subject" }} / {{ r.crashes|pair:"opponent" }}</td>
-      <td>{{ r.illegal|pair:"subject" }} / {{ r.illegal|pair:"opponent" }}</td>
-      <td class="nowrap"><label><input type="checkbox" name="exclude" value="{{ r.opponent }}"{% if r.opponent in excluded %} checked{% endif %} onchange="this.form.submit()"> counted</label></td>
-    </tr>
-  {% endwith %}{% empty %}
-    <tr><td colspan="13" class="muted">No opponent has played yet.</td></tr>
-  {% endfor %}
-  </tbody>
+<div class="match-grid">
+  {# overall, across both columns #}
   {% if summary.rows %}
-  <tfoot>
-    <tr><th>Overall{% if excluded %} <span class="muted">without {{ excluded|join:", " }}</span>{% endif %}</th>
-      <th class="num">{% if summary.performance is not None %}{{ summary.performance|floatformat:0 }}{% endif %}</th>
-      <th class="num">{{ summary.performance_games }}</th><th class="num">{{ summary.wins }}</th>
-      <th class="num">{{ summary.draws }}</th><th class="num">{{ summary.losses }}</th>
-      <th class="num">{{ summary.overall.score|percent }}</th>
-      <th class="num">{{ summary.overall.elo|elo }} {{ summary.overall.error|error }}</th>
-      <th class="mono">{% if summary.penta %}{{ summary.penta|join:" " }}{% endif %}</th><th colspan="4"></th></tr>
-  </tfoot>
+  <div class="card span-all">
+    <div class="card-head">
+      <h3>Overall{% if excluded %} <span class="muted">without {{ excluded|join:", " }}</span>{% endif %}</h3>
+      <span class="muted">{{ summary.performance_games }} games</span>
+    </div>
+    <div class="score-row">
+      <div class="score-figure">
+        <span class="score-value">{{ summary.overall.score|percent }}</span>
+        <span class="score-label muted">score</span>
+        <span class="delta {% if summary.overall.elo > 0 %}better{% elif summary.overall.elo < 0 %}worse{% endif %}">{{ summary.overall.elo|elo }} {{ summary.overall.error|error }}</span>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar" role="img" aria-label="{{ summary.wins }} wins, {{ summary.draws }} draws, {{ summary.losses }} losses">
+          <span class="seg pass" style="width: {% widthratio summary.wins summary.performance_games 100 %}%" title="{{ summary.wins }} wins"></span>
+          <span class="seg draw" style="width: {% widthratio summary.draws summary.performance_games 100 %}%" title="{{ summary.draws }} draws"></span>
+          <span class="seg fail" style="width: {% widthratio summary.losses summary.performance_games 100 %}%" title="{{ summary.losses }} losses"></span>
+        </div>
+        <div class="marks muted">
+          <span><i class="key pass"></i>{{ summary.wins }} won</span>
+          <span><i class="key draw"></i>{{ summary.draws }} drawn</span>
+          <span><i class="key fail"></i>{{ summary.losses }} lost</span>
+          {% if summary.performance is not None %}<span>performance {{ summary.performance|floatformat:0 }}</span>{% endif %}
+          {% if summary.penta %}<span>pentanomial <span class="mono">{{ summary.penta|join:" " }}</span></span>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
   {% endif %}
-</table>
+
+  {% for row in summary.rows %}{% with r=row.result %}
+  <div class="card{% if r.opponent in excluded %} excluded{% endif %}">
+    <div class="card-head">
+      <h3>{{ r.engine }}</h3>
+      <span class="muted">{{ r.opponent }}</span>
+      {% if r.rating %}<span class="muted" title="{{ r.rating.list }}{% if r.rating.as_of %}, {{ r.rating.as_of }}{% endif %}">rated {{ r.rating.value|num }}</span>{% endif %}
+      <label class="outcome none card-state"><input type="checkbox" name="exclude" value="{{ r.opponent }}"{% if r.opponent in excluded %} checked{% endif %} onchange="this.form.submit()"> left out</label>
+    </div>
+    <div class="score-row">
+      <div class="score-figure">
+        <span class="score-value">{{ row.rating.score|percent }}</span>
+        <span class="score-label muted">{{ r.games }} games</span>
+        <span class="delta {% if row.rating.elo > 0 %}better{% elif row.rating.elo < 0 %}worse{% endif %}">{{ row.rating.elo|elo }} {{ row.rating.error|error }}</span>
+      </div>
+      <div class="bar-wrap">
+        {% if r.games %}
+        <div class="bar" role="img" aria-label="{{ r.wins }} wins, {{ r.draws }} draws, {{ r.losses }} losses">
+          <span class="seg pass" style="width: {% widthratio r.wins r.games 100 %}%" title="{{ r.wins }} wins"></span>
+          <span class="seg draw" style="width: {% widthratio r.draws r.games 100 %}%" title="{{ r.draws }} draws"></span>
+          <span class="seg fail" style="width: {% widthratio r.losses r.games 100 %}%" title="{{ r.losses }} losses"></span>
+        </div>
+        <div class="marks muted">
+          <span><i class="key pass"></i>{{ r.wins }} won</span>
+          <span><i class="key draw"></i>{{ r.draws }} drawn</span>
+          <span><i class="key fail"></i>{{ r.losses }} lost</span>
+          {% if r.penta %}<span>penta <span class="mono">{{ r.penta|join:" " }}</span></span>{% endif %}
+        </div>
+        {% else %}<div class="bar"></div><div class="marks muted"><span>no games yet</span></div>{% endif %}
+      </div>
+    </div>
+    {% with tl=r.timelosses|pair:"subject" tlo=r.timelosses|pair:"opponent" cr=r.crashes|pair:"subject" cro=r.crashes|pair:"opponent" il=r.illegal|pair:"subject" ilo=r.illegal|pair:"opponent" %}
+    {% if tl or tlo or cr or cro or il or ilo %}
+    <div class="faults muted">
+      {% if tl or tlo %}<span>time losses <span class="mono">{{ tl }} / {{ tlo }}</span></span>{% endif %}
+      {% if cr or cro %}<span>crashes <span class="mono">{{ cr }} / {{ cro }}</span></span>{% endif %}
+      {% if il or ilo %}<span>illegal moves <span class="mono">{{ il }} / {{ ilo }}</span></span>{% endif %}
+      <span>(engine under test / opponent)</span>
+    </div>
+    {% endif %}
+    {% endwith %}
+  </div>
+  {% endwith %}{% empty %}
+  <p class="muted span-all">No opponent has played yet.</p>
+  {% endfor %}
 </div>
 </form>
-<p class="muted">Time losses, crashes and illegal moves are the engine under test's / the opponent's. Elo is the
-  engine under test's difference to the opponent, ± the 95% interval{% if summary.performance is not None %};
-  the rating under Overall is the performance rating against the opponents' listed ratings{% endif %}.</p>
+{% if summary.rows %}<p class="muted">Elo is the engine under test's difference to the opponent, ± the 95% interval{% if summary.performance is not None %}; the performance rating is the opponents' average listed rating plus the Elo of the overall score{% endif %}.</p>{% endif %}
+
+<div class="card">
+  <div class="facts-cols">
+    <dl class="facts">
+      <dt>Engine under test</dt><dd>{{ subject_name }}{% if match.subject.commit %} <span class="mono">{{ match.subject.commit|sha:10 }}</span>{% endif %}
+        {% if match.subject_info.options %}<span class="muted">{% for k, v in match.subject_info.options.items %}{{ k }}={{ v }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</dd>
+      {% if settings.tc %}<dt>Time control</dt><dd>{{ settings.tc }}</dd>{% endif %}
+      {% if settings.book %}<dt>Book</dt><dd>{{ settings.book }}</dd>{% endif %}
+      {% if settings.runner %}<dt>Runner</dt><dd>{{ settings.runner.name }} {{ settings.runner.version }}</dd>{% endif %}
+    </dl>
+    <dl class="facts">
+      {% if host.name %}<dt>Host</dt><dd>{{ host.name }}{% if host.logical_cores %} <span class="muted">{{ host.logical_cores }} threads</span>{% endif %}</dd>{% endif %}
+      <dt>Producer</dt><dd>{% if producer_url %}<a href="{{ producer_url }}">{{ match.producer_name }}</a>{% else %}{{ match.producer_name }}{% endif %}{% if match.producer.version %} <span class="muted">{{ match.producer.version }}</span>{% endif %}</dd>
+      {% if match.started_at %}<dt>Started</dt><dd>{{ match.started_at|date:"Y-m-d H:i" }}</dd>{% endif %}
+      {% if match.finished_at %}<dt>Finished</dt><dd>{{ match.finished_at|date:"Y-m-d H:i" }}</dd>{% endif %}
+    </dl>
+  </div>
+</div>
 
 {% if entries %}
 <h2>Games</h2>
