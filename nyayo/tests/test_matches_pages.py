@@ -446,5 +446,5 @@ class ClickableGraphs(GameTestCase):
         self.assertEqual(page.count('class="chart"'), 3)
         self.assertEqual(page.count('class="chart" data-graph'), 3)
         # only the first graph is shown, the others carry the hidden attribute
-        self.assertEqual(page.count('" hidden>'), 2)  # the eval graph is shown, depth and time are hidden
+        self.assertEqual(page.count('" hidden>'), 3)  # the graphs panel, and of its graphs depth and time
         self.assertIn("[hidden] { display: none !important; }", page)
