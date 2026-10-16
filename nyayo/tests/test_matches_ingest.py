@@ -31,6 +31,31 @@ GAUNTLET = {
     "machines": [],
 }
 
+OPENBENCH_SPRT = {
+    "schema_version": 1,
+    "id": "openbench-bobby-123",
+    "kind": "sprt",
+    "state": "running",
+    "updated_at": "2026-10-16T12:34:56Z",
+    "producer": {"kind": "OpenBench", "url": "/test/123/", "instance": "bobby"},
+    "subject": {"engine": "Dev Engine", "name": "Dev Engine", "repo": "https://example.com/dev.git", "sha": "abc123",
+                "bench": 2000, "options": "Threads=1 Hash=64", "time_control": "40/20", "network": "dev-net",
+                "book": "book"},
+    "opponents": [{"engine": "Base Engine", "name": "Base Engine", "repo": "https://example.com/base.git",
+                   "sha": "def456", "bench": 1800, "options": "Threads=1", "time_control": "40/20",
+                   "network": "base-net"}],
+    "results": [{"games": 18, "wins": 9, "losses": 3, "draws": 6, "LL": 12, "LD": 8, "DD": 5, "DW": 4, "WW": 3,
+                 "crashes": 1, "timeloss": 2}],
+    "sprt": {"lower": -5.0, "upper": 5.0, "alpha": 0.05, "beta": 0.05, "current_llr": 0.4, "lower_llr": -1.0,
+             "upper_llr": 1.0, "result": None},
+    "settings": {"dev_time_control": "40/20", "base_time_control": "40/20", "book_name": "book",
+                 "adjudication": "movecount=3 score=400", "scale_method": "BASE", "scale_nps": 0},
+    "machines": [{"machine_id": 7, "user": "alice", "games": 18, "wins": 9, "losses": 3, "draws": 6, "crashes": 1,
+                  "timeloss": 2, "updated_at": "2026-10-16T12:34:56Z"}],
+    "error": False,
+    "finished": False,
+}
+
 
 def gauntlet(**changes):
     document = copy.deepcopy(GAUNTLET)
@@ -120,6 +145,30 @@ class CreateAndUpdate(MatchTestCase):
         self.put_match(other)
         self.assertEqual(Engine.objects.filter(name="Elephant").count(), 1)
         self.assertEqual(Engine.objects.count(), 3)
+
+    def test_openbench_sprt_payload_is_accepted(self):
+        response = self.put_match(OPENBENCH_SPRT, match_id="openbench-bobby-123")
+        self.assertEqual(response.status_code, 201, response.content)
+        match = Match.objects.get(pk="openbench-bobby-123")
+        self.assertEqual((match.kind, match.state, match.producer_name), ("sprt", "running", "OpenBench"))
+        self.assertEqual(match.subject.commit, "abc123")
+        self.assertEqual(match.subject_info["options"], {"Threads": "1", "Hash": "64"})
+        row = match.results.get()
+        self.assertEqual((row.games, row.wins, row.draws, row.losses), (18, 9, 6, 3))
+        self.assertEqual(row.penta, [12, 8, 5, 4, 3])
+        self.assertEqual((match.sprt["llr"], match.sprt["lower"], match.sprt["upper"]), (0.4, -1.0, 1.0))
+
+    def test_openbench_sprt_update_grows_counts_and_llr(self):
+        self.put_match(OPENBENCH_SPRT, match_id="openbench-bobby-123")
+        later = copy.deepcopy(OPENBENCH_SPRT)
+        later["updated_at"] = "2026-10-16T12:44:56Z"
+        later["results"][0].update(games=20, wins=10, draws=7, losses=3, LL=12, LD=9, DD=6, DW=4, WW=3)
+        later["sprt"]["current_llr"] = 0.55
+        response = self.put_match(later, match_id="openbench-bobby-123")
+        self.assertEqual(response.status_code, 200, response.content)
+        row = MatchResult.objects.get()
+        self.assertEqual((row.games, row.wins, row.draws, row.losses), (20, 10, 7, 3))
+        self.assertEqual(Match.objects.get().sprt["llr"], 0.55)
 
 
 class Snapshots(MatchTestCase):

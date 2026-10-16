@@ -10,7 +10,7 @@ from nyayo.matches import pgnview, stats, timing
 from nyayo.matches.models import Match
 
 from .test_games import GameTestCase, pgn
-from .test_matches_ingest import gauntlet, scheduled
+from .test_matches_ingest import OPENBENCH_SPRT, gauntlet, scheduled
 
 COMMENTED = (
     '[White "Elephant 1.0.0"]\n[Black "Barbarossa 0.6.0"]\n[Result "*"]\n\n'
@@ -103,6 +103,15 @@ class Pages(GameTestCase):
         self.assertContains(response, "2465")
         self.assertContains(response, "65.0%")  # 5 wins and 3 draws in 10
         self.assertContains(response, 'http-equiv="refresh"')
+
+    def test_match_page_shows_sprt_viewer_for_openbench_payload(self):
+        self.put_match(OPENBENCH_SPRT, match_id="openbench-bobby-123")
+        response = self.client.get("/matches/openbench-bobby-123")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, ">SPRT<")
+        self.assertContains(response, "current LLR")
+        self.assertContains(response, "active window -1.00 .. 1.00")
+        self.assertContains(response, "SPRT bounds -5.00 .. 5.00")
 
     def test_a_finished_match_does_not_refresh(self):
         document = gauntlet()

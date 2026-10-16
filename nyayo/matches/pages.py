@@ -28,6 +28,45 @@ def engine_label(engine):
     return f"{engine.name} {engine.version}".strip()
 
 
+def number(value):
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def sprt_view(match):
+    data = match.sprt if isinstance(match.sprt, dict) else None
+    if not data:
+        return None
+    llr = number(data.get("llr"))
+    lower = number(data.get("lower"))
+    upper = number(data.get("upper"))
+    source = data.get("openbench") if isinstance(data.get("openbench"), dict) else {}
+    source_lower = number(source.get("lower"))
+    source_upper = number(source.get("upper"))
+
+    values = [v for v in (llr, lower, upper, source_lower, source_upper) if v is not None]
+    if len(values) >= 2:
+        low, high = min(values), max(values)
+        if low == high:
+            low, high = low - 1.0, high + 1.0
+    else:
+        low, high = -3.0, 3.0
+
+    def pct(value):
+        if value is None:
+            return None
+        return max(0.0, min(100.0, (value - low) / (high - low) * 100.0))
+
+    return {
+        "llr": llr, "lower": lower, "upper": upper, "result": data.get("result"),
+        "alpha": number(data.get("alpha")), "beta": number(data.get("beta")),
+        "elo0": number(data.get("elo0")), "elo1": number(data.get("elo1")), "model": data.get("model"),
+        "source_lower": source_lower, "source_upper": source_upper,
+        "range_low": low, "range_high": high,
+        "llr_pct": pct(llr), "lower_pct": pct(lower), "upper_pct": pct(upper),
+        "source_lower_pct": pct(source_lower), "source_upper_pct": pct(source_upper),
+    }
+
+
 def matches_list(request):
     matches = match_queryset().order_by("-updated_at")
     kind, state, engine = request.GET.get("kind", ""), request.GET.get("state", ""), request.GET.get("engine", "")
@@ -118,6 +157,7 @@ def match_detail(request, match_id):
     response = render(request, "matches/match_detail.html", {
         "view": view, "match": match, "boards": live_boards(match, groups["playing"]),
         "summary": stats.summarize(match.results.all(), excluded), "excluded": excluded,
+        "sprt": sprt_view(match),
         "timing": timing.summarize(
             match.state, match.started_at or match.received_at, match.finished_at, match.updated_at, total,
             len(groups["finished"]), len(groups["playing"]), durations, (match.settings or {}).get("concurrency"),

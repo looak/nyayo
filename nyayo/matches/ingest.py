@@ -24,6 +24,7 @@ from .models import GAME_ID_MAX, ID_PATTERN, KINDS, MATCH_ID_MAX, STATES, Engine
 SCHEMA_VERSION = 1
 
 ID = re.compile(ID_PATTERN)
+NON_ID = re.compile(r"[^A-Za-z0-9._-]+")
 COUNTS = ("games", "wins", "draws", "losses")
 SIDES = ("timelosses", "crashes", "illegal")
 GAME_STATES = ("scheduled", "playing", "finished")
@@ -51,7 +52,7 @@ def ingest(raw, machine=None, match_id=None):
     """Stores one match from its raw JSON bytes. machine is who sent it, match_id the id the request was addressed
     to. Returns Ingested(match, created); raises IngestError for a document that's invalid (400) or an update that
     changes what may not change (409)."""
-    document = parse(raw)
+    document = normalize(parse(raw))
     validate(document, match_id)
     m = document["match"]
 
@@ -59,6 +60,7 @@ def ingest(raw, machine=None, match_id=None):
     if existing is not None:
         previous = read_archived(existing.pk)
         if previous is not None:
+            previous = normalize(previous)
             check_update(previous, document)
         else:
             check_update_against(existing, document)
@@ -80,6 +82,125 @@ def parse(raw):
     if not isinstance(document, dict):
         raise invalid("the body must be a JSON object")
     return document
+
+
+def normalize(document):
+    """Producer compatibility shim: accepts OpenBench's top-level match payload and maps it to nyayo's schema."""
+    if "match" in document:
+        return document
+    needed = ("id", "kind", "state", "updated_at", "producer", "subject", "opponents", "results")
+    if any(name not in document for name in needed):
+        return document
+    return normalize_openbench(document)
+
+
+def normalize_openbench(document):
+    opponents = []
+    rows = []
+    used = set()
+    for i, opponent in enumerate(document.get("opponents") or []):
+        opponent_id = safe_id(opponent.get("id") or opponent.get("name") or opponent.get("engine") or f"opponent-{i + 1}",
+                              f"opponent-{i + 1}", used)
+        used.add(opponent_id)
+        opponents.append({
+            "id": opponent_id,
+            "name": opponent.get("name") or opponent.get("engine") or f"opponent-{i + 1}",
+            "version": "",
+            "commit": opponent.get("sha") or "",
+            "repo": opponent.get("repo"),
+            "bench": opponent.get("bench"),
+            "options": options_dict(opponent.get("options")),
+            "rating": None,
+        })
+    source_rows = document.get("results") or []
+    for i, row in enumerate(source_rows):
+        target = {"opponent": opponents[i]["id"] if i < len(opponents) else safe_id(f"opponent-{i + 1}",
+                                                                                      f"opponent-{i + 1}", used)}
+        target.update({
+            "games": row.get("games", 0), "wins": row.get("wins", 0), "draws": row.get("draws", 0),
+            "losses": row.get("losses", 0),
+            "penta": [row.get("LL", 0), row.get("LD", 0), row.get("DD", 0), row.get("DW", 0), row.get("WW", 0)],
+            "timelosses": {"subject": row.get("timeloss", 0), "opponent": 0},
+            "crashes": {"subject": row.get("crashes", 0), "opponent": 0},
+            "illegal": {"subject": 0, "opponent": 0},
+        })
+        rows.append(target)
+    settings = document.get("settings") or {}
+    subject = document.get("subject") or {}
+    producer = document.get("producer") or {}
+    kind = "sprt" if document.get("kind") == "sprt" else "games"
+    match = {
+        "id": document.get("id"), "kind": kind, "state": document.get("state"), "name": document.get("id"),
+        "producer": {"name": producer.get("kind") or "OpenBench", "version": producer.get("instance") or "",
+                     "url": producer.get("url")},
+        "started_at": document.get("started_at"), "updated_at": document.get("updated_at"),
+        "finished_at": document.get("finished_at"),
+        "host": {"name": producer.get("instance") or ""},
+        "settings": {
+            "tc": subject.get("time_control") or settings.get("dev_time_control"),
+            "book": subject.get("book") or settings.get("book_name"),
+            "runner": {"name": producer.get("kind") or "OpenBench", "version": producer.get("instance") or ""},
+            "openbench": settings,
+        },
+    }
+    sprt = document.get("sprt")
+    mapped_sprt = None
+    if isinstance(sprt, dict):
+        mapped_sprt = {
+            "elo0": sprt.get("elo0"), "elo1": sprt.get("elo1"), "alpha": sprt.get("alpha"), "beta": sprt.get("beta"),
+            "model": sprt.get("model"), "llr": sprt.get("current_llr"),
+            "lower": sprt.get("lower_llr", sprt.get("lower")), "upper": sprt.get("upper_llr", sprt.get("upper")),
+            "result": sprt.get("result"),
+            "openbench": {"lower": sprt.get("lower"), "upper": sprt.get("upper")},
+        }
+    return {
+        "schema_version": document.get("schema_version"),
+        "match": match,
+        "subject": {
+            "name": subject.get("name") or subject.get("engine") or "subject",
+            "version": "",
+            "commit": subject.get("sha") or "",
+            "repo": subject.get("repo"),
+            "bench": subject.get("bench"),
+            "options": options_dict(subject.get("options")),
+        },
+        "opponents": opponents,
+        "results": rows,
+        "progress": None,
+        "games": None,
+        "sprt": mapped_sprt,
+        "machines": document.get("machines") or [],
+    }
+
+
+def safe_id(value, fallback, used):
+    text = NON_ID.sub("-", str(value or "").strip()).strip("._-")
+    if not text:
+        text = fallback
+    if not text[0].isalnum():
+        text = f"x-{text}"
+    base = text[:GAME_ID_MAX]
+    candidate, i = base, 2
+    while candidate in used:
+        suffix = f"-{i}"
+        candidate = f"{base[:max(1, GAME_ID_MAX - len(suffix))]}{suffix}"
+        i += 1
+    return candidate
+
+
+def options_dict(value):
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return {"raw": str(value)}
+    parsed = {}
+    for item in value.split():
+        if "=" in item:
+            key, val = item.split("=", 1)
+            parsed[key] = val
+    return parsed or {"raw": value}
 
 
 def is_count(value):

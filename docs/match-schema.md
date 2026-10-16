@@ -9,6 +9,12 @@ untouched. The schema changes only by bumping `schema_version`, agreed with the 
 The producer re-sends the **whole document** as the match grows and says the state every time; nyayo keeps no state of
 its own on a producer's behalf, so a lost report costs nothing.
 
+### OpenBench compatibility
+
+nyayo also accepts OpenBench's top-level snapshot shape (no nested `match` object) and maps it to this schema at
+ingest time. That compatibility path is for `kind: "sprt"` and `kind: "games"` reports and keeps OpenBench-specific
+details under `match.settings.openbench` and `sprt.openbench`.
+
 ## Endpoints
 
 | | |
