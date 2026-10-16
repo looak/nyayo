@@ -81,6 +81,11 @@ class Comments(SimpleTestCase):
         self.assertIsNotNone(board.piece_at(chess.E4))
         self.assertTrue(pgnview.board_svg(parsed, 0).startswith("<svg"))
 
+    def test_plain_pgn_omits_annotations(self):
+        text = pgnview.plain_pgn(COMMENTED)
+        self.assertIn("1. e4 e5 2. Nf3 Nc6 *", text)
+        self.assertNotIn("{+0.30/18 1.204s}", text)
+
 
 class Pages(GameTestCase):
     def test_matches_list(self):
@@ -141,6 +146,21 @@ class Pages(GameTestCase):
         self.assertContains(response, "+M3")
         self.assertContains(response, 'data-plies="4"')
         self.assertContains(response, "live")
+        self.assertNotContains(response, 'data-copy-target="copy-fen"')
+
+    def test_a_finished_match_shows_copyable_fen_and_pgn(self):
+        document = gauntlet()
+        document["match"].update(state="finished", finished_at="2026-10-15T10:00:00Z")
+        self.put_match(document)
+        self.put_game(COMMENTED.replace(b'"*"', b'"1-0"').replace(b"Nc6 {book} *", b"Nc6 {book} 1-0"))
+        response = self.client.get("/matches/gauntlet-test-1/games/1")
+        self.assertContains(response, 'data-copy-target="copy-fen"')
+        self.assertContains(response, 'data-copy-target="copy-pgn"')
+        self.assertContains(response, 'data-extra-tab="share"')
+        self.assertContains(response, 'data-extra-panel="share" hidden')
+        self.assertContains(response, "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3")
+        self.assertContains(response, "1. e4 e5 2. Nf3 Nc6 1-0")
+        self.assertNotContains(response, "{+0.30/18 1.204s}")
 
     def test_game_page_at_a_ply(self):
         self.put_game(COMMENTED)
@@ -334,6 +354,17 @@ class Detail(SimpleTestCase):
         self.assertEqual([line["colour"] for line in graph["lines"]], ["white", "black"])
         self.assertEqual(len(graph["lines"][0]["dots"]), 2)
 
+    def test_time_graph_has_spent_bars_and_mirrored_time_left(self):
+        parsed = pgnview.load(EXTRAS)
+        graph = next(g for g in pgnview.graphs(parsed.moves, control=(60.0, 1.0)) if g["key"] == "time")
+        self.assertGreater(len([b for b in graph["bars"] if b["colour"] == "white"]), 0)
+        self.assertGreater(len([b for b in graph["bars"] if b["colour"] == "black"]), 0)
+        middle = graph["middle"]
+        white = next(line for line in graph["lines"] if line["colour"] == "white")
+        black = next(line for line in graph["lines"] if line["colour"] == "black")
+        self.assertLess(white["dots"][0]["y"], middle)
+        self.assertGreater(black["dots"][0]["y"], middle)
+
     def test_eval_is_each_engines_own_view(self):
         moves = pgnview.load(EXTRAS).moves
         self.assertEqual([m.own_pawns for m in moves], [0.30, -0.25, 0.40])
@@ -350,13 +381,21 @@ class GamePageLayout(GameTestCase):
         self.assertIn('data-running="black"', page)  # three plies played, black is on the move
         self.assertIn("thinking", page)
 
-    def test_tabs_and_graph_buttons(self):
+    def test_graph_buttons_and_wide_graph_panel(self):
         self.put_game(EXTRAS)
         page = self.client.get("/matches/gauntlet-test-1/games/1").content.decode()
-        self.assertIn('data-tab="graphs"', page)
+        self.assertIn('data-extra-tab="graphs"', page)
+        self.assertIn('class="game-graphs"', page)
         self.assertIn('data-metric="eval"', page)
         self.assertIn('data-metric="time"', page)
         self.assertNotIn('data-metric="nps"', page)
+
+    def test_player_cards_use_king_icons(self):
+        self.put_game(EXTRAS)
+        page = self.client.get("/matches/gauntlet-test-1/games/1").content.decode()
+        self.assertIn('class="king-icon white"', page)
+        self.assertIn('class="king-icon black"', page)
+        self.assertNotIn('class="swatch white"', page)
 
     def test_nodes_column_only_with_detail(self):
         self.put_game(EXTRAS)
@@ -446,8 +485,8 @@ class ClickableGraphs(GameTestCase):
         self.assertIn('class="hit" data-goto="2"', page)
         self.assertEqual(page.count('class="chart"'), 3)
         self.assertEqual(page.count('class="chart" data-graph'), 3)
-        # only the first graph is shown, the others carry the hidden attribute
-        self.assertEqual(page.count('" hidden>'), 3)  # the graphs panel, and of its graphs depth and time
+        # only the first graph is shown
+        self.assertEqual(page.count('" hidden>'), 2)  # depth and time
         self.assertIn("[hidden] { display: none !important; }", page)
 
 

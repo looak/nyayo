@@ -22,8 +22,8 @@
   var timer = null;
   var busy = false;
   // what the viewer picked survives the page being redrawn as the game goes on
-  var tab = "moves";
   var metric = null;
+  var extraTab = "graphs";
 
   function current() {
     var root = body.querySelector(".game");
@@ -40,12 +40,15 @@
     if (visible) element.removeAttribute("hidden"); else element.setAttribute("hidden", "");
   }
 
-  // --- tabs, graph buttons, the moves list ---
+  // --- graph buttons and the moves list ---
   function applyView() {
-    var panels = body.querySelectorAll("[data-panel]");
-    if (!body.querySelector('[data-panel="' + tab + '"]')) tab = "moves";
-    panels.forEach(function (p) { show(p, p.dataset.panel === tab); });
-    body.querySelectorAll("[data-tab]").forEach(function (a) { a.classList.toggle("current", a.dataset.tab === tab); });
+    var tabs = body.querySelectorAll("[data-extra-tab]");
+    if (tabs.length) {
+      var keys = Array.prototype.map.call(tabs, function (t) { return t.dataset.extraTab; });
+      if (keys.indexOf(extraTab) < 0) extraTab = keys[0];
+      tabs.forEach(function (t) { t.classList.toggle("current", t.dataset.extraTab === extraTab); });
+      body.querySelectorAll("[data-extra-panel]").forEach(function (p) { show(p, p.dataset.extraPanel === extraTab); });
+    }
     var buttons = body.querySelectorAll("[data-metric]");
     if (buttons.length) {
       var keys = Array.prototype.map.call(buttons, function (b) { return b.dataset.metric; });
@@ -55,8 +58,47 @@
     }
     var here = body.querySelector("td.here");
     var box = body.querySelector(".moves-scroll");
-    if (here && box && tab === "moves") {
+    if (here && box) {
       box.scrollTop = here.offsetTop - box.clientHeight / 2 + here.offsetHeight / 2;
+    }
+  }
+
+  function outerHeight(element) {
+    if (!element) return 0;
+    var style = getComputedStyle(element);
+    return element.offsetHeight + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0);
+  }
+
+  // keep the right column (player cards + moves) at the same height as the board column
+  function syncMovesHeight() {
+    var boardCol = body.querySelector(".board-col");
+    var sideCol = body.querySelector(".side-col");
+    var moves = body.querySelector(".moves-scroll");
+    if (!boardCol || !sideCol || !moves) return;
+    if (boardCol.offsetTop !== sideCol.offsetTop) {
+      sideCol.style.height = "";
+      moves.style.height = "";
+      moves.style.maxHeight = "";
+      return;
+    }
+    var topBar = boardCol.querySelector(".player-bar:first-child");
+    var boardFrame = boardCol.querySelector(".board-frame");
+    var bottomBar = boardCol.querySelector(".player-bar:last-of-type");
+    var nav = boardCol.querySelector(".board-nav");
+    var target = outerHeight(topBar) + outerHeight(boardFrame) + outerHeight(bottomBar) + outerHeight(nav);
+    if (target <= 0) return;
+    sideCol.style.height = Math.floor(target) + "px";
+    var fixed = 0;
+    Array.prototype.forEach.call(sideCol.children, function (child) {
+      if (child !== moves) fixed += outerHeight(child);
+    });
+    var available = Math.floor(target - fixed);
+    if (available > 120) {
+      moves.style.height = available + "px";
+      moves.style.maxHeight = available + "px";
+    } else {
+      moves.style.height = "";
+      moves.style.maxHeight = "";
     }
   }
 
@@ -95,6 +137,7 @@
   function shownNow() {
     readClocks();
     applyView();
+    syncMovesHeight();
     tick();
   }
 
@@ -144,15 +187,16 @@
       event.preventDefault();
       return go(parseInt(link.dataset.goto, 10));
     }
-    var picked = event.target.closest("[data-tab]");
-    if (picked) {
-      event.preventDefault();
-      tab = picked.dataset.tab;
-      return applyView();
-    }
     var button = event.target.closest("[data-metric]");
     if (button) {
       metric = button.dataset.metric;
+      applyView();
+      return;
+    }
+    var tab = event.target.closest("[data-extra-tab]");
+    if (tab) {
+      event.preventDefault();
+      extraTab = tab.dataset.extraTab;
       applyView();
     }
   });
@@ -165,6 +209,7 @@
     else if (event.key === "End") { event.preventDefault(); go(plies()); }
   });
   document.addEventListener("visibilitychange", function () { if (!document.hidden) schedule(0); });
+  window.addEventListener("resize", function () { syncMovesHeight(); });
 
   shownNow();
   schedule(poll);

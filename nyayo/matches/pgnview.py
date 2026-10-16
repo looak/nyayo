@@ -143,6 +143,14 @@ def load(raw):
     return Parsed(dict(game.headers), moves, game.headers.get("Result", "*"), start)
 
 
+def plain_pgn(raw):
+    """The game's PGN as plain movetext: no comments, no NAGs, no side lines."""
+    game = chess.pgn.read_game(io.StringIO(raw.decode("utf-8", errors="replace")))
+    if game is None:
+        return ""
+    return game.accept(chess.pgn.StringExporter(headers=True, comments=False, variations=False))
+
+
 # --- the board ---
 
 def position(parsed, ply):
@@ -200,12 +208,11 @@ def last_moves(moves, ply):
     return latest
 
 
-# --- graphs: a value per move, a line per engine ---
+# --- graphs ---
 
 METRICS = (
     ("eval", "Eval", lambda m: m.own_pawns, "pawns"),
     ("depth", "Depth", lambda m: m.depth, ""),
-    ("time", "Time", lambda m: m.seconds, "s"),
     ("nodes", "Nodes", lambda m: m.nodes, ""),
     ("nps", "NPS", lambda m: m.nps, ""),
 )
@@ -251,12 +258,14 @@ def build_graph(key, label, unit, getter, moves, ply):
         high_x = low_x + 1
     values = [v for points in series.values() for _, v in points]
     if key == "eval":
-        limit = min(GRAPH_LIMIT, max(1.0, math.ceil(max(abs(v) for v in values))))
+        peak = max(abs(v) for v in values)
+        limit = min(GRAPH_LIMIT, max(1.5, peak * 1.35))
         low_y, high_y, step = -limit, limit, limit / 2 if limit > 2 else 1.0
         clip = (lambda v: max(-limit, min(limit, v)))
     else:
-        step = nice_step(max(values))
-        low_y, high_y = 0.0, math.ceil(max(values) / step) * step or step
+        top = max(values) * 1.15
+        step = nice_step(top)
+        low_y, high_y = 0.0, math.ceil(top / step) * step or step
         clip = float
 
     def x(number):
@@ -308,7 +317,99 @@ def build_graph(key, label, unit, getter, moves, ply):
             "plot_height": GRAPH_HEIGHT - PAD_BOTTOM - PAD_TOP}
 
 
-def graphs(moves, ply=None):
+def build_time_graph(moves, ply, control):
+    """Lichess-like time chart: per-move spent bars and remaining-time lines, mirrored around a middle axis.
+
+    White is above the middle, black below it, for both spent bars and time-left lines.
+    """
+    points = [move for move in moves if move.seconds is not None]
+    if len(points) < 2:
+        return None
+
+    numbers = [m.number for m in moves]
+    low_x, high_x = min(numbers), max(numbers)
+    if high_x == low_x:
+        high_x = low_x + 1
+
+    def x(number):
+        return PAD_LEFT + (number - low_x) / (high_x - low_x) * (GRAPH_WIDTH - PAD_LEFT - PAD_RIGHT)
+
+    top, bottom = PAD_TOP, GRAPH_HEIGHT - PAD_BOTTOM
+    middle = (top + bottom) / 2
+    half = (bottom - top) / 2
+    bar_room = half - 10
+    line_room = half - 10
+    max_spent = (max(move.seconds for move in points) or 1.0) * 1.15
+
+    base, increment = control if control is not None else (None, 0.0)
+    left = {"white": base, "black": base}
+    left_points = {"white": [], "black": []}
+    bars = []
+    for move in moves:
+        if move.seconds is not None:
+            spent = move.seconds / max_spent if max_spent else 0.0
+            height = max(1.0, spent * bar_room)
+            y0, y1 = (middle - height, middle) if move.colour == "white" else (middle, middle + height)
+            bars.append({
+                "x": round(x(move.number) - 5, 1), "y": round(y0, 1), "height": round(max(y1 - y0, 1.0), 1),
+                "colour": move.colour, "tip": f"{move.number}{'.' if move.colour == 'white' else '…'} {move.san}: {move.seconds:.3g} s"
+            })
+        if move.time_left is not None:
+            left[move.colour] = move.time_left
+        elif move.seconds is not None and left[move.colour] is not None:
+            left[move.colour] = max(0.0, left[move.colour] + increment - move.seconds)
+        if left[move.colour] is not None:
+            left_points[move.colour].append((move, left[move.colour]))
+
+    max_left = max((value for side in left_points.values() for _, value in side), default=0.0) * 1.15
+    max_left = max(max_left, 1.0)
+
+    def y_left(colour, value):
+        ratio = min(1.0, max(0.0, value / max_left))
+        return (middle - ratio * line_room) if colour == "white" else (middle + ratio * line_room)
+
+    lines = []
+    for colour, side in left_points.items():
+        lines.append({
+            "colour": colour,
+            "points": " ".join(f"{x(move.number):.1f},{y_left(colour, value):.1f}" for move, value in side),
+            "dots": [{"x": round(x(move.number), 1), "y": round(y_left(colour, value), 1),
+                      "tip": f"{move.number}{'.' if colour == 'white' else '…'} {move.san}: {value:.1f} s left"}
+                     for move, value in side],
+        })
+
+    count = max(1, min(10, high_x - low_x))
+    xstep = max(1, math.ceil((high_x - low_x) / count))
+    xticks = [{"x": round(x(n), 1), "label": str(n)} for n in range(low_x, high_x + 1, xstep)]
+    cursor = None
+    if ply and 0 < ply <= len(moves):
+        cursor = round(x(moves[ply - 1].number), 1)
+
+    last_ply = {}
+    for move in moves:
+        last_ply[move.number] = move.ply
+    spacing = (GRAPH_WIDTH - PAD_LEFT - PAD_RIGHT) / (high_x - low_x)
+    columns = []
+    for number, target in sorted(last_ply.items()):
+        left_x = max(PAD_LEFT, x(number) - spacing / 2)
+        right_x = min(GRAPH_WIDTH - PAD_RIGHT, x(number) + spacing / 2)
+        columns.append({"x": round(left_x, 1), "width": round(max(right_x - left_x, 1.0), 1), "ply": target,
+                        "tip": f"move {number}"})
+
+    ticks = []
+    for ratio in (1.0, 0.5):
+        value = max_left * ratio
+        ticks.append({"y": round(middle - ratio * line_room, 1), "label": f"{value:.0f}s"})
+        ticks.append({"y": round(middle + ratio * line_room, 1), "label": f"-{value:.0f}s"})
+
+    return {"key": "time", "label": "Time", "width": GRAPH_WIDTH, "height": GRAPH_HEIGHT, "lines": lines,
+            "bars": bars, "yticks": ticks, "xticks": xticks, "cursor": cursor, "left": PAD_LEFT,
+            "right": GRAPH_WIDTH - PAD_RIGHT, "top": PAD_TOP, "bottom": GRAPH_HEIGHT - PAD_BOTTOM,
+            "columns": columns, "plot_height": GRAPH_HEIGHT - PAD_BOTTOM - PAD_TOP, "middle": round(middle, 1)}
+
+
+def graphs(moves, ply=None, control=None):
     """Every metric the game has values for, in the order the buttons show them."""
-    built = (build_graph(key, label, unit, getter, moves, ply) for key, label, getter, unit in METRICS)
-    return [g for g in built if g is not None]
+    by_key = {key: build_graph(key, label, unit, getter, moves, ply) for key, label, getter, unit in METRICS}
+    by_key["time"] = build_time_graph(moves, ply, control)
+    return [by_key[key] for key in ("eval", "depth", "time", "nodes", "nps") if by_key.get(key) is not None]

@@ -153,10 +153,12 @@
   table.moves td.here { background: var(--committed-bg); font-weight: 700; }
   table.moves td, table.moves th { padding: .15rem .45rem; }
 
-  /* the game page: a board as big as the window allows, the engines' figures and the moves and graphs beside it */
-  .game-layout { display: grid; gap: 1rem 1.5rem; align-items: start;
+  /* the game page: board and moves side by side; graphs stretch under both columns */
+  .game-layout { display: grid; gap: 1rem 1.5rem; align-items: stretch;
                  grid-template-columns: minmax(300px, min(62%, calc(100vh - 12rem))) minmax(320px, 1fr); }
   @media (max-width: 900px) { .game-layout { grid-template-columns: minmax(0, 1fr); } }
+  .board-col, .side-col { display: flex; flex-direction: column; min-height: 100%; }
+  .side-col { min-height: 0; }
   .game-status { margin: 0 0 .5rem; }
   .board-frame svg { display: block; width: 100%; height: auto; }
   .board-nav { margin: .4rem 0 0; font-size: 1.1rem; display: flex; gap: .9rem; align-items: baseline; }
@@ -168,10 +170,10 @@
   .clock { font: 700 1.3rem ui-monospace, "Cascadia Mono", Consolas, monospace; font-variant-numeric: tabular-nums;
            padding: 0 .55rem; border-radius: 4px; background: var(--code-bg); }
   .on-move .clock { color: var(--better); background: var(--published-bg); }
-  .swatch { display: inline-block; width: .75rem; height: .75rem; border-radius: 50%; vertical-align: -1px;
-            border: 1px solid var(--muted); }
-  .swatch.white { background: var(--series-white); }
-  .swatch.black { background: var(--series-black); }
+  .king-icon { display: inline-block; width: 1rem; text-align: center; margin-right: .2rem; font-size: .95rem;
+               line-height: 1; vertical-align: -1px; }
+  .king-icon.white::before { content: "♔"; color: var(--series-white); }
+  .king-icon.black::before { content: "♚"; color: var(--series-black); }
   .engine { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .5rem .75rem;
             margin-bottom: .6rem; }
   .engine-head { display: flex; flex-wrap: wrap; gap: .1rem .6rem; align-items: baseline; }
@@ -181,7 +183,7 @@
   .stats dt { color: var(--muted); font-size: .75rem; }
   .stats dd { margin: 0; font-variant-numeric: tabular-nums; }
   .pv { margin-top: .4rem; font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
-  .moves-scroll { max-height: 34vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;
+  .moves-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;
                   background: var(--card); position: relative; }
   .moves-scroll table.moves { margin: 0; }
   table.moves td.num { color: var(--muted); width: 2.5rem; }
@@ -192,14 +194,20 @@
             padding: .15rem .7rem; cursor: pointer; }
   .metric.current { background: var(--committed-bg); border-color: var(--committed); font-weight: 600; }
   .legend-lines { margin-left: auto; display: flex; flex-wrap: wrap; gap: .2rem .9rem; font-size: .85rem; }
+  .game-extra { margin-top: 1rem; }
+  .game-extra .tabs { margin: 0 0 .4rem; }
+  .game-graphs { margin-top: 0; }
   .chart { display: block; width: 100%; height: auto; background: var(--card); border: 1px solid var(--line);
            border-radius: 8px; }
+  .chart .axis { stroke: var(--muted); stroke-width: 1.2; opacity: .6; }
   .chart .grid { stroke: var(--line); stroke-width: 1; }
-  .chart .tick { fill: var(--muted); font-size: 11px; }
+  .chart .tick { fill: var(--muted); font-size: 9px; }
   .chart .cursor { stroke: var(--fg); stroke-width: 1; stroke-dasharray: 3 3; }
-  .chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; }
+  .chart .series { fill: none; stroke-width: 1.2; stroke-linejoin: round; }
   .chart .series.white { stroke: var(--series-white); }
   .chart .series.black { stroke: var(--series-black); }
+  .chart .bar-white { fill: #d9d9d9; opacity: .85; }
+  .chart .bar-black { fill: #111; opacity: .9; }
   /* a match: its progress card, and the opponents as cards in two columns */
   .seg.draw { background: var(--muted); opacity: .55; }
   .key { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; margin-right: .35rem;
@@ -233,6 +241,22 @@
   .chart .hit { fill: transparent; cursor: pointer; }
   .chart .hit:hover { fill: var(--fg); fill-opacity: .07; }
   .chart .series, .chart .dot-white, .chart .dot-black { pointer-events: none; }
+  .copy-panels { margin-top: 0; }
+  .copy-box { padding: .55rem .7rem; background: var(--code-bg); }
+  .copy-panels .card { margin: .5rem 0 0; }
+  .copy-box-head { display: flex; gap: .5rem; align-items: center; }
+  .copy-label { color: var(--muted); font-weight: 600; }
+  .copy-feedback { margin-left: .35rem; font-size: .82rem; }
+  .copy-button { border: 1px solid var(--line); border-radius: 4px; background: var(--card); color: var(--fg);
+                 cursor: pointer; min-width: 4.8rem; padding: .2rem .5rem; margin: 2px 0 2px auto; }
+  .copy-button.icon { min-width: 2rem; padding: .1rem .35rem; font-size: 1rem; line-height: 1; }
+  .copy-button:hover { border-color: var(--link); }
+  .copy-button.done { color: var(--better); border-color: var(--better); }
+  .copy-button.failed { color: var(--worse); border-color: var(--worse); }
+  .copy-field { width: 100%; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg);
+                line-height: 1.35; padding: .3rem .5rem; }
+  .copy-box.multi .copy-box-head { margin-bottom: .45rem; }
+  .copy-box.multi .copy-field { resize: vertical; min-height: 10rem; background: var(--card); }
   /* a class that sets display would otherwise beat the browser's own rule for the hidden attribute */
   [hidden] { display: none !important; }
   .chart .dot-white { fill: var(--series-white); }
@@ -250,5 +274,59 @@
 <main>
 {% block content %}{% endblock %}
 </main>
+<script>
+(function () {
+  function fallbackCopy(text, field) {
+    var probe = null;
+    if (!field || !(field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement)) {
+      probe = document.createElement("textarea");
+      probe.value = text;
+      probe.setAttribute("readonly", "");
+      probe.style.position = "fixed";
+      probe.style.opacity = "0";
+      document.body.appendChild(probe);
+      field = probe;
+    }
+    field.focus();
+    field.select();
+    try {
+      return document.execCommand("copy");
+    } finally {
+      if (probe) document.body.removeChild(probe);
+    }
+  }
+
+  function copy(text, field) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).then(function () { return true; })
+        .catch(function () { return fallbackCopy(text, field); });
+    }
+    return Promise.resolve(fallbackCopy(text, field));
+  }
+
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest("[data-copy-target]");
+    if (!button) return;
+    var target = document.getElementById(button.dataset.copyTarget || "");
+    if (!target) return;
+    var text = target.dataset.copyValue || ("value" in target ? target.value : target.textContent);
+    var feedback = button.closest(".copy-box") ? button.closest(".copy-box").querySelector("[data-copy-feedback]") : null;
+    var label = button.dataset.copyLabel || "Copy";
+    if (!text) return;
+
+    copy(text, target).then(function (ok) {
+      button.classList.remove("done", "failed");
+      button.classList.add(ok ? "done" : "failed");
+      button.textContent = ok ? "✓" : "✕";
+      if (feedback) feedback.textContent = ok ? "Copied to clipboard." : "Could not copy.";
+      setTimeout(function () {
+        button.classList.remove("done", "failed");
+        button.textContent = label;
+        if (feedback) feedback.textContent = "";
+      }, 1800);
+    });
+  });
+})();
+</script>
 </body>
 </html>

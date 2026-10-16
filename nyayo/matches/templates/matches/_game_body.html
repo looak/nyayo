@@ -30,7 +30,7 @@
       {% for s in sides %}
       <div class="engine {{ s.colour }}">
         <div class="engine-head">
-          <i class="swatch {{ s.colour }}"></i>
+          <i class="king-icon {{ s.colour }}" aria-hidden="true"></i>
           <strong>{{ s.name|default:s.colour }}</strong>
           {% if s.subject %}<span class="muted">engine under test</span>{% endif %}
           {% if s.to_move and live %}<span class="badge running thinking-badge">thinking <span class="thinking" data-colour="{{ s.colour }}"></span></span>{% endif %}
@@ -50,65 +50,74 @@
         {% endwith %}
       </div>
       {% endfor %}
-
-      <div class="tabs" role="tablist">
-        <a href="#moves" class="tab current" data-tab="moves">Moves</a>
-        {% if graphs %}<a href="#graphs" class="tab" data-tab="graphs">Graphs</a>{% endif %}
-      </div>
-
-      <div class="tab-panel" data-panel="moves">
-        <div class="moves-scroll">
-          <table class="moves">
-            <tbody>
-            {% for number, white, black in rows %}
-              <tr>
-                <td class="num">{{ number }}</td>
-                {% if white %}
-                <td class="mv{% if white.ply == ply %} here{% endif %}"><a href="?ply={{ white.ply }}" data-goto="{{ white.ply }}" title="{{ white.score }}{% if white.depth is not None %} depth {{ white.depth }}{% endif %}{% if white.seconds is not None %}, {{ white.seconds|spent }}{% endif %}">{{ white.san }}</a>
-                  <span class="muted mono">{% if white.book %}book{% else %}{{ white.score }}{% endif %}</span></td>
-                {% else %}<td class="muted">…</td>{% endif %}
-                {% if black %}
-                <td class="mv{% if black.ply == ply %} here{% endif %}"><a href="?ply={{ black.ply }}" data-goto="{{ black.ply }}" title="{{ black.score }}{% if black.depth is not None %} depth {{ black.depth }}{% endif %}{% if black.seconds is not None %}, {{ black.seconds|spent }}{% endif %}">{{ black.san }}</a>
-                  <span class="muted mono">{% if black.book %}book{% else %}{{ black.score }}{% endif %}</span></td>
-                {% else %}<td></td>{% endif %}
-              </tr>
-            {% empty %}
-              <tr><td colspan="3" class="muted">No moves yet.</td></tr>
-            {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {% if graphs %}
-      <div class="tab-panel" data-panel="graphs" hidden>
-        <div class="metrics">
-          {% for g in graphs %}<button type="button" class="metric{% if forloop.first %} current{% endif %}" data-metric="{{ g.key }}">{{ g.label }}</button>{% endfor %}
-          <span class="legend-lines">
-            {% for s in sides %}<span><i class="swatch {{ s.colour }}"></i> {{ s.name|default:s.colour|truncatechars:26 }}</span>{% endfor %}
-          </span>
-        </div>
-        {% for g in graphs %}
-        <svg class="chart" data-graph="{{ g.key }}" viewBox="0 0 {{ g.width }} {{ g.height }}" role="img"
-             aria-label="{{ g.label }} per move, a line for each engine"{% if not forloop.first %} hidden{% endif %}>
-          {% for t in g.yticks %}
-          <line x1="{{ g.left }}" x2="{{ g.right }}" y1="{{ t.y }}" y2="{{ t.y }}" class="grid"/>
-          <text x="{{ g.left|add:'-6' }}" y="{{ t.y }}" class="tick" text-anchor="end" dominant-baseline="middle">{{ t.label }}</text>
+      <div class="moves-scroll">
+        <table class="moves">
+          <tbody>
+          {% for number, white, black in rows %}
+            <tr>
+              <td class="num">{{ number }}</td>
+              {% if white %}
+              <td class="mv{% if white.ply == ply %} here{% endif %}"><a href="?ply={{ white.ply }}" data-goto="{{ white.ply }}" title="{{ white.score }}{% if white.depth is not None %} depth {{ white.depth }}{% endif %}{% if white.seconds is not None %}, {{ white.seconds|spent }}{% endif %}">{{ white.san }}</a>
+                <span class="muted mono">{% if white.book %}book{% else %}{{ white.score }}{% endif %}</span></td>
+              {% else %}<td class="muted">…</td>{% endif %}
+              {% if black %}
+              <td class="mv{% if black.ply == ply %} here{% endif %}"><a href="?ply={{ black.ply }}" data-goto="{{ black.ply }}" title="{{ black.score }}{% if black.depth is not None %} depth {{ black.depth }}{% endif %}{% if black.seconds is not None %}, {{ black.seconds|spent }}{% endif %}">{{ black.san }}</a>
+                <span class="muted mono">{% if black.book %}book{% else %}{{ black.score }}{% endif %}</span></td>
+              {% else %}<td></td>{% endif %}
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="muted">No moves yet.</td></tr>
           {% endfor %}
-          {% for t in g.xticks %}
-          <text x="{{ t.x }}" y="{{ g.bottom|add:'16' }}" class="tick" text-anchor="middle">{{ t.label }}</text>
-          {% endfor %}
-          {% if g.cursor is not None %}<line x1="{{ g.cursor }}" x2="{{ g.cursor }}" y1="{{ g.top }}" y2="{{ g.bottom }}" class="cursor"/>{% endif %}
-          {% for line in g.lines %}
-          <polyline points="{{ line.points }}" class="series {{ line.colour }}"/>
-          {% for d in line.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="3" class="dot-{{ line.colour }}"/>{% endfor %}
-          {% endfor %}
-          {% for c in g.columns %}<rect x="{{ c.x }}" y="{{ g.top }}" width="{{ c.width }}" height="{{ g.plot_height }}" class="hit" data-goto="{{ c.ply }}"><title>{{ c.tip }}</title></rect>{% endfor %}
-        </svg>
-        {% endfor %}
+          </tbody>
+        </table>
       </div>
-      {% endif %}
     </div>
   </div>
+  {% if graphs or match.state != "running" %}
+  <div class="game-extra">
+    <div class="tabs">
+      {% if graphs %}<a href="#graphs" class="tab current" data-extra-tab="graphs">Graphs</a>{% endif %}
+      {% if match.state != "running" %}<a href="#share" class="tab{% if not graphs %} current{% endif %}" data-extra-tab="share">Share &amp; export</a>{% endif %}
+    </div>
+
+    {% if graphs %}
+    <div class="game-graphs" data-extra-panel="graphs">
+      <div class="metrics">
+        {% for g in graphs %}<button type="button" class="metric{% if forloop.first %} current{% endif %}" data-metric="{{ g.key }}">{{ g.label }}</button>{% endfor %}
+        <span class="legend-lines">
+          {% for s in sides %}<span><i class="king-icon {{ s.colour }}" aria-hidden="true"></i> {{ s.name|default:s.colour|truncatechars:26 }}</span>{% endfor %}
+        </span>
+      </div>
+      {% for g in graphs %}
+      <svg class="chart" data-graph="{{ g.key }}" viewBox="0 0 {{ g.width }} {{ g.height }}" role="img"
+           aria-label="{{ g.label }} per move, a line for each engine"{% if not forloop.first %} hidden{% endif %}>
+        {% if g.middle is not None %}<line x1="{{ g.left }}" x2="{{ g.right }}" y1="{{ g.middle }}" y2="{{ g.middle }}" class="axis"/>{% endif %}
+        {% for t in g.yticks %}
+        <line x1="{{ g.left }}" x2="{{ g.right }}" y1="{{ t.y }}" y2="{{ t.y }}" class="grid"/>
+        <text x="{{ g.left|add:'-6' }}" y="{{ t.y }}" class="tick" text-anchor="end" dominant-baseline="middle">{{ t.label }}</text>
+        {% endfor %}
+        {% for t in g.xticks %}
+        <text x="{{ t.x }}" y="{{ g.bottom|add:'16' }}" class="tick" text-anchor="middle">{{ t.label }}</text>
+        {% endfor %}
+        {% if g.cursor is not None %}<line x1="{{ g.cursor }}" x2="{{ g.cursor }}" y1="{{ g.top }}" y2="{{ g.bottom }}" class="cursor"/>{% endif %}
+        {% for b in g.bars %}<rect x="{{ b.x }}" y="{{ b.y }}" width="10" height="{{ b.height }}" class="bar-{{ b.colour }}"><title>{{ b.tip }}</title></rect>{% endfor %}
+        {% for line in g.lines %}
+        <polyline points="{{ line.points }}" class="series {{ line.colour }}"/>
+        {% for d in line.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="2" class="dot-{{ line.colour }}"/>{% endfor %}
+        {% endfor %}
+        {% for c in g.columns %}<rect x="{{ c.x }}" y="{{ g.top }}" width="{{ c.width }}" height="{{ g.plot_height }}" class="hit" data-goto="{{ c.ply }}"><title>{{ c.tip }}</title></rect>{% endfor %}
+      </svg>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if match.state != "running" %}
+    <div class="copy-panels" data-extra-panel="share"{% if graphs %} hidden{% endif %}>
+      {% include "runs/_copy_field.html" with title="FEN" target_id="copy-fen" value=fen copy_icon=1 copy_label="🗐" %}
+      {% include "runs/_copy_field.html" with title="PGN" target_id="copy-pgn" value=pgn_text rows=12 copy_icon=1 copy_label="🗐" %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 {% endif %}

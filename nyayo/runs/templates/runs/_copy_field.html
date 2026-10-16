@@ -1,0 +1,13 @@
+<div class="card copy-box{% if rows and rows|add:0 > 1 %} multi{% endif %}">
+  <div class="copy-box-head">
+    <span class="copy-label">{{ title }}</span>
+    <button type="button" class="copy-button{% if copy_icon %} icon{% endif %}" data-copy-target="{{ target_id }}"
+            data-copy-label="{{ copy_label|default:'Copy' }}">{{ copy_label|default:"Copy" }}</button>
+    <span class="copy-feedback muted" data-copy-feedback aria-live="polite"></span>
+  </div>
+  {% if rows and rows|add:0 > 1 %}
+  <textarea id="{{ target_id }}" class="copy-field mono" rows="{{ rows }}" readonly spellcheck="false">{{ value }}</textarea>
+  {% else %}
+  <input id="{{ target_id }}" class="copy-field mono" type="text" readonly spellcheck="false" value="{{ value }}">
+  {% endif %}
+</div>

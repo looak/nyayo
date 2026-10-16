@@ -178,9 +178,10 @@ def game_context(match, game, ply=None):
     return {
         "match": match, "game": game, "entry": entry, "headers": parsed.headers, "result": parsed.result,
         "live": live, "cut_off": parsed.result == "*" and not live, "plies": plies, "ply": ply,
+        "fen": board.fen(), "pgn_text": pgnview.plain_pgn(raw),
         "board": chess.svg.board(board, orientation=chess.BLACK if bottom == "black" else chess.WHITE, lastmove=last,
                                  check=board.king(board.turn) if board.is_check() else None, size=720),
-        "rows": pgnview.pairs(parsed.moves), "graphs": pgnview.graphs(parsed.moves, ply), "at_end": ply == plies,
+        "rows": pgnview.pairs(parsed.moves), "graphs": pgnview.graphs(parsed.moves, ply, control), "at_end": ply == plies,
         "move": parsed.moves[ply - 1] if ply else None, "subject_colour": colour,
         "sides": [sides["white"], sides["black"]], "top": sides[top], "bottom": sides[bottom],
         "control": control, "running": running or "", "age_ms": games.age_ms(match.pk, game) if running else 0,
