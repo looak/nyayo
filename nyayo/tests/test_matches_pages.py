@@ -589,3 +589,13 @@ class OverallAlwaysFirst(GameTestCase):
     def test_the_card_follows_what_is_left_out(self):
         page = self.client.get(self.URL, {"view": "list", "exclude": "barbarossa"}).content.decode()
         self.assertIn("without barbarossa", page)
+
+
+class GraphScript(GameTestCase):
+    def test_graphs_are_shown_and_hidden_through_the_attribute(self):
+        # SVG elements have no .hidden property: assigning it changed nothing and every graph stayed as rendered
+        self.put_game(EXTRAS)
+        page = self.client.get("/matches/gauntlet-test-1/games/1").content.decode()
+        self.assertNotIn(".hidden =", page)
+        self.assertIn('setAttribute("hidden"', page)
+        self.assertIn('removeAttribute("hidden")', page)

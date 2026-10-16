@@ -34,18 +34,24 @@
     return root ? parseInt(root.dataset.plies, 10) : 0;
   }
 
+  // The hidden attribute, set the same way for every element: the charts are SVG, which has no .hidden property, so
+  // assigning it there changes nothing and the server's own hidden attribute stays.
+  function show(element, visible) {
+    if (visible) element.removeAttribute("hidden"); else element.setAttribute("hidden", "");
+  }
+
   // --- tabs, graph buttons, the moves list ---
   function applyView() {
     var panels = body.querySelectorAll("[data-panel]");
     if (!body.querySelector('[data-panel="' + tab + '"]')) tab = "moves";
-    panels.forEach(function (p) { p.hidden = p.dataset.panel !== tab; });
+    panels.forEach(function (p) { show(p, p.dataset.panel === tab); });
     body.querySelectorAll("[data-tab]").forEach(function (a) { a.classList.toggle("current", a.dataset.tab === tab); });
     var buttons = body.querySelectorAll("[data-metric]");
     if (buttons.length) {
       var keys = Array.prototype.map.call(buttons, function (b) { return b.dataset.metric; });
       if (keys.indexOf(metric) < 0) metric = keys[0];
       buttons.forEach(function (b) { b.classList.toggle("current", b.dataset.metric === metric); });
-      body.querySelectorAll("[data-graph]").forEach(function (g) { g.hidden = g.dataset.graph !== metric; });
+      body.querySelectorAll("[data-graph]").forEach(function (g) { show(g, g.dataset.graph === metric); });
     }
     var here = body.querySelector("td.here");
     var box = body.querySelector(".moves-scroll");
