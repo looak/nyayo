@@ -430,3 +430,21 @@ class RealFastchessOutput(SimpleTestCase):
         parsed = self.games[0]
         middle = parsed.moves[20]
         self.assertTrue(middle.pv)
+
+
+class ClickableGraphs(GameTestCase):
+    def test_a_column_per_move_goes_to_its_last_ply(self):
+        graph = pgnview.graphs(pgnview.load(EXTRAS).moves)[0]
+        self.assertEqual([c["ply"] for c in graph["columns"]], [2, 3])  # move 1 ends at black's reply, move 2 is open
+        self.assertIn("white", graph["columns"][0]["tip"])
+        self.assertIn("black", graph["columns"][0]["tip"])
+
+    def test_the_page_has_the_columns_and_hides_the_other_graphs(self):
+        self.put_game(EXTRAS)
+        page = self.client.get("/matches/gauntlet-test-1/games/1").content.decode()
+        self.assertIn('class="hit" data-goto="2"', page)
+        self.assertEqual(page.count('class="chart"'), 3)
+        self.assertEqual(page.count('class="chart" data-graph'), 3)
+        # only the first graph is shown, the others carry the hidden attribute
+        self.assertEqual(page.count('" hidden>'), 2)  # the eval graph is shown, depth and time are hidden
+        self.assertIn("[hidden] { display: none !important; }", page)

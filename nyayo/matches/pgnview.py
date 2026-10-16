@@ -284,9 +284,28 @@ def build_graph(key, label, unit, getter, moves, ply):
     cursor = None
     if ply and 0 < ply <= len(moves):
         cursor = round(x(moves[ply - 1].number), 1)
+
+    # a column per move number to click: it goes to the end of that move, where both engines have answered, and its
+    # tooltip gives both values
+    last_ply, shown = {}, {}
+    for move in moves:
+        last_ply[move.number] = move.ply
+    for colour, points in series.items():
+        for move, value in points:
+            shown.setdefault(move.number, {})[colour] = human(value)
+    spacing = (GRAPH_WIDTH - PAD_LEFT - PAD_RIGHT) / (high_x - low_x)
+    columns = []
+    for number, target in sorted(last_ply.items()):
+        values = shown.get(number, {})
+        tip = f"move {number}" + "".join(f" · {colour} {values[colour]}" for colour in ("white", "black")
+                                          if colour in values)
+        left = max(PAD_LEFT, x(number) - spacing / 2)
+        right = min(GRAPH_WIDTH - PAD_RIGHT, x(number) + spacing / 2)
+        columns.append({"x": round(left, 1), "width": round(max(right - left, 1.0), 1), "ply": target, "tip": tip})
     return {"key": key, "label": label, "width": GRAPH_WIDTH, "height": GRAPH_HEIGHT, "lines": lines,
             "yticks": yticks, "xticks": xticks, "cursor": cursor, "left": PAD_LEFT, "right": GRAPH_WIDTH - PAD_RIGHT,
-            "top": PAD_TOP, "bottom": GRAPH_HEIGHT - PAD_BOTTOM}
+            "top": PAD_TOP, "bottom": GRAPH_HEIGHT - PAD_BOTTOM, "columns": columns,
+            "plot_height": GRAPH_HEIGHT - PAD_BOTTOM - PAD_TOP}
 
 
 def graphs(moves, ply=None):

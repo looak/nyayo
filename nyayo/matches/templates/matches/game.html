@@ -133,7 +133,7 @@
   }
 
   body.addEventListener("click", function (event) {
-    var link = event.target.closest("a[data-goto]");
+    var link = event.target.closest("[data-goto]");  // a move, a board button, or a column of a graph
     if (link) {
       event.preventDefault();
       return go(parseInt(link.dataset.goto, 10));

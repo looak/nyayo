@@ -101,8 +101,9 @@
           {% if g.cursor is not None %}<line x1="{{ g.cursor }}" x2="{{ g.cursor }}" y1="{{ g.top }}" y2="{{ g.bottom }}" class="cursor"/>{% endif %}
           {% for line in g.lines %}
           <polyline points="{{ line.points }}" class="series {{ line.colour }}"/>
-          {% for d in line.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="3" class="dot-{{ line.colour }}"><title>{{ d.tip }}</title></circle>{% endfor %}
+          {% for d in line.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="3" class="dot-{{ line.colour }}"/>{% endfor %}
           {% endfor %}
+          {% for c in g.columns %}<rect x="{{ c.x }}" y="{{ g.top }}" width="{{ c.width }}" height="{{ g.plot_height }}" class="hit" data-goto="{{ c.ply }}"><title>{{ c.tip }}</title></rect>{% endfor %}
         </svg>
         {% endfor %}
       </div>

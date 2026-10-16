@@ -200,6 +200,11 @@
   .chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; }
   .chart .series.white { stroke: var(--series-white); }
   .chart .series.black { stroke: var(--series-black); }
+  .chart .hit { fill: transparent; cursor: pointer; }
+  .chart .hit:hover { fill: var(--fg); fill-opacity: .07; }
+  .chart .series, .chart .dot-white, .chart .dot-black { pointer-events: none; }
+  /* a class that sets display would otherwise beat the browser's own rule for the hidden attribute */
+  [hidden] { display: none !important; }
   .chart .dot-white { fill: var(--series-white); }
   .chart .dot-black { fill: var(--series-black); }
 </style>
