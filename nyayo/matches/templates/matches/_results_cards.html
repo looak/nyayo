@@ -1,35 +1,5 @@
 {% load runs_extras matches_extras %}
 <div class="match-grid">
-  {# overall, across both columns #}
-  {% if summary.rows %}
-  <div class="card span-all">
-    <div class="card-head">
-      <h3>Overall{% if excluded %} <span class="muted">without {{ excluded|join:", " }}</span>{% endif %}</h3>
-      <span class="muted">{{ summary.performance_games }} games</span>
-    </div>
-    <div class="score-row">
-      <div class="score-figure">
-        <span class="score-value">{{ summary.overall.score|percent }}</span>
-        <span class="score-label muted">score</span>
-        <span class="delta {% if summary.overall.elo > 0 %}better{% elif summary.overall.elo < 0 %}worse{% endif %}">{{ summary.overall.elo|elo }} {{ summary.overall.error|error }}</span>
-      </div>
-      <div class="bar-wrap">
-        <div class="bar" role="img" aria-label="{{ summary.wins }} wins, {{ summary.draws }} draws, {{ summary.losses }} losses">
-          <span class="seg pass" style="width: {% widthratio summary.wins summary.performance_games 100 %}%" title="{{ summary.wins }} wins"></span>
-          <span class="seg draw" style="width: {% widthratio summary.draws summary.performance_games 100 %}%" title="{{ summary.draws }} draws"></span>
-          <span class="seg fail" style="width: {% widthratio summary.losses summary.performance_games 100 %}%" title="{{ summary.losses }} losses"></span>
-        </div>
-        <div class="marks muted">
-          <span><i class="key pass"></i>{{ summary.wins }} won</span>
-          <span><i class="key draw"></i>{{ summary.draws }} drawn</span>
-          <span><i class="key fail"></i>{{ summary.losses }} lost</span>
-          {% if summary.performance is not None %}<span>performance {{ summary.performance|floatformat:0 }}</span>{% endif %}
-          {% if summary.penta %}<span>pentanomial <span class="mono">{{ summary.penta|join:" " }}</span></span>{% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
 
   {% for row in summary.rows %}{% with r=row.result %}
   <div class="card{% if r.opponent in excluded %} excluded{% endif %}">

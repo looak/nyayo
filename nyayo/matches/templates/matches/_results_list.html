@@ -23,16 +23,5 @@
     <tr><td colspan="13" class="muted">No opponent has played yet.</td></tr>
   {% endfor %}
   </tbody>
-  {% if summary.rows %}
-  <tfoot>
-    <tr><th>Overall{% if excluded %} <span class="muted">without {{ excluded|join:", " }}</span>{% endif %}</th>
-      <th class="num">{% if summary.performance is not None %}{{ summary.performance|floatformat:0 }}{% endif %}</th>
-      <th class="num">{{ summary.performance_games }}</th><th class="num">{{ summary.wins }}</th>
-      <th class="num">{{ summary.draws }}</th><th class="num">{{ summary.losses }}</th>
-      <th class="num">{{ summary.overall.score|percent }}</th>
-      <th class="num">{{ summary.overall.elo|elo }} {{ summary.overall.error|error }}</th>
-      <th class="mono">{% if summary.penta %}{{ summary.penta|join:" " }}{% endif %}</th><th colspan="4"></th></tr>
-  </tfoot>
-  {% endif %}
 </table>
 </div>

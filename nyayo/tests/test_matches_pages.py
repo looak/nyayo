@@ -570,3 +570,22 @@ class ResultsView(GameTestCase):
         self.assertIn('name="view" value="list"', page)
         self.assertIn("without barbarossa", page)
         self.assertIn("exclude=barbarossa", page)  # the other view's link keeps the exclusion
+
+
+class OverallAlwaysFirst(GameTestCase):
+    URL = "/matches/gauntlet-test-1"
+
+    def test_the_overall_card_is_there_in_both_views_and_before_the_results(self):
+        for view in ("cards", "list"):
+            page = self.client.get(self.URL, {"view": view}).content.decode()
+            self.assertEqual(page.count('class="card overall"'), 1, view)
+            self.assertLess(page.index('class="card overall"'), page.index('class="view-switch"'), view)
+
+    def test_the_list_has_no_overall_row(self):
+        page = self.client.get(self.URL, {"view": "list"}).content.decode()
+        self.assertNotIn("<tfoot>", page)
+        self.assertEqual(page.count("Overall"), 1)  # the card's heading
+
+    def test_the_card_follows_what_is_left_out(self):
+        page = self.client.get(self.URL, {"view": "list", "exclude": "barbarossa"}).content.decode()
+        self.assertIn("without barbarossa", page)
