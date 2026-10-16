@@ -221,6 +221,12 @@
   .match-grid .span-all { grid-column: 1 / -1; }
   @media (max-width: 800px) { .match-grid { grid-template-columns: minmax(0, 1fr); } }
   .card.excluded { opacity: .55; }
+  .view-switch { display: inline-flex; margin: 0 0 .6rem; border: 1px solid var(--line); border-radius: 6px;
+                 overflow: hidden; }
+  .view-switch a { padding: .15rem .9rem; color: var(--fg); background: var(--card); }
+  .view-switch a + a { border-left: 1px solid var(--line); }
+  .view-switch a.current { background: var(--committed-bg); color: var(--committed); font-weight: 600; }
+  .view-switch a:hover { text-decoration: none; }
   .faults { display: flex; flex-wrap: wrap; gap: .1rem 1rem; margin-top: .5rem; font-size: .85rem; }
   .facts-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .25rem 2rem; }
   @media (max-width: 800px) { .facts-cols { grid-template-columns: minmax(0, 1fr); } }

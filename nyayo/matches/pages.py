@@ -15,6 +15,8 @@ from .models import KINDS, STATES, Engine, Game, Match
 
 OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): "loss", ("1-0", "black"): "loss",
             ("1/2-1/2", "white"): "draw", ("1/2-1/2", "black"): "draw"}
+RESULT_VIEWS = ("cards", "list")
+VIEW_COOKIE = "nyayo_results_view"
 STATE_ORDER = {"playing": 0, "unfinished": 1, "scheduled": 2, "finished": 3}
 
 
@@ -109,8 +111,12 @@ def match_detail(request, match_id):
     total = (match.progress or {}).get("total") or len(match.schedule) or None
     durations = timing.game_durations(
         match.games.exclude(result="*").values_list("started_at", "finished_at"))
-    return render(request, "matches/match_detail.html", {
-        "match": match, "boards": live_boards(match, groups["playing"]),
+    # how the results are shown: the choice in the url, else the one made last time, kept in a cookie
+    chosen = request.GET.get("view")
+    view = chosen if chosen in RESULT_VIEWS else request.COOKIES.get(VIEW_COOKIE)
+    view = view if view in RESULT_VIEWS else RESULT_VIEWS[0]
+    response = render(request, "matches/match_detail.html", {
+        "view": view, "match": match, "boards": live_boards(match, groups["playing"]),
         "summary": stats.summarize(match.results.all(), excluded), "excluded": excluded,
         "timing": timing.summarize(
             match.state, match.started_at or match.received_at, match.finished_at, match.updated_at, total,
@@ -120,6 +126,9 @@ def match_detail(request, match_id):
         "host": match.host, "subject_name": engine_label(match.subject),
         "producer_url": (match.producer or {}).get("url"),
     })
+    if chosen in RESULT_VIEWS:
+        response.set_cookie(VIEW_COOKIE, chosen, max_age=365 * 24 * 3600, samesite="Lax")
+    return response
 
 
 def live_boards(match, playing):

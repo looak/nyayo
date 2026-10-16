@@ -1,0 +1,38 @@
+{% load runs_extras matches_extras %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Opponent</th><th class="num">Rating</th><th class="num">Games</th><th class="num">+</th>
+    <th class="num">=</th><th class="num">−</th><th class="num">Score</th><th class="num">Elo</th>
+    <th>Pentanomial</th><th>Time losses</th><th>Crashes</th><th>Illegal</th><th>Left out</th></tr></thead>
+  <tbody>
+  {% for row in summary.rows %}{% with r=row.result %}
+    <tr{% if r.opponent in excluded %} class="muted"{% endif %}>
+      <td>{{ r.engine }} <span class="muted">{{ r.opponent }}</span></td>
+      <td class="num">{% if r.rating %}{{ r.rating.value|num }}{% if r.rating.list %} <span class="muted" title="{{ r.rating.list }}{% if r.rating.as_of %}, {{ r.rating.as_of }}{% endif %}">{{ r.rating.list|truncatechars:12 }}</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="num">{{ r.games }}</td>
+      <td class="num">{{ r.wins }}</td><td class="num">{{ r.draws }}</td><td class="num">{{ r.losses }}</td>
+      <td class="num">{{ row.rating.score|percent }}</td>
+      <td class="num">{{ row.rating.elo|elo }} <span class="muted">{{ row.rating.error|error }}</span></td>
+      <td class="mono">{% if r.penta %}{{ r.penta|join:" " }}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td>{{ r.timelosses|pair:"subject" }} / {{ r.timelosses|pair:"opponent" }}</td>
+      <td>{{ r.crashes|pair:"subject" }} / {{ r.crashes|pair:"opponent" }}</td>
+      <td>{{ r.illegal|pair:"subject" }} / {{ r.illegal|pair:"opponent" }}</td>
+      <td class="nowrap"><label><input type="checkbox" name="exclude" value="{{ r.opponent }}"{% if r.opponent in excluded %} checked{% endif %} onchange="this.form.submit()"> left out</label></td>
+    </tr>
+  {% endwith %}{% empty %}
+    <tr><td colspan="13" class="muted">No opponent has played yet.</td></tr>
+  {% endfor %}
+  </tbody>
+  {% if summary.rows %}
+  <tfoot>
+    <tr><th>Overall{% if excluded %} <span class="muted">without {{ excluded|join:", " }}</span>{% endif %}</th>
+      <th class="num">{% if summary.performance is not None %}{{ summary.performance|floatformat:0 }}{% endif %}</th>
+      <th class="num">{{ summary.performance_games }}</th><th class="num">{{ summary.wins }}</th>
+      <th class="num">{{ summary.draws }}</th><th class="num">{{ summary.losses }}</th>
+      <th class="num">{{ summary.overall.score|percent }}</th>
+      <th class="num">{{ summary.overall.elo|elo }} {{ summary.overall.error|error }}</th>
+      <th class="mono">{% if summary.penta %}{{ summary.penta|join:" " }}{% endif %}</th><th colspan="4"></th></tr>
+  </tfoot>
+  {% endif %}
+</table>
+</div>

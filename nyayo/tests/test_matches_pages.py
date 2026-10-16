@@ -537,3 +537,36 @@ class MatchHeader(GameTestCase):
         page = self.client.get("/matches/gauntlet-test-1").content.decode()
         self.assertIn("Ended", page)
         self.assertNotIn("Estimated finish", page)
+
+
+class ResultsView(GameTestCase):
+    URL = "/matches/gauntlet-test-1"
+
+    def test_cards_by_default(self):
+        page = self.client.get(self.URL).content.decode()
+        self.assertIn('class="match-grid"', page)
+        self.assertNotIn("<th>Pentanomial</th>", page)
+
+    def test_the_list(self):
+        page = self.client.get(self.URL, {"view": "list"}).content.decode()
+        self.assertIn("<th>Pentanomial</th>", page)
+        self.assertNotIn('class="match-grid"', page)
+        self.assertIn("Barbarossa 0.6.0", page)
+        self.assertIn("65.0%", page)
+
+    def test_the_choice_is_remembered(self):
+        response = self.client.get(self.URL, {"view": "list"})
+        self.assertEqual(response.cookies["nyayo_results_view"].value, "list")
+        again = self.client.get(self.URL).content.decode()  # the test client sends the cookie back
+        self.assertIn("<th>Pentanomial</th>", again)
+        back = self.client.get(self.URL, {"view": "cards"}).content.decode()
+        self.assertIn('class="match-grid"', back)
+
+    def test_an_unknown_view_falls_back(self):
+        self.assertIn('class="match-grid"', self.client.get(self.URL, {"view": "wall"}).content.decode())
+
+    def test_leaving_an_opponent_out_keeps_the_view(self):
+        page = self.client.get(self.URL, {"view": "list", "exclude": "barbarossa"}).content.decode()
+        self.assertIn('name="view" value="list"', page)
+        self.assertIn("without barbarossa", page)
+        self.assertIn("exclude=barbarossa", page)  # the other view's link keeps the exclusion
