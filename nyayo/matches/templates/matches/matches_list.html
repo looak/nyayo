@@ -106,11 +106,7 @@
   </tbody>
 </table>
 </div>
-<div class="pager">
-  {% if page.has_previous %}<a href="?kind={{ kind }}&state={{ state }}&engine={{ engine }}&page={{ page.previous_page_number }}">newer</a>{% endif %}
-  <span class="muted">page {{ page.number }} of {{ page.paginator.num_pages }}</span>
-  {% if page.has_next %}<a href="?kind={{ kind }}&state={{ state }}&engine={{ engine }}&page={{ page.next_page_number }}">older</a>{% endif %}
-</div>
+{% pager page %}
 {% else %}
 <p class="muted">No matches yet. A gauntlet runner reports them with <code>PUT /api/matches/{id}</code>.</p>
 {% endif %}

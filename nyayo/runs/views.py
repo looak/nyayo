@@ -2,12 +2,13 @@ import uuid
 import zlib
 
 from django.conf import settings
-from django.core.paginator import Paginator
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.safestring import mark_safe
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+
+from nyayo.paging import PAGE_SIZE, paginate
 
 from . import chessboard, compare
 from .ingest import IngestError, ingest
@@ -78,7 +79,7 @@ def runs_list(request):
     if kind:
         runs = runs.filter(kind=kind)
     kinds = KINDS + sorted(set(Run.objects.values_list("kind", flat=True)) - set(KINDS))
-    page = Paginator(runs, 50).get_page(request.GET.get("page"))
+    page = paginate(runs, request)
     return render(request, "runs/runs_list.html", {
         "page": page, "branch": branch, "state": state, "states": STATES, "kind": kind, "kinds": kinds,
         "branches": Run.objects.order_by("branch").values_list("branch", flat=True).distinct(),
@@ -95,7 +96,7 @@ def run_detail(request, run_id):
 
 def compare_page(request):
     """Run a against b: b is a run id, 'baseline' (each check against its own) or 'previous' (on a's branch)."""
-    recent = list(Run.objects.order_by("-recorded_at")[:200])
+    recent = list(Run.objects.order_by("-recorded_at")[:PAGE_SIZE])
     a_id, b_choice = request.GET.get("a"), request.GET.get("b") or "baseline"
     context = {"recent": recent, "a_id": a_id or "", "b_choice": b_choice}
     if not a_id:

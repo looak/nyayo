@@ -20,10 +20,10 @@
   {% if pair.diff %}
     {% if pair.not_deterministic %}<p class="note">Not deterministic: the same tree and build searched differently.</p>{% endif %}
     <p class="muted">{{ pair.diff.compared }} positions compared, {{ pair.diff.changed }} changed{% if pair.diff.files_changed %}; the suite file changed ({{ pair.diff.files_changed|join:", " }}), its positions aren't comparable{% else %}{% if pair.diff.only_here %}; {{ pair.diff.only_here }} new positions{% endif %}{% if pair.diff.only_there %}; {{ pair.diff.only_there }} positions missing{% endif %}{% endif %}.</p>
-    {% include "runs/_changes.html" with title="Newly failing" changes=pair.diff.newly_failing open=True %}
-    {% include "runs/_changes.html" with title="Newly passing" changes=pair.diff.newly_passing open=True %}
-    {% include "runs/_changes.html" with title="Points changed" changes=pair.diff.points_changed %}
-    {% include "runs/_changes.html" with title="Same result, another move" changes=pair.diff.other_move %}
+    {% include "runs/_changes.html" with check=pair.check.check_id title="Newly failing" changes=pair.diff.newly_failing open=True %}
+    {% include "runs/_changes.html" with check=pair.check.check_id title="Newly passing" changes=pair.diff.newly_passing open=True %}
+    {% include "runs/_changes.html" with check=pair.check.check_id title="Points changed" changes=pair.diff.points_changed %}
+    {% include "runs/_changes.html" with check=pair.check.check_id title="Same result, another move" changes=pair.diff.other_move %}
   {% endif %}
 </section>
 {% endfor %}

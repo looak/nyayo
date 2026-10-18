@@ -1,5 +1,7 @@
 from django.contrib import admin, messages
 
+from nyayo.paging import PAGE_SIZE
+
 from . import games
 from .ingest import delete_archived
 from .models import Engine, Match
@@ -7,12 +9,14 @@ from .models import Engine, Match
 
 @admin.register(Engine)
 class EngineAdmin(admin.ModelAdmin):
+    list_per_page = PAGE_SIZE
     list_display = ["name", "version", "commit"]
     search_fields = ["name", "version", "commit"]
 
 
 @admin.register(Match)
 class MatchAdmin(admin.ModelAdmin):
+    list_per_page = PAGE_SIZE
     list_display = ["id", "name", "kind", "state", "subject", "producer_name", "machine", "updated_at"]
     list_filter = ["kind", "state", "producer_name", "machine"]
     search_fields = ["id", "name"]

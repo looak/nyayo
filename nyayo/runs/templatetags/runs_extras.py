@@ -1,6 +1,35 @@
 from django import template
 
+from nyayo.paging import paginate
+
 register = template.Library()
+
+
+@register.simple_tag(takes_context=True)
+def paged(context, items, key="page"):
+    """A list as the page of it the request asks for: `{% paged things "page" as page %}`. Nested lists on one page
+    each need a key of their own."""
+    return paginate(items, context["request"], key)
+
+
+@register.inclusion_tag("runs/_pager.html", takes_context=True)
+def pager(context, page, key="page"):
+    """Previous and next links for a page from `paged` (or a view), keeping the rest of the query as it is. Nothing
+    for a list that fits on one page."""
+    request = context["request"]
+
+    def link(number):
+        query = request.GET.copy()
+        query[key] = number
+        return "?" + query.urlencode()
+
+    return {
+        "page": page,
+        "first": link(1) if page.number > 2 else None,
+        "previous": link(page.previous_page_number()) if page.has_previous() else None,
+        "next": link(page.next_page_number()) if page.has_next() else None,
+        "last": link(page.paginator.num_pages) if page.number < page.paginator.num_pages - 1 else None,
+    }
 
 
 @register.filter

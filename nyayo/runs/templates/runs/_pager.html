@@ -1,0 +1,9 @@
+{% if page.paginator.num_pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  {% if first %}<a href="{{ first }}">first</a>{% endif %}
+  {% if previous %}<a href="{{ previous }}">previous</a>{% endif %}
+  <span class="muted">page {{ page.number }} of {{ page.paginator.num_pages }} &middot; {{ page.paginator.count }} in all</span>
+  {% if next %}<a href="{{ next }}">next</a>{% endif %}
+  {% if last %}<a href="{{ last }}">last</a>{% endif %}
+</nav>
+{% endif %}

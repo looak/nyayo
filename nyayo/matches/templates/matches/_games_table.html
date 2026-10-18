@@ -1,5 +1,5 @@
 {% if entries %}
-{% if title %}<h3>{{ title }} <span class="muted">{{ entries|length }}</span></h3>{% endif %}
+{% if title %}<h3>{{ title }} <span class="muted">{% if count %}{{ count }}{% else %}{{ entries|length }}{% endif %}</span></h3>{% endif %}
 <div class="scroll">
 <table>
   <thead><tr><th class="num">Game</th><th class="num">Round</th><th>Opponent</th><th>Engine under test played</th>

@@ -181,8 +181,9 @@
 
 {% if entries %}
 <h2>Games</h2>
-{% include "matches/_games_table.html" with entries=groups.playing title="Playing" %}
-{% include "matches/_games_table.html" with entries=groups.unfinished title="Cut off" %}
-{% include "matches/_games_table.html" with entries=groups.finished title="Finished" %}
+{% include "matches/_games_table.html" with entries=groups.playing title="Playing" count=totals.playing %}
+{% include "matches/_games_table.html" with entries=groups.unfinished title="Cut off" count=totals.unfinished %}
+{% include "matches/_games_table.html" with entries=groups.finished title="Finished" count=totals.finished %}
+{% pager games_page %}
 {% endif %}
 {% endblock %}

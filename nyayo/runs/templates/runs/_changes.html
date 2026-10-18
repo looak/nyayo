@@ -1,11 +1,11 @@
-{% load runs_extras %}{% if changes %}
-<details{% if open %} open{% endif %}>
-  <summary>{{ title }} <span class="muted">({{ changes|length }})</span></summary>
+{% load runs_extras %}{% if changes %}{% with key=check|add:"-"|add:title|slugify %}{% paged changes key as shown %}
+<details{% if open or key in request.GET %} open{% endif %}>
+  <summary>{{ title }} <span class="muted">({{ shown.paginator.count }})</span></summary>
   <div class="scroll">
   <table>
     <thead><tr><th>Position</th><th>File</th><th>Before</th><th>Now</th><th class="num">Points</th></tr></thead>
     <tbody>
-    {% for change in changes %}
+    {% for change in shown.object_list %}
       <tr>
         <td class="mono"><a href="{% url 'case' change.case.check_result.check_id change.case.case_id %}?branch={{ branch|urlencode }}">{{ change.case.case_id }}</a></td>
         <td class="muted">{{ change.case.file }}</td>
@@ -17,5 +17,6 @@
     </tbody>
   </table>
   </div>
+  {% pager shown key %}
 </details>
-{% endif %}
+{% endwith %}{% endif %}

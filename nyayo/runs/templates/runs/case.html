@@ -43,7 +43,8 @@
   <table>
     <thead><tr><th>Recorded</th><th>Run</th><th>State</th><th>Commit</th><th>Result</th><th>Played</th><th class="num">Points</th><th class="num">Nodes</th><th class="num">Time</th></tr></thead>
     <tbody>
-    {% for row in current.rows %}
+    {% paged current.rows "page" as rows_page %}
+    {% for row in rows_page.object_list %}
       <tr>
         <td class="nowrap">{{ row.run.recorded_at|date:"Y-m-d H:i" }}</td>
         <td class="mono"><a href="{% url 'run' row.run.pk %}">{{ row.run.short_name }}</a></td>
@@ -60,6 +61,7 @@
     </tbody>
   </table>
   </div>
+  {% pager rows_page %}
 {% else %}
   <p class="muted">No results for this position along {{ branch }}.</p>
 {% endif %}

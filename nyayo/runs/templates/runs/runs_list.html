@@ -48,11 +48,7 @@
   </tbody>
 </table>
 </div>
-<div class="pager">
-  {% if page.has_previous %}<a href="?branch={{ branch|urlencode }}&state={{ state }}&tier={{ kind|urlencode }}&page={{ page.previous_page_number }}">newer</a>{% endif %}
-  <span class="muted">page {{ page.number }} of {{ page.paginator.num_pages }}</span>
-  {% if page.has_next %}<a href="?branch={{ branch|urlencode }}&state={{ state }}&tier={{ kind|urlencode }}&page={{ page.next_page_number }}">older</a>{% endif %}
-</div>
+{% pager page %}
 {% else %}
 <p class="muted">No runs yet. Push one from Elephant with <code>python test/results.py sync</code>.</p>
 {% endif %}

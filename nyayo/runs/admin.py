@@ -1,11 +1,14 @@
 from django.contrib import admin, messages
 
+from nyayo.paging import PAGE_SIZE
+
 from .ingest import delete_archived
 from .models import Machine, Run
 
 
 @admin.register(Machine)
 class MachineAdmin(admin.ModelAdmin):
+    list_per_page = PAGE_SIZE
     list_display = ["name", "active", "created_at", "run_count"]
     readonly_fields = ["created_at"]
     actions = ["revoke", "rotate_token"]
@@ -41,6 +44,7 @@ class MachineAdmin(admin.ModelAdmin):
 
 @admin.register(Run)
 class RunAdmin(admin.ModelAdmin):
+    list_per_page = PAGE_SIZE
     list_display = ["short_name", "state", "branch", "machine", "host_name", "recorded_at"]
     list_filter = ["state", "kind", "source", "machine", "branch"]
     search_fields = ["id", "commit", "tree", "branch"]

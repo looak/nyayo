@@ -129,13 +129,14 @@
 
 {% if entries %}
 <h2>Games</h2>
-{% include "matches/_games_table.html" with entries=groups.playing title="Playing" %}
-{% include "matches/_games_table.html" with entries=groups.unfinished title="Cut off" %}
-{% if groups.scheduled %}
-<details{% if not groups.playing and not groups.finished %} open{% endif %}><summary>{{ groups.scheduled|length }} scheduled</summary>
-  {% include "matches/_games_table.html" with entries=groups.scheduled title="" %}
+{% include "matches/_games_table.html" with entries=groups.playing title="Playing" count=totals.playing %}
+{% include "matches/_games_table.html" with entries=groups.unfinished title="Cut off" count=totals.unfinished %}
+{% if groups.scheduled or totals.scheduled %}
+<details{% if not groups.playing and not groups.finished %} open{% endif %}><summary>{{ totals.scheduled }} scheduled</summary>
+  {% include "matches/_games_table.html" with entries=groups.scheduled title="" count=totals.scheduled %}
 </details>
 {% endif %}
-{% include "matches/_games_table.html" with entries=groups.finished title="Finished" %}
+{% include "matches/_games_table.html" with entries=groups.finished title="Finished" count=totals.finished %}
+{% pager games_page %}
 {% endif %}
 {% endblock %}

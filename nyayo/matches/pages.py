@@ -5,12 +5,13 @@ from datetime import timedelta
 import chess
 import chess.svg
 from django.conf import settings
-from django.core.paginator import Paginator
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 
 from django.utils import timezone
+
+from nyayo.paging import paginate
 
 from . import games, pgnview, progress, sprtview, stats, timing
 from .models import KINDS, STATES, Engine, Game, Match
@@ -228,7 +229,7 @@ def matches_list(request):
         matches = matches.filter(state=state)
     if engine.isdigit():
         matches = matches.filter(subject_id=int(engine))
-    page = Paginator(matches, 50).get_page(request.GET.get("page"))
+    page = paginate(matches, request)
     running = running_cards(cutoff, timezone.now())
     for match in page.object_list:
         match.summary = stats.summarize(match.results.all())
@@ -333,6 +334,13 @@ def match_detail(request, match_id):
         "host": match.host, "subject_name": subject_name, "stored_games": stored_games(match),
         "producer_url": (match.producer or {}).get("url"),
     }
+    # the games table shows one page of them, in play order (playing, cut off, scheduled, finished); what was counted
+    # above, the totals and the boards in play, is of all of them
+    games_page = paginate(entries, request)
+    context.update({
+        "games_page": games_page, "totals": {name: len(rows) for name, rows in groups.items()},
+        "groups": {name: [e for e in games_page.object_list if e["state"] == name] for name in groups},
+    })
     template = "matches/match_detail.html"
     if context["sprt"]:
         # an SPRT is a test of one change, not a field of opponents: its own page
