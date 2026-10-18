@@ -1,8 +1,25 @@
 {% extends "runs/base.html" %}
-{% load matches_extras %}
+{% load runs_extras matches_extras %}
 {% block title %}Matches · nyayo{% endblock %}
+{% block head %}{% if live %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
 {% block content %}
 <h1>Matches</h1>
+{% for g in live %}
+<a class="card live-card" href="{% url 'game' g.match.pk g.game %}">
+  <div class="live-card-board">{{ g.svg|safe }}</div>
+  <div class="live-card-body">
+    <div class="live-card-head"><span class="badge running">live</span> <strong>{{ g.match.name|default:g.match.pk }}</strong>
+      <span class="muted">game {{ g.game }} · move {{ g.last.number|default:"–" }}</span></div>
+    <div class="live-card-players">
+      <span><i class="king-icon white" aria-hidden="true"></i> {{ g.white|default:"white" }}</span>
+      <span class="muted">against</span>
+      <span><i class="king-icon black" aria-hidden="true"></i> {{ g.black|default:"black" }}</span>
+    </div>
+    {% if g.last %}<div class="mono live-card-last">{{ g.last.number }}{% if g.plies|divisibleby:2 %}…{% else %}.{% endif %} {{ g.last.san }}{% if g.last.score %} <span class="muted">{{ g.last.score }}</span>{% endif %}</div>{% endif %}
+    <div class="muted live-card-age">{% if g.since < 5 %}moved just now{% else %}last move {{ g.since|seconds }} ago{% endif %}</div>
+  </div>
+</a>
+{% endfor %}
 <form class="filters" method="get">
   <label>Kind
     <select name="kind" onchange="this.form.submit()">

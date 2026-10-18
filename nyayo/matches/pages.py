@@ -179,6 +179,34 @@ def sprt_progress(match):
             "projection": progress.projection(series, match.sprt, timezone.now()) if running else None}
 
 
+# most live games the list shows a card for; a runner plays a handful at a time
+LIVE_CARDS = 6
+
+
+def live_cards(cutoff):
+    """The games being played right now, newest first, for the top of the match list: a game with no result yet in a
+    match that is running and has reported lately (a silent match's games are likely dead). One that can't be read
+    is left out."""
+    rows = (Game.objects.filter(result="*", match__state="running", match__updated_at__gte=cutoff)
+            .select_related("match", "match__subject").order_by("-received_at")[:LIVE_CARDS])
+    cards = []
+    for row in rows:
+        raw = games.read_pgn(row.match_id, row.game)
+        parsed = pgnview.load(raw) if raw else None
+        if parsed is None:
+            continue
+        plies = len(parsed.moves)
+        orientation = chess.BLACK if row.colour == "black" else chess.WHITE
+        cards.append({
+            "match": row.match, "game": row.game, "plies": plies, "colour": row.colour,
+            "white": parsed.headers.get("White", ""), "black": parsed.headers.get("Black", ""),
+            "last": parsed.moves[-1] if parsed.moves else None,
+            "since": games.age_ms(row.match_id, row.game) // 1000,
+            "svg": pgnview.board_svg(parsed, plies, orientation, size=190),
+        })
+    return cards
+
+
 def matches_list(request):
     matches = match_queryset().order_by("-updated_at")
     kind, state, engine = request.GET.get("kind", ""), request.GET.get("state", ""), request.GET.get("engine", "")
@@ -192,6 +220,7 @@ def matches_list(request):
     if engine.isdigit():
         matches = matches.filter(subject_id=int(engine))
     page = Paginator(matches, 50).get_page(request.GET.get("page"))
+    live = live_cards(cutoff)
     for match in page.object_list:
         match.summary = stats.summarize(match.results.all())
         match.silent = is_silent(match, cutoff)
@@ -201,6 +230,7 @@ def matches_list(request):
         match.elo_error = produced.get("error") if produced else match.summary.overall.error
     return render(request, "matches/matches_list.html", {
         "page": page, "kind": kind, "kinds": KINDS, "state": state, "states": STATES + ["silent"], "engine": engine,
+        "live": live,
         "engines": Engine.objects.filter(matches_as_subject__isnull=False).distinct(),
     })
 

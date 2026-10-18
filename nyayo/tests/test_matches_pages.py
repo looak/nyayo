@@ -711,3 +711,57 @@ class GraphScript(GameTestCase):
         self.assertNotIn(".hidden =", page)
         self.assertIn('setAttribute("hidden"', page)
         self.assertIn('removeAttribute("hidden")', page)
+
+
+class LiveCards(GameTestCase):
+    def fresh(self):
+        Match.objects.update(updated_at=django_timezone.now())
+
+    def test_a_live_game_gets_a_card_linking_to_it(self):
+        self.fresh()
+        self.put_game(pgn("1. e4 e5 2. Nf3"))
+        page = self.client.get("/matches").content.decode()
+        self.assertIn('href="/matches/gauntlet-test-1/games/1"', page)
+        self.assertIn('class="card live-card"', page)
+        self.assertIn("game 1 · move 2", page)
+        self.assertIn("Nf3", page)
+        self.assertIn('http-equiv="refresh" content="10"', page)
+
+    def test_the_card_comes_before_the_list(self):
+        self.fresh()
+        self.put_game(pgn("1. e4 e5"))
+        page = self.client.get("/matches").content.decode()
+        self.assertLess(page.index("live-card-board"), page.index("<table>"))
+
+    def test_nothing_live_no_card_and_no_refresh(self):
+        self.fresh()
+        page = self.client.get("/matches").content.decode()
+        self.assertNotIn('class="card live-card"', page)
+        self.assertNotIn('http-equiv="refresh"', page)
+
+    def test_a_finished_game_has_no_card(self):
+        self.fresh()
+        self.put_game(pgn("1. e4 e5", result="1-0"))
+        self.assertNotIn('class="card live-card"', self.client.get("/matches").content.decode())
+
+    def test_games_of_a_match_that_stopped_have_no_card(self):
+        self.put_game(pgn("1. e4 e5"))
+        Match.objects.update(state="stopped", updated_at=django_timezone.now())
+        self.assertNotIn('class="card live-card"', self.client.get("/matches").content.decode())
+
+    def test_games_of_a_silent_match_have_no_card(self):
+        self.put_game(pgn("1. e4 e5"))
+        Match.objects.update(updated_at=django_timezone.now() - timedelta(minutes=45))
+        self.assertNotIn('class="card live-card"', self.client.get("/matches").content.decode())
+
+    def test_each_live_game_gets_its_own_card_up_to_a_few(self):
+        self.fresh()
+        for number in range(1, 9):
+            self.put_game(pgn("1. e4 e5"), game=str(number))
+        page = self.client.get("/matches").content.decode()
+        self.assertEqual(page.count('class="card live-card"'), 6)
+
+    def test_the_filters_still_work_with_a_card_up(self):
+        self.fresh()
+        self.put_game(pgn("1. e4 e5"))
+        self.assertEqual(self.client.get("/matches?kind=sprt").status_code, 200)
