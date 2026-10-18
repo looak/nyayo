@@ -12,7 +12,7 @@ from django.template.loader import render_to_string
 
 from django.utils import timezone
 
-from . import games, pgnview, stats, timing
+from . import games, pgnview, progress, stats, timing
 from .models import KINDS, STATES, Engine, Game, Match
 
 OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): "loss", ("1-0", "black"): "loss",
@@ -113,6 +113,16 @@ def sprt_view(match):
         "range_low": low, "range_high": high,
         "llr_pct": pct(llr), "lower_pct": pct(lower), "upper_pct": pct(upper),
     }
+
+
+def sprt_progress(match):
+    """The SPRT card's graphs and projection, from the snapshots; empty for a match that isn't an SPRT."""
+    if not isinstance(match.sprt, dict):
+        return {}
+    series = progress.points(match.snapshots.all())
+    running = match.state == "running"
+    return {"graphs": progress.graphs(series, match.sprt),
+            "projection": progress.projection(series, match.sprt, timezone.now()) if running else None}
 
 
 def matches_list(request):
@@ -217,7 +227,7 @@ def match_detail(request, match_id):
         "view": view, "match": match, "silent": is_silent(match, silent_cutoff()), "silent_minutes": settings.NYAYO_SILENT_AFTER, "boards": live_boards(match, groups["playing"]),
         "summary": summary, "excluded": excluded,
         "summary_clipboard": summary_clipboard_text(match, subject_name, summary, match.settings or {}),
-        "sprt": sprt_view(match),
+        "sprt": sprt_view(match), **sprt_progress(match),
         "timing": timing.summarize(
             match.state, match.started_at or match.received_at, match.finished_at, match.updated_at, total,
             played, len(groups["playing"]), durations, (match.settings or {}).get("concurrency"),

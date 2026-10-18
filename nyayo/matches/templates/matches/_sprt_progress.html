@@ -1,0 +1,31 @@
+{% load runs_extras matches_extras %}
+{# an SPRT's Elo and LLR over games, from the snapshots, and where the LLR is heading #}
+{% if projection %}
+<dl class="chips">
+  {% if projection.reason %}
+  <div><dt>Projection</dt><dd class="muted">{{ projection.reason }}</dd></div>
+  {% else %}
+  <div><dt>Heading for</dt><dd>the {{ projection.bound }} bound <span class="muted">{{ projection.bound_value|floatformat:2 }}</span></dd></div>
+  <div><dt>Games to go</dt><dd title="{{ projection.basis }}">~{{ projection.games|floatformat:0 }}</dd></div>
+  {% if projection.seconds is not None %}<div><dt>Time to go</dt><dd title="{{ projection.basis }}, at the pace of those games">~{{ projection.seconds|seconds }} <span class="muted">{{ projection.at|date:"D H:i" }}</span></dd></div>{% endif %}
+  {% endif %}
+</dl>
+{% if not projection.reason %}<p class="muted">An estimate: the LLR's slope run to the bound it is heading for; it can turn around.</p>{% endif %}
+{% endif %}
+{% for g in graphs %}
+<h4 class="graph-title">{{ g.label }} <span class="muted">over games{% if g.band %}, with its 95% interval{% endif %}</span></h4>
+<svg class="chart" viewBox="0 0 {{ g.width }} {{ g.height }}" role="img" aria-label="{{ g.label }} over games">
+  {% for t in g.yticks %}
+  <line x1="{{ g.left }}" x2="{{ g.right }}" y1="{{ t.y }}" y2="{{ t.y }}" class="grid"/>
+  <text x="{{ g.left|add:'-6' }}" y="{{ t.y }}" class="tick" text-anchor="end" dominant-baseline="middle">{{ t.label }}</text>
+  {% endfor %}
+  {% for t in g.xticks %}<text x="{{ t.x }}" y="{{ g.bottom|add:'16' }}" class="tick" text-anchor="middle">{{ t.label }}</text>{% endfor %}
+  {% if g.band %}<polygon points="{{ g.band }}" class="band"/>{% endif %}
+  {% for m in g.marks %}
+  <line x1="{{ g.left }}" x2="{{ g.right }}" y1="{{ m.y }}" y2="{{ m.y }}" class="axis bound"/>
+  <text x="{{ g.right }}" y="{{ m.y|add:'-3' }}" class="tick" text-anchor="end">{{ m.label }}</text>
+  {% endfor %}
+  <polyline points="{{ g.line }}" class="series white"/>
+  <circle cx="{{ g.last.x }}" cy="{{ g.last.y }}" r="3" class="dot-white"/>
+</svg>
+{% endfor %}

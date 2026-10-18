@@ -82,6 +82,7 @@
     {% if sprt.beta is not None %}<div><dt>Beta</dt><dd>{{ sprt.beta|floatformat:3 }}</dd></div>{% endif %}
     {% if sprt.model %}<div><dt>Model</dt><dd>{{ sprt.model }}</dd></div>{% endif %}
   </dl>
+  {% include "matches/_sprt_progress.html" %}
 </div>
 {% endif %}
 
