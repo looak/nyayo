@@ -1,3 +1,4 @@
+import copy
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -5,6 +6,7 @@ from types import SimpleNamespace
 
 import chess
 from django.test import SimpleTestCase
+from django.utils import timezone as django_timezone
 
 from nyayo.matches import pgnview, stats, timing
 from nyayo.matches.models import Match
@@ -103,13 +105,13 @@ class Pages(GameTestCase):
         self.assertContains(response, "2465")
         self.assertContains(response, "65.0%")  # 5 wins and 3 draws in 10
         self.assertContains(response, "Clipboard table")
-        self.assertContains(response, "Engine	Penta	Strength	Elo")
-        self.assertContains(response, "Games	10")
-        self.assertContains(response, "Time control	120+1")
-        self.assertContains(response, "Date	2026-10-15 08:30 UTC")
-        self.assertContains(response, "Barbarossa 0.6.0	0 1 2 2 0	2465	+107.5")
-        self.assertContains(response, "Belette 1.0	-	-	-")
-        self.assertContains(response, "Subject Elo	+107.5")
+        self.assertContains(response, "Engine\tPenta\tStrength\tElo")
+        self.assertContains(response, "Games\t10")
+        self.assertContains(response, "Time control\t120+1")
+        self.assertContains(response, "Date\t2026-10-15 08:30 UTC")
+        self.assertContains(response, "Barbarossa 0.6.0\t0 1 2 2 0\t2465\t+107.5")
+        self.assertContains(response, "Belette 1.0\t-\t-\t-")
+        self.assertContains(response, "Subject Elo\t+107.5")
         self.assertContains(response, 'http-equiv="refresh"')
 
     def test_match_page_shows_sprt_viewer_for_openbench_payload(self):
@@ -119,7 +121,39 @@ class Pages(GameTestCase):
         self.assertContains(response, ">SPRT<")
         self.assertContains(response, "current LLR")
         self.assertContains(response, "active window -1.00 .. 1.00")
-        self.assertContains(response, "SPRT bounds -5.00 .. 5.00")
+        self.assertContains(response, "Elo window")
+        self.assertContains(response, "-5.00 .. 5.00")
+        self.assertNotContains(response, "SPRT bounds")
+        self.assertNotContains(response, 'title="SPRT lower')
+        self.assertContains(response, "18")  # games played, from the results
+
+    def test_a_failed_sprt_is_not_badged_as_a_pass(self):
+        document = copy.deepcopy(OPENBENCH_SPRT)
+        document.update(state="finished", finished=True)
+        document["sprt"]["result"] = "failed"
+        document["id"] = "openbench-bobby-123"
+        response = self.put_match(document, match_id="openbench-bobby-123")
+        self.assertEqual(response.status_code, 201, response.content)
+        html = self.client.get("/matches/openbench-bobby-123").content.decode()
+        self.assertIn('<span class="outcome fail">failed</span>', html)
+        self.assertNotIn('<span class="outcome pass">failed</span>', html)
+
+    def test_a_running_match_with_no_report_for_a_while_is_silent(self):
+        Match.objects.update(updated_at=django_timezone.now())
+        self.assertNotContains(self.client.get("/matches/gauntlet-test-1"), "badge silent")
+        Match.objects.update(updated_at=django_timezone.now() - timedelta(minutes=31))
+        self.assertContains(self.client.get("/matches/gauntlet-test-1"), '<span class="badge silent">silent</span>')
+        self.assertContains(self.client.get("/matches"), "badge silent")
+        self.assertContains(self.client.get("/matches?state=silent"), "gauntlet-test-1")
+
+    def test_a_report_clears_silent(self):
+        Match.objects.update(updated_at=django_timezone.now() - timedelta(minutes=31))
+        Match.objects.update(updated_at=django_timezone.now())
+        self.assertNotContains(self.client.get("/matches/gauntlet-test-1"), "badge silent")
+
+    def test_a_finished_match_is_never_silent(self):
+        Match.objects.update(state="finished", updated_at=django_timezone.now() - timedelta(days=3))
+        self.assertNotContains(self.client.get("/matches/gauntlet-test-1"), "badge silent")
 
     def test_a_finished_match_does_not_refresh(self):
         document = gauntlet()

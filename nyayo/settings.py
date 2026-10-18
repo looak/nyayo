@@ -56,6 +56,9 @@ NYAYO_GAME_POLL_MS = int(os.environ.get("NYAYO_GAME_POLL_MS", 100))
 NYAYO_WIP_DAYS = int(os.environ.get("NYAYO_WIP_DAYS", 14))
 NYAYO_COMMITTED_DAYS = int(os.environ.get("NYAYO_COMMITTED_DAYS", 30))
 
+# A running match with no report for this many minutes is shown as silent (derived when a page is drawn, never stored).
+NYAYO_SILENT_AFTER = int(os.environ.get("NYAYO_SILENT_AFTER", 30))
+
 # A run's largest size once decompressed; uploads are gzipped and far smaller on the wire.
 NYAYO_MAX_RUN_BYTES = 64 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024

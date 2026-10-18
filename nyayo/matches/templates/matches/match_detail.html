@@ -4,14 +4,14 @@
 {% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% endblock %}
 {% block content %}
 <h1>{{ match.name|default:match.pk }}
-  <span class="tier">{{ match.kind }}</span> <span class="badge {{ match.state }}">{{ match.state }}</span></h1>
+  <span class="tier">{{ match.kind }}</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}</h1>
 
 {# the match as a whole, in the style of a check on a run: a verdict, when and how long, a bar and its figures #}
 <div class="card">
   <div class="card-head">
     <h3>Games</h3>
     <span class="muted">{{ settings.tc }}{% if settings.concurrency %} · {{ settings.concurrency }} at a time{% endif %}</span>
-    <span class="outcome {{ match.state }} card-state">{{ match.state }}</span>
+    {% if silent %}<span class="outcome silent card-state">silent</span>{% else %}<span class="outcome {{ match.state }} card-state">{{ match.state }}</span>{% endif %}
     {% if timing.elapsed is not None %}<span class="timing muted">{% if timing.running %}running for{% else %}ran for{% endif %} {{ timing.elapsed|seconds }}</span>{% endif %}
   </div>
   <div class="score">
@@ -43,6 +43,7 @@
     {% if match.finished_at and not timing.running %}<div><dt>Ended</dt><dd>{{ match.finished_at|date:"D H:i" }}</dd></div>{% endif %}
     <div><dt>Last report</dt><dd{% if timing.stale_seconds %} class="worse"{% endif %}>{{ match.updated_at|date:"H:i:s" }}{% if timing.stale_seconds %} <span class="muted">{{ timing.stale_seconds|seconds }} ago</span>{% endif %}</dd></div>
   </dl>
+  {% if silent %}<p class="note">Silent: no report for over {{ silent_minutes }} minutes while the producer says running. Its next report clears this.</p>{% endif %}
   {% if timing.stale_seconds %}<p class="note">No report for {{ timing.stale_seconds|seconds }}. The runner may have stopped without saying so; the figures above are as of the last report.</p>{% endif %}
 </div>
 
@@ -50,7 +51,7 @@
 <div class="card">
   <div class="card-head">
     <h3>SPRT</h3>
-    {% if sprt.result %}<span class="outcome pass">{{ sprt.result }}</span>{% else %}<span class="outcome warn">running</span>{% endif %}
+    {% if sprt.result == "passed" %}<span class="outcome pass">{{ sprt.result }}</span>{% elif sprt.result %}<span class="outcome fail">{{ sprt.result }}</span>{% else %}<span class="outcome warn">running</span>{% endif %}
   </div>
   {% if sprt.llr is not None %}
   <div class="score-row">
@@ -63,13 +64,10 @@
         <span class="seg draw" style="width: 100%"></span>
         {% if sprt.lower_pct is not None %}<span class="mark minimum" style="left: {{ sprt.lower_pct|stringformat:".3f" }}%" title="active lower {{ sprt.lower|floatformat:2 }}"></span>{% endif %}
         {% if sprt.upper_pct is not None %}<span class="mark minimum" style="left: {{ sprt.upper_pct|stringformat:".3f" }}%" title="active upper {{ sprt.upper|floatformat:2 }}"></span>{% endif %}
-        {% if sprt.source_lower_pct is not None %}<span class="mark baseline" style="left: {{ sprt.source_lower_pct|stringformat:".3f" }}%" title="SPRT lower {{ sprt.source_lower|floatformat:2 }}"></span>{% endif %}
-        {% if sprt.source_upper_pct is not None %}<span class="mark baseline" style="left: {{ sprt.source_upper_pct|stringformat:".3f" }}%" title="SPRT upper {{ sprt.source_upper|floatformat:2 }}"></span>{% endif %}
         {% if sprt.llr_pct is not None %}<span class="mark" style="left: {{ sprt.llr_pct|stringformat:".3f" }}%" title="current LLR {{ sprt.llr|floatformat:2 }}"></span>{% endif %}
       </div>
       <div class="marks muted">
         {% if sprt.lower is not None and sprt.upper is not None %}<span><span class="mark-key minimum"></span>active window {{ sprt.lower|floatformat:2 }} .. {{ sprt.upper|floatformat:2 }}</span>{% endif %}
-        {% if sprt.source_lower is not None and sprt.source_upper is not None %}<span><span class="mark-key baseline"></span>SPRT bounds {{ sprt.source_lower|floatformat:2 }} .. {{ sprt.source_upper|floatformat:2 }}</span>{% endif %}
         <span><span class="mark-key"></span>current {{ sprt.llr|floatformat:2 }}</span>
       </div>
     </div>
@@ -78,6 +76,7 @@
   <dl class="chips">
     {% if sprt.elo0 is not None %}<div><dt>Elo0</dt><dd>{{ sprt.elo0|floatformat:2 }}</dd></div>{% endif %}
     {% if sprt.elo1 is not None %}<div><dt>Elo1</dt><dd>{{ sprt.elo1|floatformat:2 }}</dd></div>{% endif %}
+    {% if sprt.elo0 is None and sprt.source_lower is not None and sprt.source_upper is not None %}<div><dt>Elo window</dt><dd>{{ sprt.source_lower|floatformat:2 }} .. {{ sprt.source_upper|floatformat:2 }}</dd></div>{% endif %}
     {% if sprt.alpha is not None %}<div><dt>Alpha</dt><dd>{{ sprt.alpha|floatformat:3 }}</dd></div>{% endif %}
     {% if sprt.beta is not None %}<div><dt>Beta</dt><dd>{{ sprt.beta|floatformat:3 }}</dd></div>{% endif %}
     {% if sprt.model %}<div><dt>Model</dt><dd>{{ sprt.model }}</dd></div>{% endif %}

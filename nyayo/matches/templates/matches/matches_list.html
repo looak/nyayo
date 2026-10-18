@@ -35,7 +35,7 @@
       <td class="nowrap">{{ match.updated_at|date:"Y-m-d H:i" }}</td>
       <td><a href="{% url 'match' match.pk %}">{{ match.name|default:match.pk }}</a></td>
       <td><span class="tier">{{ match.kind }}</span></td>
-      <td><span class="badge {{ match.state }}">{{ match.state }}</span></td>
+      <td>{% if match.silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}</td>
       <td>{{ match.subject }}</td>
       <td class="num">{{ match.summary.overall.games }}{% if match.progress.total %}<span class="muted">/{{ match.progress.total }}</span>{% endif %}</td>
       <td class="num">{{ match.summary.overall.score|percent }}</td>

@@ -1,5 +1,7 @@
 """The pages: the match list, a match, and a game, live."""
 
+from datetime import timedelta
+
 import chess
 import chess.svg
 from django.conf import settings
@@ -68,6 +70,15 @@ def summary_clipboard_text(match, subject_name, summary, settings):
     return "\n".join(lines)
 
 
+def silent_cutoff(now=None):
+    """Running matches last reported before this are silent."""
+    return (now or timezone.now()) - timedelta(minutes=settings.NYAYO_SILENT_AFTER)
+
+
+def is_silent(match, cutoff):
+    return match.state == "running" and match.updated_at < cutoff
+
+
 def sprt_view(match):
     data = match.sprt if isinstance(match.sprt, dict) else None
     if not data:
@@ -79,7 +90,7 @@ def sprt_view(match):
     source_lower = number(source.get("lower"))
     source_upper = number(source.get("upper"))
 
-    values = [v for v in (llr, lower, upper, source_lower, source_upper) if v is not None]
+    values = [v for v in (llr, lower, upper) if v is not None]
     if len(values) >= 2:
         low, high = min(values), max(values)
         if low == high:
@@ -99,7 +110,6 @@ def sprt_view(match):
         "source_lower": source_lower, "source_upper": source_upper,
         "range_low": low, "range_high": high,
         "llr_pct": pct(llr), "lower_pct": pct(lower), "upper_pct": pct(upper),
-        "source_lower_pct": pct(source_lower), "source_upper_pct": pct(source_upper),
     }
 
 
@@ -108,15 +118,19 @@ def matches_list(request):
     kind, state, engine = request.GET.get("kind", ""), request.GET.get("state", ""), request.GET.get("engine", "")
     if kind in KINDS:
         matches = matches.filter(kind=kind)
-    if state in STATES:
+    cutoff = silent_cutoff()
+    if state == "silent":
+        matches = matches.filter(state="running", updated_at__lt=cutoff)
+    elif state in STATES:
         matches = matches.filter(state=state)
     if engine.isdigit():
         matches = matches.filter(subject_id=int(engine))
     page = Paginator(matches, 50).get_page(request.GET.get("page"))
     for match in page.object_list:
         match.summary = stats.summarize(match.results.all())
+        match.silent = is_silent(match, cutoff)
     return render(request, "matches/matches_list.html", {
-        "page": page, "kind": kind, "kinds": KINDS, "state": state, "states": STATES, "engine": engine,
+        "page": page, "kind": kind, "kinds": KINDS, "state": state, "states": STATES + ["silent"], "engine": engine,
         "engines": Engine.objects.filter(matches_as_subject__isnull=False).distinct(),
     })
 
@@ -191,15 +205,20 @@ def match_detail(request, match_id):
     view = chosen if chosen in RESULT_VIEWS else request.COOKIES.get(VIEW_COOKIE)
     view = view if view in RESULT_VIEWS else RESULT_VIEWS[0]
     summary = stats.summarize(match.results.all(), excluded)
+    if not match.schedule and total is None:
+        # no schedule to count (an SPRT): the games played are the results'
+        played = max(len(groups["finished"]), stats.summarize(match.results.all()).overall.games)
+    else:
+        played = len(groups["finished"])
     subject_name = engine_label(match.subject)
     response = render(request, "matches/match_detail.html", {
-        "view": view, "match": match, "boards": live_boards(match, groups["playing"]),
+        "view": view, "match": match, "silent": is_silent(match, silent_cutoff()), "silent_minutes": settings.NYAYO_SILENT_AFTER, "boards": live_boards(match, groups["playing"]),
         "summary": summary, "excluded": excluded,
         "summary_clipboard": summary_clipboard_text(match, subject_name, summary, match.settings or {}),
         "sprt": sprt_view(match),
         "timing": timing.summarize(
             match.state, match.started_at or match.received_at, match.finished_at, match.updated_at, total,
-            len(groups["finished"]), len(groups["playing"]), durations, (match.settings or {}).get("concurrency"),
+            played, len(groups["playing"]), durations, (match.settings or {}).get("concurrency"),
             timezone.now()),
         "groups": groups, "entries": entries, "refresh": match.state == "running", "settings": match.settings,
         "host": match.host, "subject_name": subject_name,
