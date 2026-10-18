@@ -113,3 +113,33 @@ class OnThePage(MatchTestCase):
         page = self.page(document)
         self.assertIn("nyayo's figure", page)
         self.assertRegex(page, r"Elo   \| -?\d+\.\d\d \+- \d+\.\d\d \(95%\)")
+
+
+class Bar(MatchTestCase):
+    def bar(self, llr, lower=-2.94, upper=2.94):
+        document = example_document()
+        document["sprt"].update(llr=llr, lower=lower, upper=upper)
+        self.assertIn(self.put_match(document).status_code, (200, 201))
+        page = self.client.get(f"/matches/{ID}").content.decode()
+        return page[page.index('class="bar sprt-track"'):page.index('class="marks muted sprt-marks"')]
+
+    def test_zero_is_the_pillar_in_the_middle_of_symmetric_bounds(self):
+        self.assertIn('class="mark zero" style="left: 50.000%"', self.bar(0.31))
+
+    def test_a_positive_llr_fills_green_from_zero_towards_passing(self):
+        bar = self.bar(1.47)  # halfway from 0 to the upper bound
+        self.assertIn('class="fill pass" style="left: 50.000%; width: 25.000%"', bar)
+        self.assertNotIn("fill fail", bar)
+
+    def test_a_negative_llr_fills_red_from_the_llr_up_to_zero(self):
+        bar = self.bar(-1.47)
+        self.assertIn('class="fill fail" style="left: 25.000%; width: 25.000%"', bar)
+        self.assertNotIn("fill pass", bar)
+
+    def test_an_llr_of_zero_fills_nothing(self):
+        bar = self.bar(0.0)
+        self.assertNotIn('class="fill', bar)
+
+    def test_zero_is_not_in_the_middle_of_uneven_bounds(self):
+        # lower -1, upper 3: zero a quarter of the way along
+        self.assertIn('class="mark zero" style="left: 25.000%"', self.bar(0.5, lower=-1.0, upper=3.0))

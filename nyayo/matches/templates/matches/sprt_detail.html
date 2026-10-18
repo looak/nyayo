@@ -36,14 +36,15 @@
 
   {% if sprt.llr is not None %}
   <div class="bar-wrap sprt-bar">
-    <div class="bar" role="img" aria-label="LLR {{ sprt.llr|floatformat:2 }} between {{ sprt.lower|floatformat:2 }} and {{ sprt.upper|floatformat:2 }}">
-      <span class="seg draw" style="width: 100%"></span>
+    <div class="bar sprt-track" role="img" aria-label="LLR {{ sprt.llr|floatformat:2 }} between {{ sprt.lower|floatformat:2 }} and {{ sprt.upper|floatformat:2 }}">
+      {% if sprt.fill %}<span class="fill {% if sprt.fill.passing %}pass{% else %}fail{% endif %}" style="left: {{ sprt.fill.left|stringformat:".3f" }}%; width: {{ sprt.fill.width|stringformat:".3f" }}%" title="LLR {{ sprt.llr|floatformat:2 }}"></span>{% endif %}
       {% if sprt.lower_pct is not None %}<span class="mark minimum" style="left: {{ sprt.lower_pct|stringformat:".3f" }}%" title="lower bound {{ sprt.lower|floatformat:2 }}"></span>{% endif %}
       {% if sprt.upper_pct is not None %}<span class="mark minimum" style="left: {{ sprt.upper_pct|stringformat:".3f" }}%" title="upper bound {{ sprt.upper|floatformat:2 }}"></span>{% endif %}
-      {% if sprt.llr_pct is not None %}<span class="mark" style="left: {{ sprt.llr_pct|stringformat:".3f" }}%" title="LLR {{ sprt.llr|floatformat:2 }}"></span>{% endif %}
+      <span class="mark zero" style="left: {{ sprt.zero_pct|stringformat:".3f" }}%" title="LLR 0"></span>
     </div>
-    <div class="marks muted">
+    <div class="marks muted sprt-marks">
       <span>{{ sprt.lower|floatformat:2 }} fails</span>
+      <span class="sprt-zero" style="left: {{ sprt.zero_pct|stringformat:".3f" }}%">0</span>
       <span class="marks-end">passes {{ sprt.upper|floatformat:2 }}</span>
     </div>
   </div>

@@ -141,6 +141,12 @@
   .sprt-figures .score-value { font-size: 2rem; }
   .sprt-bar { margin: .35rem 0 .5rem; }
   .marks-end { margin-left: auto; }
+  .sprt-track .fill { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+  .sprt-track .fill.pass { background: var(--cell-pass); }
+  .sprt-track .fill.fail { background: var(--cell-fail); }
+  .sprt-track .mark.zero { top: -5px; bottom: -5px; border-left-width: 3px; }
+  .sprt-marks { position: relative; }
+  .sprt-zero { position: absolute; transform: translateX(-50%); }
   .chip-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: .25rem 2rem;
                  margin-top: .6rem; }
   .chip-groups h4 { margin: .5rem 0 0; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase;

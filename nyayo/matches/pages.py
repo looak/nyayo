@@ -87,7 +87,8 @@ def sprt_view(match):
     lower = number(data.get("lower"))
     upper = number(data.get("upper"))
 
-    values = [v for v in (llr, lower, upper) if v is not None]
+    # the bar runs lower to upper with 0 marked, so 0 is in range whatever the bounds
+    values = [v for v in (llr, lower, upper, 0.0) if v is not None]
     if len(values) >= 2:
         low, high = min(values), max(values)
         if low == high:
@@ -100,8 +101,14 @@ def sprt_view(match):
             return None
         return max(0.0, min(100.0, (value - low) / (high - low) * 100.0))
 
+    zero, here = pct(0.0), pct(llr)
+    fill = None
+    if here is not None and here != zero:
+        # filled from 0 towards the LLR: green on the way to passing, red on the way to failing
+        fill = {"left": min(zero, here), "width": abs(here - zero), "passing": llr > 0}
     produced = match.stats if isinstance(match.stats, dict) else None
     return {
+        "fill": fill, "zero_pct": zero,
         "stats": produced, "producer": match.producer_name or "the producer",
         "llr": llr, "lower": lower, "upper": upper, "result": data.get("result"),
         "alpha": number(data.get("alpha")), "beta": number(data.get("beta")),
