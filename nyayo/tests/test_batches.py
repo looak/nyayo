@@ -197,4 +197,5 @@ class OnThePage(BatchCase):
         self.put_batch(bz2.compress(batch_text(game("0-1"))), batch="b")
         page = self.client.get("/matches/gauntlet-test-1").content.decode()
         self.assertIn("Stored games", page)
-        self.assertIn("<dd title=\"batches of finished games kept as data\">3</dd>", page)
+        self.assertIn("kept as data\">3 ", page)
+        self.assertIn("/api/games?match=gauntlet-test-1", page)

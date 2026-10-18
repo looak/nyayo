@@ -1,12 +1,12 @@
 from django.core.exceptions import RequestDataTooBig
-from django.http import HttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from nyayo.runs.ingest import IngestError
 from nyayo.runs.views import decompress, machine_for, text, unauthorized
 
-from . import batches, games
+from . import batches, export, games
 from .ingest import ingest
 
 
@@ -66,3 +66,16 @@ def api_batch(request, match_id, batch):
     except IngestError as error:
         return text(error.status, error.reason)
     return text(201 if created else 200, "created" if created else "unchanged")
+
+
+@require_http_methods(["GET"])
+def api_games(request):
+    """GET /api/games?...: every stored game matching the filters (docs/match-schema.md, Export) as one bz2 stream,
+    open like the pages."""
+    try:
+        filters = export.parse(request.GET)
+    except export.BadFilter as error:
+        return text(400, str(error))
+    response = StreamingHttpResponse(export.chunks(filters), content_type="application/x-bzip2")
+    response["Content-Disposition"] = 'attachment; filename="nyayo-games.pgn.bz2"'
+    return response

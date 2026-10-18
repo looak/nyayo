@@ -10,8 +10,8 @@ The producer re-sends the **whole document** as the match grows and says the sta
 its own on a producer's behalf, so a lost report costs nothing.
 
 Optional additions that leave every existing document valid (`stats`, batches) stay within version 1. **Written ahead
-of the code** (2026-10-17), marked *planned* below: the export, and OpenBench sending version 1
-(`stats`, the move of an old match to version 1 and batches are built).
+of the code** (2026-10-17), marked *planned* below: OpenBench sending version 1
+(`stats`, the move of an old match to version 1, batches and the export are built).
 
 ### OpenBench compatibility
 
@@ -28,7 +28,7 @@ below) and every OpenBench match has been resent.
 | `PUT /api/matches/{match.id}/games/{game}` | one game's PGN so far, `application/x-chess-pgn`, optionally gzipped |
 | `GET /api/matches/{match.id}/games/{game}` | the stored PGN, open like the pages |
 | `PUT /api/matches/{match.id}/pgns/{batch}` | a batch of finished games, `application/x-bzip2` (see *Batches*) |
-| `GET /api/games?…` | *planned*: every stored game matching a filter, one bz2 stream (see *Export*) |
+| `GET /api/games?…` | every stored game matching a filter, one bz2 stream (see *Export*) |
 
 `Authorization: Bearer <token>`, the per-machine tokens made in the admin (the same as for runs). Responses are plain
 text: `201` created, `200` updated (or an identical resend of a sealed game or a batch), `401` bad token, `400` invalid
