@@ -32,9 +32,9 @@ class Stats(MatchTestCase):
     def test_the_sprt_card_labels_them_as_the_producers(self):
         self.put_match(v1())
         page = self.client.get(f"/matches/{ID}").content.decode()
-        self.assertIn("OpenBench's, penta", page)
+        self.assertIn("OpenBench's figure, 95% interval", page)
         self.assertIn("+21.7", page)
-        self.assertIn("± 114.5", page)
+        self.assertIn("114.47", page)
 
     def test_the_list_shows_them_in_place_of_the_calculation(self):
         self.put_match(v1())

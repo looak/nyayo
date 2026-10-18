@@ -1,17 +1,5 @@
 {% load runs_extras matches_extras %}
-{# an SPRT's Elo and LLR over games, from the snapshots, and where the LLR is heading #}
-{% if projection %}
-<dl class="chips">
-  {% if projection.reason %}
-  <div><dt>Projection</dt><dd class="muted">{{ projection.reason }}</dd></div>
-  {% else %}
-  <div><dt>Heading for</dt><dd>the {{ projection.bound }} bound <span class="muted">{{ projection.bound_value|floatformat:2 }}</span></dd></div>
-  <div><dt>Games to go</dt><dd title="{{ projection.basis }}">~{{ projection.games|floatformat:0 }}</dd></div>
-  {% if projection.seconds is not None %}<div><dt>Time to go</dt><dd title="{{ projection.basis }}, at the pace of those games">~{{ projection.seconds|seconds }} <span class="muted">{{ projection.at|date:"D H:i" }}</span></dd></div>{% endif %}
-  {% endif %}
-</dl>
-{% if not projection.reason %}<p class="muted">An estimate: the LLR's slope run to the bound it is heading for; it can turn around.</p>{% endif %}
-{% endif %}
+{# an SPRT's Elo and LLR over games, from the snapshots #}
 {% for g in graphs %}
 <h4 class="graph-title">{{ g.label }} <span class="muted">over games{% if g.band %}, with its 95% interval{% endif %}</span></h4>
 <svg class="chart" viewBox="0 0 {{ g.width }} {{ g.height }}" role="img" aria-label="{{ g.label }} over games">

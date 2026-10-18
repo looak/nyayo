@@ -48,44 +48,6 @@
   {% if timing.stale_seconds %}<p class="note">No report for {{ timing.stale_seconds|seconds }}. The runner may have stopped without saying so; the figures above are as of the last report.</p>{% endif %}
 </div>
 
-{% if sprt %}
-<div class="card">
-  <div class="card-head">
-    <h3>SPRT</h3>
-    {% if sprt.result == "passed" %}<span class="outcome pass">{{ sprt.result }}</span>{% elif sprt.result %}<span class="outcome fail">{{ sprt.result }}</span>{% else %}<span class="outcome warn">running</span>{% endif %}
-  </div>
-  {% if sprt.llr is not None %}
-  <div class="score-row">
-    <div class="score-figure">
-      <span class="score-value">{{ sprt.llr|floatformat:2 }}</span>
-      <span class="score-label muted">current LLR</span>
-    </div>
-    <div class="bar-wrap">
-      <div class="bar" role="img" aria-label="LLR {{ sprt.llr|floatformat:2 }} from {{ sprt.range_low|floatformat:2 }} to {{ sprt.range_high|floatformat:2 }}">
-        <span class="seg draw" style="width: 100%"></span>
-        {% if sprt.lower_pct is not None %}<span class="mark minimum" style="left: {{ sprt.lower_pct|stringformat:".3f" }}%" title="active lower {{ sprt.lower|floatformat:2 }}"></span>{% endif %}
-        {% if sprt.upper_pct is not None %}<span class="mark minimum" style="left: {{ sprt.upper_pct|stringformat:".3f" }}%" title="active upper {{ sprt.upper|floatformat:2 }}"></span>{% endif %}
-        {% if sprt.llr_pct is not None %}<span class="mark" style="left: {{ sprt.llr_pct|stringformat:".3f" }}%" title="current LLR {{ sprt.llr|floatformat:2 }}"></span>{% endif %}
-      </div>
-      <div class="marks muted">
-        {% if sprt.lower is not None and sprt.upper is not None %}<span><span class="mark-key minimum"></span>active window {{ sprt.lower|floatformat:2 }} .. {{ sprt.upper|floatformat:2 }}</span>{% endif %}
-        <span><span class="mark-key"></span>current {{ sprt.llr|floatformat:2 }}</span>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-  <dl class="chips">
-    {% if sprt.stats %}<div><dt>Elo <span class="muted">({{ sprt.producer }}'s, {{ sprt.stats.model }})</span></dt><dd>{{ sprt.stats.elo|elo }} <span class="muted">{{ sprt.stats.error|error }}</span></dd></div>{% endif %}
-    {% if sprt.elo0 is not None %}<div><dt>Elo0</dt><dd>{{ sprt.elo0|floatformat:2 }}</dd></div>{% endif %}
-    {% if sprt.elo1 is not None %}<div><dt>Elo1</dt><dd>{{ sprt.elo1|floatformat:2 }}</dd></div>{% endif %}
-    {% if sprt.alpha is not None %}<div><dt>Alpha</dt><dd>{{ sprt.alpha|floatformat:3 }}</dd></div>{% endif %}
-    {% if sprt.beta is not None %}<div><dt>Beta</dt><dd>{{ sprt.beta|floatformat:3 }}</dd></div>{% endif %}
-    {% if sprt.model %}<div><dt>Model</dt><dd>{{ sprt.model }}</dd></div>{% endif %}
-  </dl>
-  {% include "matches/_sprt_progress.html" %}
-</div>
-{% endif %}
-
 {% if boards %}
 <h2>Playing now</h2>
 <div class="boards">

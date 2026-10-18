@@ -136,6 +136,18 @@
   .badge.stopped { color: var(--wip); background: var(--wip-bg); }
   .chart .band { fill: var(--cell-newly-passing); opacity: .16; }
   .chart .bound { stroke-dasharray: 4 3; }
+  .sprt-figures { gap: .25rem 2.5rem; }
+  .sprt-figures .score-figure { min-width: 0; flex-direction: column; gap: 0; align-items: flex-start; }
+  .sprt-figures .score-value { font-size: 2rem; }
+  .sprt-bar { margin: .35rem 0 .5rem; }
+  .marks-end { margin-left: auto; }
+  .chip-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: .25rem 2rem;
+                 margin-top: .6rem; }
+  .chip-groups h4 { margin: .5rem 0 0; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase;
+                    color: var(--muted); }
+  .vs { opacity: .7; }
+  table.penta { width: auto; margin: .6rem 0 .2rem; }
+  table.penta th, table.penta td { padding: .15rem .8rem; }
   .graph-title { margin: 1rem 0 .3rem; font-size: .9rem; }
   .badge.silent, .outcome.silent { color: var(--wip); background: var(--wip-bg); }
   .badge.error { color: var(--worse); background: var(--error-bg); }

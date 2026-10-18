@@ -1,0 +1,153 @@
+{% extends "runs/base.html" %}
+{% load runs_extras matches_extras %}
+{% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% endblock %}
+{% block content %}
+<h1>{{ match.name|default:match.pk }}
+  <span class="tier">sprt</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}</h1>
+<p class="muted">{{ subject_line }} <span class="vs">against</span> {{ base_line }}{% if producer_url %} · <a href="{{ producer_url }}">{{ match.producer_name }}</a>{% endif %}</p>
+
+<div class="card">
+  <div class="card-head">
+    <h3>SPRT</h3>
+    <span class="muted">{{ tc_text }}{% if options_text %} · {{ options_text }}{% endif %}</span>
+    {% if sprt.result == "passed" %}<span class="outcome pass card-state">passed</span>
+    {% elif sprt.result %}<span class="outcome fail card-state">{{ sprt.result }}</span>
+    {% elif silent %}<span class="outcome silent card-state">silent</span>
+    {% else %}<span class="outcome {{ match.state }} card-state">{{ match.state }}</span>{% endif %}
+  </div>
+
+  <div class="score-row sprt-figures">
+    <div class="score-figure">
+      <span class="score-value">{{ timing.finished }}</span>
+      <span class="score-label muted">games</span>
+    </div>
+    <div class="score-figure" title="{{ elo_by }}'s figure, 95% interval">
+      <span class="score-value {% if elo > 0 %}better{% elif elo < 0 %}worse{% endif %}">{{ elo_text }}</span>
+      <span class="score-label muted">{% if error is not None %}± {{ error|floatformat:2 }} Elo{% else %}Elo{% endif %}</span>
+    </div>
+    {% if sprt.llr is not None %}
+    <div class="score-figure">
+      <span class="score-value">{{ sprt.llr|floatformat:2 }}</span>
+      <span class="score-label muted">LLR{% if sprt.lower is not None %} ({{ sprt.lower|floatformat:2 }}, {{ sprt.upper|floatformat:2 }}){% endif %}</span>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if sprt.llr is not None %}
+  <div class="bar-wrap sprt-bar">
+    <div class="bar" role="img" aria-label="LLR {{ sprt.llr|floatformat:2 }} between {{ sprt.lower|floatformat:2 }} and {{ sprt.upper|floatformat:2 }}">
+      <span class="seg draw" style="width: 100%"></span>
+      {% if sprt.lower_pct is not None %}<span class="mark minimum" style="left: {{ sprt.lower_pct|stringformat:".3f" }}%" title="lower bound {{ sprt.lower|floatformat:2 }}"></span>{% endif %}
+      {% if sprt.upper_pct is not None %}<span class="mark minimum" style="left: {{ sprt.upper_pct|stringformat:".3f" }}%" title="upper bound {{ sprt.upper|floatformat:2 }}"></span>{% endif %}
+      {% if sprt.llr_pct is not None %}<span class="mark" style="left: {{ sprt.llr_pct|stringformat:".3f" }}%" title="LLR {{ sprt.llr|floatformat:2 }}"></span>{% endif %}
+    </div>
+    <div class="marks muted">
+      <span>{{ sprt.lower|floatformat:2 }} fails</span>
+      <span class="marks-end">passes {{ sprt.upper|floatformat:2 }}</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="chip-groups">
+    <section>
+      <h4>Time</h4>
+      <dl class="chips">
+        {% if match.started_at %}<div><dt>Started</dt><dd>{{ match.started_at|date:"D j M H:i" }}</dd></div>{% endif %}
+        {% if timing.running %}
+          {% if timing.elapsed is not None %}<div><dt>Elapsed</dt><dd>{{ timing.elapsed|seconds }}</dd></div>{% endif %}
+          <div><dt>Last report</dt><dd{% if silent or timing.stale_seconds %} class="worse"{% endif %}>{{ match.updated_at|date:"H:i:s" }}{% if timing.stale_seconds %} <span class="muted">{{ timing.stale_seconds|seconds }} ago</span>{% endif %}</dd></div>
+          {% if timing.per_hour is not None %}<div><dt>Pace</dt><dd>{{ timing.per_hour|floatformat:0 }} games/h</dd></div>{% endif %}
+          {% if projection.bound %}
+          <div><dt>Games to go</dt><dd title="{{ projection.basis }}">~{{ projection.games|floatformat:0 }} <span class="muted">to the {{ projection.bound }} bound</span></dd></div>
+          {% if projection.seconds is not None %}
+          <div><dt>Time to go</dt><dd title="{{ projection.basis }}, at the pace of those games">~{{ projection.seconds|seconds }}</dd></div>
+          <div><dt>Done around</dt><dd>{{ projection.at|date:"D j M H:i" }}</dd></div>
+          {% endif %}
+          {% elif projection.reason %}<div><dt>Estimate</dt><dd class="muted">{{ projection.reason }}</dd></div>{% endif %}
+        {% else %}
+          <div><dt>{% if match.state == "finished" %}Ended{% else %}Stopped{% endif %}</dt><dd>{{ match.finished_at|default:match.updated_at|date:"D j M H:i" }}</dd></div>
+          {% if timing.elapsed is not None %}<div><dt>Elapsed</dt><dd>{{ timing.elapsed|seconds }}</dd></div>{% endif %}
+          {% if timing.per_hour is not None %}<div><dt>Pace</dt><dd>{{ timing.per_hour|floatformat:0 }} games/h</dd></div>{% endif %}
+        {% endif %}
+      </dl>
+    </section>
+
+    <section>
+      <h4>Test</h4>
+      <dl class="chips">
+        {% if tc_text %}<div><dt>Time control</dt><dd>{{ tc_text }}</dd></div>{% endif %}
+        {% if options_text %}<div><dt>UCI options</dt><dd>{{ options_text }}</dd></div>{% endif %}
+        {% if settings.book %}<div><dt>Book</dt><dd>{{ settings.book }}</dd></div>{% endif %}
+        {% if sprt.elo0 is not None %}<div><dt>Elo bounds</dt><dd>[{{ sprt.elo0|floatformat:2 }}, {{ sprt.elo1|floatformat:2 }}]</dd></div>{% endif %}
+        {% if sprt.alpha is not None %}<div><dt>α / β</dt><dd>{{ sprt.alpha|floatformat:2 }} / {{ sprt.beta|floatformat:2 }}</dd></div>{% endif %}
+        {% if sprt.model %}<div><dt>Model</dt><dd>{{ sprt.model }}</dd></div>{% endif %}
+      </dl>
+    </section>
+  </div>
+
+  {% if silent %}<p class="note">Silent: no report for over {{ silent_minutes }} minutes while the producer says running. Its next report clears this.</p>{% endif %}
+</div>
+
+<div class="copy-panels">
+  {% include "runs/_copy_field.html" with title="Result" target_id="copy-sprt" value=clipboard rows=6 copy_label="Copy" %}
+</div>
+
+<h2>Progress</h2>
+{% if graphs %}
+{% include "matches/_sprt_progress.html" %}
+{% else %}
+<p class="muted">The graphs start once the test has reported more than once.</p>
+{% endif %}
+
+<h2>Results</h2>
+<div class="card">
+  {% if row %}
+  <div class="score-row">
+    <div class="score-figure">
+      <span class="score-value">{{ row.score|percent }}</span>
+      <span class="score-label muted">score</span>
+    </div>
+    <div class="bar-wrap">
+      {% if row.games %}
+      <div class="bar" role="img" aria-label="{{ row.wins }} wins, {{ row.draws }} draws, {{ row.losses }} losses">
+        <span class="seg pass" style="width: {% widthratio row.wins row.games 100 %}%" title="{{ row.wins }} wins"></span>
+        <span class="seg draw" style="width: {% widthratio row.draws row.games 100 %}%" title="{{ row.draws }} draws"></span>
+        <span class="seg fail" style="width: {% widthratio row.losses row.games 100 %}%" title="{{ row.losses }} losses"></span>
+      </div>
+      {% else %}<div class="bar"></div>{% endif %}
+      <div class="marks muted">
+        <span><i class="key pass"></i>{{ row.wins }} won</span>
+        <span><i class="key draw"></i>{{ row.draws }} drawn</span>
+        <span><i class="key fail"></i>{{ row.losses }} lost</span>
+      </div>
+    </div>
+  </div>
+  {% if penta_rows %}
+  <table class="penta">
+    <thead><tr><th>Pairs</th>{% for p in penta_rows %}<th class="num">{{ p.label }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      <tr><td class="muted">count</td>{% for p in penta_rows %}<td class="num">{{ p.count }}</td>{% endfor %}</tr>
+      <tr><td class="muted">share</td>{% for p in penta_rows %}<td class="num muted">{{ p.share }}</td>{% endfor %}</tr>
+    </tbody>
+  </table>
+  {% endif %}
+  {% if faults %}<div class="faults muted">{% for f in faults %}<span>{{ f.label }} <span class="mono">{{ f.subject }} / {{ f.opponent }}</span></span>{% endfor %}<span>(engine under test / base)</span></div>{% endif %}
+  {% endif %}
+  {% if match.machines %}
+  <dl class="chips">
+    <div><dt>Workers</dt><dd>{% for m in match.machines %}{{ m.name }} <span class="muted">{{ m.games }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}</dd></div>
+    {% if stored_games %}<div><dt>Stored games</dt><dd>{{ stored_games }} <a href="{% url 'api_games' %}?match={{ match.pk|urlencode }}" class="muted">export</a></dd></div>{% endif %}
+  </dl>
+  {% elif stored_games %}
+  <dl class="chips"><div><dt>Stored games</dt><dd>{{ stored_games }} <a href="{% url 'api_games' %}?match={{ match.pk|urlencode }}" class="muted">export</a></dd></div></dl>
+  {% endif %}
+</div>
+
+{% if entries %}
+<h2>Games</h2>
+{% include "matches/_games_table.html" with entries=groups.playing title="Playing" %}
+{% include "matches/_games_table.html" with entries=groups.unfinished title="Cut off" %}
+{% include "matches/_games_table.html" with entries=groups.finished title="Finished" %}
+{% endif %}
+{% endblock %}

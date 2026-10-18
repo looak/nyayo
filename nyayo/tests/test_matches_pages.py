@@ -119,9 +119,9 @@ class Pages(GameTestCase):
         response = self.client.get(f"/matches/{ID}")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, ">SPRT<")
-        self.assertContains(response, "current LLR")
-        self.assertContains(response, "active window -2.94 .. 2.94")
-        self.assertContains(response, "<dt>Elo1</dt><dd>5.00</dd>")
+        self.assertContains(response, "<dt>Time control</dt><dd>8.0+0.08s</dd>")
+        self.assertContains(response, "-2.94, 2.94")
+        self.assertContains(response, "[0.00, 5.00]")
         self.assertNotContains(response, "SPRT bounds")
         self.assertContains(response, "20")  # games played, from the results
 
@@ -132,7 +132,7 @@ class Pages(GameTestCase):
         response = self.put_match(document)
         self.assertEqual(response.status_code, 201, response.content)
         html = self.client.get(f"/matches/{ID}").content.decode()
-        self.assertIn('<span class="outcome fail">failed</span>', html)
+        self.assertIn('<span class="outcome fail card-state">failed</span>', html)
         self.assertNotIn('<span class="outcome pass">failed</span>', html)
 
     def test_a_running_match_with_no_report_for_a_while_is_silent(self):

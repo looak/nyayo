@@ -12,7 +12,7 @@ from django.template.loader import render_to_string
 
 from django.utils import timezone
 
-from . import games, pgnview, progress, stats, timing
+from . import games, pgnview, progress, sprtview, stats, timing
 from .models import KINDS, STATES, Engine, Game, Match
 
 OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): "loss", ("1-0", "black"): "loss",
@@ -109,6 +109,47 @@ def sprt_view(match):
         "range_low": low, "range_high": high,
         "llr_pct": pct(llr), "lower_pct": pct(lower), "upper_pct": pct(upper),
     }
+
+
+def sprt_page(match, sprt, projection):
+    """What the SPRT page adds: the figures at the top, the test's settings, both engines and the block to paste."""
+    row = match.results.first()
+    elo, error, whose = sprtview.elo_figures(match, row)
+    options = (match.subject_info or {}).get("options")
+    tc = (match.settings or {}).get("tc")
+    base = {"name": row.engine.name, "info": row.info, "commit": row.engine.commit} if row else None
+    return {
+        "row": row, "elo": elo, "elo_text": sprtview.figure(elo, sign=True), "error": error, "elo_by": whose,
+        "tc_text": sprtview.tc_text(tc), "options_text": sprtview.options_text(options),
+        "clipboard": sprtview.clipboard(match, row, sprt, tc, options),
+        "subject_line": sprtview.engine_line(match.subject.name, match.subject_info, match.subject.commit),
+        "base_line": sprtview.engine_line(base["name"], base["info"], base["commit"]) if base else "",
+        "projection": projection, "penta_rows": penta_rows(row), "faults": faults(row),
+    }
+
+
+PENTA_LABELS = ("LL", "LD", "DD", "DW", "WW")
+
+
+def penta_rows(row):
+    """The pentanomial as columns with each one's share of the pairs, None before it has any."""
+    if not row or not row.penta or not sum(row.penta):
+        return None
+    pairs = sum(row.penta)
+    return [{"label": label, "count": count, "share": f"{count / pairs:.1%}"}
+            for label, count in zip(PENTA_LABELS, row.penta)]
+
+
+def faults(row):
+    """Time losses, crashes and illegal moves per side, only those that happened."""
+    if not row:
+        return []
+    out = []
+    for label, sides in (("time losses", row.timelosses), ("crashes", row.crashes), ("illegal moves", row.illegal)):
+        sides = sides or {}
+        if sides.get("subject") or sides.get("opponent"):
+            out.append({"label": label, "subject": sides.get("subject", 0), "opponent": sides.get("opponent", 0)})
+    return out
 
 
 def stored_games(match):
@@ -226,7 +267,7 @@ def match_detail(request, match_id):
     else:
         played = len(groups["finished"])
     subject_name = engine_label(match.subject)
-    response = render(request, "matches/match_detail.html", {
+    context = {
         "view": view, "match": match, "silent": is_silent(match, silent_cutoff()), "silent_minutes": settings.NYAYO_SILENT_AFTER, "boards": live_boards(match, groups["playing"]),
         "summary": summary, "excluded": excluded,
         "summary_clipboard": summary_clipboard_text(match, subject_name, summary, match.settings or {}),
@@ -238,7 +279,13 @@ def match_detail(request, match_id):
         "groups": groups, "entries": entries, "refresh": match.state == "running", "settings": match.settings,
         "host": match.host, "subject_name": subject_name, "stored_games": stored_games(match),
         "producer_url": (match.producer or {}).get("url"),
-    })
+    }
+    template = "matches/match_detail.html"
+    if context["sprt"]:
+        # an SPRT is a test of one change, not a field of opponents: its own page
+        context.update(sprt_page(match, context["sprt"], context["projection"]))
+        template = "matches/sprt_detail.html"
+    response = render(request, template, context)
     if chosen in RESULT_VIEWS:
         response.set_cookie(VIEW_COOKIE, chosen, max_age=365 * 24 * 3600, samesite="Lax")
     return response

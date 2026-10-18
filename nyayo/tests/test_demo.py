@@ -36,8 +36,8 @@ class SeedDemo(NyayoTestCase):
         running = self.client.get("/matches/demo-sprt-running").content.decode()
         self.assertIn('aria-label="Elo over games"', running)
         self.assertIn('aria-label="LLR over games"', running)
-        self.assertIn("Heading for", running)
-        self.assertNotIn("Heading for", self.client.get("/matches/demo-sprt-passed").content.decode())
+        self.assertIn("Games to go", running)
+        self.assertNotIn("Games to go", self.client.get("/matches/demo-sprt-passed").content.decode())
         self.assertIn("too few", self.client.get("/matches/demo-sprt-new").content.decode())
         # one is silent and one is not
         self.assertContains(self.client.get("/matches/demo-sprt-silent"), "badge silent")

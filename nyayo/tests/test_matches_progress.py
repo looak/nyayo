@@ -110,8 +110,8 @@ class OnThePage(MatchTestCase):
         page = self.client.get(f"/matches/{ID}").content.decode()
         self.assertIn('aria-label="Elo over games"', page)
         self.assertIn('aria-label="LLR over games"', page)
-        self.assertIn("Heading for", page)
-        self.assertIn("the upper bound", page)
+        self.assertIn("Games to go", page)
+        self.assertIn("to the upper bound", page)
         self.assertIn("Games to go", page)
 
     def test_a_finished_sprt_keeps_the_graphs_and_drops_the_projection(self):
@@ -120,7 +120,7 @@ class OnThePage(MatchTestCase):
         Match.objects.update(state="finished")
         page = self.client.get(f"/matches/{ID}").content.decode()
         self.assertIn('aria-label="LLR over games"', page)
-        self.assertNotIn("Heading for", page)
+        self.assertNotIn("Games to go", page)
 
     def test_a_gauntlet_has_no_sprt_graphs(self):
         from .test_matches_ingest import gauntlet
