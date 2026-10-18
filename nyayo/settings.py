@@ -56,6 +56,10 @@ NYAYO_GAME_POLL_MS = int(os.environ.get("NYAYO_GAME_POLL_MS", 100))
 NYAYO_WIP_DAYS = int(os.environ.get("NYAYO_WIP_DAYS", 14))
 NYAYO_COMMITTED_DAYS = int(os.environ.get("NYAYO_COMMITTED_DAYS", 30))
 
+# A git checkout (a private repository, cloned there) that manage.py backup commits the archive, the games and a dump of
+# the database to. Unset, backup only makes a local copy of the database.
+NYAYO_BACKUP_REPO = os.environ.get("NYAYO_BACKUP_REPO", "")
+
 # A running match with no report for this many minutes is shown as silent (derived when a page is drawn, never stored).
 NYAYO_SILENT_AFTER = int(os.environ.get("NYAYO_SILENT_AFTER", 30))
 

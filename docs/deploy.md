@@ -75,6 +75,8 @@ It fills in the units in `deploy/` for this checkout, user and conda env (found 
   `NYAYO_COMMITTED_DAYS` in `.env`). Published runs are kept. `python manage.py expire_runs --dry-run` shows what
   it would delete.
 
+- `nyayo-backup.timer`, which runs `manage.py backup` daily at 05:00 through `nyayo-backup.service`; see *Backup*.
+
 A running match with no report for `NYAYO_SILENT_AFTER` minutes (30 by default, in `.env`) is shown as *silent* on
 `/matches` and its page; nothing is stored, and its next report clears it.
 
@@ -89,6 +91,27 @@ deploy/update.sh
 
 It pulls, reinstalls the package, migrates the database, collects static files and restarts the service. No need to
 activate the env first.
+
+## Backup
+
+Everything nyayo knows is the database, `archive/` (the raw runs and matches) and `games/` (the only copy of each
+live game). `manage.py backup` takes an online copy of the database into `backup/` in the data directory (never copy
+the `.sqlite3` file while the service runs, it is in WAL mode) and, when `NYAYO_BACKUP_REPO` names a checkout, mirrors
+`archive/` and `games/` into it with the database as an SQL dump (`db.sql`: text, so git stores deltas), commits what
+changed and pushes. `nyayo-backup.timer` runs it daily; a failed push leaves the commit and fails the unit, so
+`systemctl status nyayo-backup` and `journalctl -u nyayo-backup` say so.
+
+Once, on bobby: make a private repository, clone it (`git clone git@github.com:<you>/nyayo-backup.git
+~/dev/nyayo-backup`, with a key bobby may push with), set `NYAYO_BACKUP_REPO=/home/fischer/dev/nyayo-backup` in
+`.env`, and run `python manage.py backup` by hand to see it work. The dump holds the machines' token hashes and the
+admin users, hence private.
+
+`games/batches/` (the game database, later) is not in the repo: it is gigabytes of bz2. Put it on the Synology's share
+and let the NAS's own backup cover it.
+
+To restore on a new machine: install nyayo, set `NYAYO_DATA_DIR` to an empty directory, clone the backup repository,
+stop nyayo, then `python manage.py restore_backup <path to the clone>`. It refuses a data directory that already has
+a database, archive or games. Restore `games/batches/` from the share.
 
 ## Machines and tokens
 

@@ -1,0 +1,11 @@
+# Backs the data up, see manage.py backup. Started daily by nyayo-backup.timer; deploy/install-service.sh fills in User,
+# WorkingDirectory and the python path like it does for nyayo.service. NYAYO_BACKUP_REPO comes from .env.
+
+[Unit]
+Description=nyayo: back up the database, archive and games
+
+[Service]
+Type=oneshot
+User=fischer
+WorkingDirectory=/home/fischer/dev/nyayo
+ExecStart=/home/fischer/miniconda3/envs/nyayo/bin/python manage.py backup

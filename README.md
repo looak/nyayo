@@ -9,8 +9,9 @@ step in a timeline and the commit that caused it is one click away.
 It plays no games itself. The runs happen elsewhere and each one hands back a single results file; nyayo dispatches,
 stores and reports.
 
-Live games are watched with [bwawa](https://github.com/looak/bwawa), which nyayo links to and borrows its SPRT and
-Elo maths from.
+It is also the live viewer for matches: gauntlets from [uwanja](https://github.com/looak/uwanja) and SPRTs from
+OpenBench report to it, and every game of a gauntlet can be watched move by move. It replaces
+[bwawa](https://github.com/looak/bwawa).
 
 ## Status
 
@@ -31,8 +32,15 @@ nyayo receives smoke runs pushed from developer machines and shows them:
   every attempt along a branch's history with its time, the move played in SAN and how long the search took: since
   when it fails, when it last passed.
 
+- **Matches** (`/matches`), gauntlets and SPRTs with their state, games and Elo. A gauntlet shows each opponent's
+  score, pentanomial and Elo (as cards or a list, with a table to copy), and every game on a live page with board,
+  clocks, evaluation and the engines' figures. An SPRT shows its LLR against its bounds, the producer's Elo, Elo and
+  LLR over games, and an estimate of the games and time left to a bound. A running match that has stopped reporting is
+  marked silent.
+
 Runs arrive as `PUT /api/runs/{id}` with a per-machine token; the format and the rules are in
-[docs/results-schema.md](docs/results-schema.md). Pulling CI runs from GitHub comes next. See
+[docs/results-schema.md](docs/results-schema.md); matches as `PUT /api/matches/{id}`, in
+[docs/match-schema.md](docs/match-schema.md). Pulling CI runs from GitHub comes next. See
 [CLAUDE.md](CLAUDE.md) for the design and the open decisions.
 
 ## Running it

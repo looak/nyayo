@@ -6,7 +6,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-for unit in nyayo.service nyayo-expire.service nyayo-expire.timer; do
+for unit in nyayo.service nyayo-expire.service nyayo-expire.timer nyayo-backup.service nyayo-backup.timer; do
     sed -e "s#^User=.*#User=$(id -un)#" \
         -e "s#^WorkingDirectory=.*#WorkingDirectory=$REPO_DIR#" \
         -e "s#^ExecStart=[^ ]*/bin/#ExecStart=$NYAYO_BIN/#" \
@@ -17,9 +17,9 @@ for unit in nyayo.service nyayo-expire.service nyayo-expire.timer; do
 done
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now nyayo nyayo-expire.timer
+sudo systemctl enable --now nyayo nyayo-expire.timer nyayo-backup.timer
 sudo systemctl restart nyayo
 systemctl status nyayo --no-pager
-systemctl list-timers nyayo-expire.timer --no-pager
+systemctl list-timers nyayo-expire.timer nyayo-backup.timer --no-pager
 echo
 echo "Follow the log with: journalctl -u nyayo -f"
