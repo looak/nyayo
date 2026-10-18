@@ -38,7 +38,7 @@
       <td>{% if match.silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}</td>
       <td>{{ match.subject }}</td>
       <td class="num">{{ match.summary.overall.games }}{% if match.progress.total %}<span class="muted">/{{ match.progress.total }}</span>{% endif %}</td>
-      <td class="num">{{ match.summary.overall.score|percent }}</td>
+      <td class="num {% if match.summary.overall.score > 0.5 %}better{% elif match.summary.overall.score < 0.5 %}worse{% endif %}">{{ match.summary.overall.score|percent }}</td>
       <td class="num"><span{% if match.stats %} title="{{ match.producer_name }}'s figure"{% endif %} class="{% if match.elo > 0 %}better{% elif match.elo < 0 %}worse{% endif %}">{{ match.elo|elo }}</span> <span class="muted">{{ match.elo_error|error }}</span></td>
     </tr>
   {% endfor %}

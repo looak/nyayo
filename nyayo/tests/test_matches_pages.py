@@ -162,6 +162,21 @@ class Pages(GameTestCase):
         self.assertRegex(page, r'class="worse">.8\.5</span>')
         self.assertRegex(page, r'class="better">\+107\.5</span>')
 
+    def test_the_list_colours_score_around_fifty_percent(self):
+        page = self.client.get("/matches").content.decode()  # the gauntlet scored 65%
+        self.assertIn('<td class="num better">65.0%</td>', page)
+        losing = v1()
+        losing["match"]["id"] = "openbench-openbench-125"
+        losing["results"][0].update(games=20, wins=4, draws=6, losses=10, penta=None)
+        self.put_match(losing, match_id="openbench-openbench-125")
+        even = v1()
+        even["match"]["id"] = "openbench-openbench-126"
+        even["results"][0].update(games=20, wins=7, draws=6, losses=7, penta=None)
+        self.put_match(even, match_id="openbench-openbench-126")
+        page = self.client.get("/matches").content.decode()
+        self.assertIn('<td class="num worse">35.0%</td>', page)
+        self.assertIn('<td class="num ">50.0%</td>', page)
+
     def test_a_finished_match_does_not_refresh(self):
         document = gauntlet()
         document["match"].update(state="finished", finished_at="2026-10-15T10:00:00Z")
