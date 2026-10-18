@@ -179,32 +179,41 @@ def sprt_progress(match):
             "projection": progress.projection(series, match.sprt, timezone.now()) if running else None}
 
 
-# most live games the list shows a card for; a runner plays a handful at a time
-LIVE_CARDS = 6
+# most running matches the list shows a card for; one or two is usual
+RUNNING_CARDS = 6
 
 
-def live_cards(cutoff):
-    """The games being played right now, newest first, for the top of the match list: a game with no result yet in a
-    match that is running and has reported lately (a silent match's games are likely dead). One that can't be read
-    is left out."""
-    rows = (Game.objects.filter(result="*", match__state="running", match__updated_at__gte=cutoff)
-            .select_related("match", "match__subject").order_by("-received_at")[:LIVE_CARDS])
+def running_cards(cutoff, now):
+    """The matches being played right now, newest first, for the top of the list: running, and reported lately (a
+    silent match is likely dead). Each as what a glance needs: games, Elo, how it is going and when it will be done."""
     cards = []
-    for row in rows:
-        raw = games.read_pgn(row.match_id, row.game)
-        parsed = pgnview.load(raw) if raw else None
-        if parsed is None:
-            continue
-        plies = len(parsed.moves)
-        orientation = chess.BLACK if row.colour == "black" else chess.WHITE
-        cards.append({
-            "match": row.match, "game": row.game, "plies": plies, "colour": row.colour,
-            "white": parsed.headers.get("White", ""), "black": parsed.headers.get("Black", ""),
-            "last": parsed.moves[-1] if parsed.moves else None,
-            "since": games.age_ms(row.match_id, row.game) // 1000,
-            "svg": pgnview.board_svg(parsed, plies, orientation, size=190),
-        })
+    for match in match_queryset().filter(state="running", updated_at__gte=cutoff).order_by("-updated_at")[
+            :RUNNING_CARDS]:
+        summary = stats.summarize(match.results.all())
+        progress_info = match.progress or {}
+        total = progress_info.get("total") or len(match.schedule) or None
+        played = progress_info.get("played") if total else None
+        if played is None:
+            played = summary.overall.games
+        playing = progress_info.get("playing") or 0
+        run = timing.summarize(match.state, match.started_at or match.received_at, match.finished_at,
+                               match.updated_at, total, played, playing, [], (match.settings or {}).get("concurrency"),
+                               now)
+        card = {"match": match, "total": total, "played": played, "playing": playing, "timing": run,
+                "score": summary.overall.score, "tc": (match.settings or {}).get("tc"), "sprt": sprt_view(match)}
+        if card["sprt"]:
+            card.update(sprt_card(match, card["sprt"], now))
+        else:
+            card.update(elo=summary.overall.elo, error=summary.overall.error, projection=None)
+        cards.append(card)
     return cards
+
+
+def sprt_card(match, sprt, now):
+    """What an SPRT adds to its card: its own Elo and error, and where the LLR is heading."""
+    elo, error, _ = sprtview.elo_figures(match, match.results.first())
+    series = progress.points(match.snapshots.all())
+    return {"elo": elo, "error": error, "projection": progress.projection(series, match.sprt, now)}
 
 
 def matches_list(request):
@@ -220,7 +229,7 @@ def matches_list(request):
     if engine.isdigit():
         matches = matches.filter(subject_id=int(engine))
     page = Paginator(matches, 50).get_page(request.GET.get("page"))
-    live = live_cards(cutoff)
+    running = running_cards(cutoff, timezone.now())
     for match in page.object_list:
         match.summary = stats.summarize(match.results.all())
         match.silent = is_silent(match, cutoff)
@@ -230,7 +239,7 @@ def matches_list(request):
         match.elo_error = produced.get("error") if produced else match.summary.overall.error
     return render(request, "matches/matches_list.html", {
         "page": page, "kind": kind, "kinds": KINDS, "state": state, "states": STATES + ["silent"], "engine": engine,
-        "live": live,
+        "running": running,
         "engines": Engine.objects.filter(matches_as_subject__isnull=False).distinct(),
     })
 

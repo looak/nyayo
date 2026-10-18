@@ -713,55 +713,75 @@ class GraphScript(GameTestCase):
         self.assertIn('removeAttribute("hidden")', page)
 
 
-class LiveCards(GameTestCase):
+class RunningCards(GameTestCase):
     def fresh(self):
         Match.objects.update(updated_at=django_timezone.now())
 
-    def test_a_live_game_gets_a_card_linking_to_it(self):
+    def page(self, url="/matches"):
+        return self.client.get(url).content.decode()
+
+    def test_a_running_gauntlet_gets_a_card_linking_to_the_match(self):
         self.fresh()
-        self.put_game(pgn("1. e4 e5 2. Nf3"))
-        page = self.client.get("/matches").content.decode()
-        self.assertIn('href="/matches/gauntlet-test-1/games/1"', page)
-        self.assertIn('class="card live-card"', page)
-        self.assertIn("game 1 · move 2", page)
-        self.assertIn("Nf3", page)
+        page = self.page()
+        self.assertIn('class="card running-card" href="/matches/gauntlet-test-1"', page)
+        self.assertIn("elephant-1.0.0-ccrl-blitz", page)
+        self.assertIn(">10</span>", page)  # games
+        self.assertIn("65.0%", page)
         self.assertIn('http-equiv="refresh" content="10"', page)
 
-    def test_the_card_comes_before_the_list(self):
+    def test_it_does_not_link_to_a_game(self):
         self.fresh()
         self.put_game(pgn("1. e4 e5"))
-        page = self.client.get("/matches").content.decode()
-        self.assertLess(page.index("live-card-board"), page.index("<table>"))
+        card = self.page()
+        card = card[card.index("running-card"):card.index("</a>", card.index("running-card"))]
+        self.assertNotIn("/games/", card)
 
-    def test_nothing_live_no_card_and_no_refresh(self):
+    def test_a_gauntlet_with_a_schedule_shows_how_far_along_it_is(self):
+        self.put_match(scheduled())
         self.fresh()
-        page = self.client.get("/matches").content.decode()
-        self.assertNotIn('class="card live-card"', page)
+        page = self.page()
+        self.assertIn('<span class="score-total">/4</span>', page)
+        self.assertIn('aria-label="1 of 4 games played, 1 playing"', page)
+        self.assertIn("<dt>Playing</dt><dd>1 game</dd>", page)
+
+    def test_a_running_sprt_shows_its_llr_and_the_producers_elo(self):
+        self.put_match(v1())
+        self.fresh()
+        page = self.page()
+        card = page[page.index('class="card running-card" href="/matches/%s"' % ID):]
+        card = card[:card.index("</a>")]
+        self.assertIn("LLR (-2.94, 2.94)", card)
+        self.assertIn("+21.7", card)
+        self.assertIn('class="fill pass"', card)  # the LLR is 0.55
+        self.assertNotIn("score-label muted\">score", card)
+
+    def test_the_cards_come_before_the_list(self):
+        self.fresh()
+        page = self.page()
+        self.assertLess(page.index("running-card"), page.index("<table>"))
+
+    def test_nothing_running_no_card_and_no_refresh(self):
+        Match.objects.update(state="finished")
+        page = self.page()
+        self.assertNotIn('class="card running-card"', page)
         self.assertNotIn('http-equiv="refresh"', page)
 
-    def test_a_finished_game_has_no_card(self):
-        self.fresh()
-        self.put_game(pgn("1. e4 e5", result="1-0"))
-        self.assertNotIn('class="card live-card"', self.client.get("/matches").content.decode())
-
-    def test_games_of_a_match_that_stopped_have_no_card(self):
-        self.put_game(pgn("1. e4 e5"))
+    def test_a_stopped_match_has_no_card(self):
         Match.objects.update(state="stopped", updated_at=django_timezone.now())
-        self.assertNotIn('class="card live-card"', self.client.get("/matches").content.decode())
+        self.assertNotIn('class="card running-card"', self.page())
 
-    def test_games_of_a_silent_match_have_no_card(self):
-        self.put_game(pgn("1. e4 e5"))
+    def test_a_silent_match_has_no_card(self):
         Match.objects.update(updated_at=django_timezone.now() - timedelta(minutes=45))
-        self.assertNotIn('class="card live-card"', self.client.get("/matches").content.decode())
+        self.assertNotIn('class="card running-card"', self.page())
 
-    def test_each_live_game_gets_its_own_card_up_to_a_few(self):
+    def test_a_few_at_most(self):
+        for n in range(8):
+            document = v1()
+            document["match"]["id"] = f"openbench-openbench-{200 + n}"
+            self.put_match(document, match_id=f"openbench-openbench-{200 + n}")
         self.fresh()
-        for number in range(1, 9):
-            self.put_game(pgn("1. e4 e5"), game=str(number))
-        page = self.client.get("/matches").content.decode()
-        self.assertEqual(page.count('class="card live-card"'), 6)
+        self.assertEqual(self.page().count('class="card running-card"'), 6)
 
     def test_the_filters_still_work_with_a_card_up(self):
         self.fresh()
-        self.put_game(pgn("1. e4 e5"))
         self.assertEqual(self.client.get("/matches?kind=sprt").status_code, 200)
