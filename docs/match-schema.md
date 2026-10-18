@@ -9,16 +9,8 @@ untouched. The schema changes only by bumping `schema_version`, agreed with the 
 The producer re-sends the **whole document** as the match grows and says the state every time; nyayo keeps no state of
 its own on a producer's behalf, so a lost report costs nothing.
 
-Optional additions that leave every existing document valid (`stats`, batches) stay within version 1. **Written ahead
-of the code** (2026-10-17), marked *planned* below: OpenBench sending version 1
-(`stats`, the move of an old match to version 1, batches and the export are built).
-
-### OpenBench compatibility
-
-nyayo also accepts OpenBench's top-level snapshot shape (no nested `match` object) and maps it to this schema at
-ingest time. That compatibility path is for `kind: "sprt"` and `kind: "games"` reports and keeps OpenBench-specific
-details under `match.settings.openbench` and `sprt.openbench`. It goes once OpenBench sends version 1 (see *OpenBench*
-below) and every OpenBench match has been resent.
+Optional additions that leave every existing document valid (`stats`, batches) stay within version 1. OpenBench sends
+version 1 too; the top-level shape it sent before is no longer accepted (`400`, no `schema_version` at the top).
 
 ## Endpoints
 
@@ -217,9 +209,8 @@ of positions.
 
 ## OpenBench
 
-*Partly planned: `stats`, the move to version 1 and batches are built.* OpenBench (the fork, [looak/openbench_eg](https://github.com/looak/openbench_eg)) sends a test as
-version 1 once its reporter switches; until then it sends the compatibility shape above, and each finished game
-through the games endpoint, tagged `[Subject]` and `[Opponent]`. OpenBench is the source of truth for an SPRT: its
+OpenBench (the fork, [looak/openbench_eg](https://github.com/looak/openbench_eg)) sends a test as version 1, and is
+the source of truth for an SPRT: its
 LLR, bounds and result, and with `stats` its Elo and error; nyayo computes no SPRT. One document per test, after every
 batch of results and every action by hand:
 
@@ -246,11 +237,6 @@ The branch is the subject's and opponent's `branch`, never their name: a test of
 `[Opponent "base"]`, and its players are named `<engine> <branch>` (`Elephant feature-x`, `Elephant main`), rewritten
 from cutechess's `<engine>-dev` and `<engine>-base`. A test of a branch against itself has the same name on both
 sides; the tags still tell them apart.
-
-**Moving a match to version 1.** The first version 1 document for a match stored from the compatibility shape replaces
-its fixed part (subject, opponents, settings, SPRT bounds) instead of being `409`, once; its opponent's id becomes
-`base`, carried over to its results, snapshots and games; counts still only grow. After that it's an ordinary version
-1 match. OpenBench's `report_to_nyayo --all` resends every test this way, after which the compatibility path goes.
 
 ## Storage
 

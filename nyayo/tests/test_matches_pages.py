@@ -12,7 +12,7 @@ from nyayo.matches import pgnview, stats, timing
 from nyayo.matches.models import Match
 
 from .test_games import GameTestCase, pgn
-from .test_matches_ingest import OPENBENCH_SPRT, gauntlet, scheduled
+from .test_matches_ingest import ID, gauntlet, scheduled, v1
 
 COMMENTED = (
     '[White "Elephant 1.0.0"]\n[Black "Barbarossa 0.6.0"]\n[Result "*"]\n\n'
@@ -115,26 +115,23 @@ class Pages(GameTestCase):
         self.assertContains(response, 'http-equiv="refresh"')
 
     def test_match_page_shows_sprt_viewer_for_openbench_payload(self):
-        self.put_match(OPENBENCH_SPRT, match_id="openbench-bobby-123")
-        response = self.client.get("/matches/openbench-bobby-123")
+        self.put_match(v1())
+        response = self.client.get(f"/matches/{ID}")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, ">SPRT<")
         self.assertContains(response, "current LLR")
-        self.assertContains(response, "active window -1.00 .. 1.00")
-        self.assertContains(response, "Elo window")
-        self.assertContains(response, "-5.00 .. 5.00")
+        self.assertContains(response, "active window -2.94 .. 2.94")
+        self.assertContains(response, "<dt>Elo1</dt><dd>5.00</dd>")
         self.assertNotContains(response, "SPRT bounds")
-        self.assertNotContains(response, 'title="SPRT lower')
-        self.assertContains(response, "18")  # games played, from the results
+        self.assertContains(response, "20")  # games played, from the results
 
     def test_a_failed_sprt_is_not_badged_as_a_pass(self):
-        document = copy.deepcopy(OPENBENCH_SPRT)
-        document.update(state="finished", finished=True)
+        document = v1()
+        document["match"]["state"] = "finished"
         document["sprt"]["result"] = "failed"
-        document["id"] = "openbench-bobby-123"
-        response = self.put_match(document, match_id="openbench-bobby-123")
+        response = self.put_match(document)
         self.assertEqual(response.status_code, 201, response.content)
-        html = self.client.get("/matches/openbench-bobby-123").content.decode()
+        html = self.client.get(f"/matches/{ID}").content.decode()
         self.assertIn('<span class="outcome fail">failed</span>', html)
         self.assertNotIn('<span class="outcome pass">failed</span>', html)
 

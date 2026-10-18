@@ -86,9 +86,6 @@ def sprt_view(match):
     llr = number(data.get("llr"))
     lower = number(data.get("lower"))
     upper = number(data.get("upper"))
-    source = data.get("openbench") if isinstance(data.get("openbench"), dict) else {}
-    source_lower = number(source.get("lower"))
-    source_upper = number(source.get("upper"))
 
     values = [v for v in (llr, lower, upper) if v is not None]
     if len(values) >= 2:
@@ -109,7 +106,6 @@ def sprt_view(match):
         "llr": llr, "lower": lower, "upper": upper, "result": data.get("result"),
         "alpha": number(data.get("alpha")), "beta": number(data.get("beta")),
         "elo0": number(data.get("elo0")), "elo1": number(data.get("elo1")), "model": data.get("model"),
-        "source_lower": source_lower, "source_upper": source_upper,
         "range_low": low, "range_high": high,
         "llr_pct": pct(llr), "lower_pct": pct(lower), "upper_pct": pct(upper),
     }

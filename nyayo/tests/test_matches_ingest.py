@@ -31,30 +31,40 @@ GAUNTLET = {
     "machines": [],
 }
 
-OPENBENCH_SPRT = {
-    "schema_version": 1,
-    "id": "openbench-bobby-123",
-    "kind": "sprt",
-    "state": "running",
-    "updated_at": "2026-10-16T12:34:56Z",
-    "producer": {"kind": "OpenBench", "url": "/test/123/", "instance": "bobby"},
-    "subject": {"engine": "Dev Engine", "name": "Dev Engine", "repo": "https://example.com/dev.git", "sha": "abc123",
-                "bench": 2000, "options": "Threads=1 Hash=64", "time_control": "40/20", "network": "dev-net",
-                "book": "book"},
-    "opponents": [{"engine": "Base Engine", "name": "Base Engine", "repo": "https://example.com/base.git",
-                   "sha": "def456", "bench": 1800, "options": "Threads=1", "time_control": "40/20",
-                   "network": "base-net"}],
-    "results": [{"games": 18, "wins": 9, "losses": 3, "draws": 6, "LL": 12, "LD": 8, "DD": 5, "DW": 4, "WW": 3,
-                 "crashes": 1, "timeloss": 2}],
-    "sprt": {"lower": -5.0, "upper": 5.0, "alpha": 0.05, "beta": 0.05, "current_llr": 0.4, "lower_llr": -1.0,
-             "upper_llr": 1.0, "result": None},
-    "settings": {"dev_time_control": "40/20", "base_time_control": "40/20", "book_name": "book",
-                 "adjudication": "movecount=3 score=400", "scale_method": "BASE", "scale_nps": 0},
-    "machines": [{"machine_id": 7, "user": "alice", "games": 18, "wins": 9, "losses": 3, "draws": 6, "crashes": 1,
-                  "timeloss": 2, "updated_at": "2026-10-16T12:34:56Z"}],
-    "error": False,
-    "finished": False,
-}
+ID = "openbench-openbench-123"
+
+
+def v1(**changes):
+    """OpenBench's test as match schema v1 (docs/match-schema.md, OpenBench)."""
+    document = {
+        "schema_version": 1,
+        "match": {
+            "id": ID, "kind": "sprt", "state": "running", "name": "feature-x vs main",
+            "producer": {"name": "OpenBench", "version": "openbench", "url": "http://172.16.100.11:8000/test/123/"},
+            "started_at": "2026-10-16T10:00:00Z", "updated_at": "2026-10-16T12:34:56Z", "finished_at": None,
+            "host": {"name": "openbench"},
+            "settings": {"tc": "8+0.08", "book": "book", "runner": {"name": "cutechess-ob"}, "pgn_options": [],
+                         "openbench": {}},
+        },
+        "subject": {"name": "Elephant", "branch": "feature-x", "commit": "abc123", "bench": 2000,
+                    "options": {"Threads": "1", "Hash": "64"}},
+        "opponents": [{"id": "base", "name": "Elephant", "branch": "main", "commit": "def456", "bench": 1800,
+                       "options": {"Threads": "1"}}],
+        "results": [{"opponent": "base", "games": 20, "wins": 10, "draws": 7, "losses": 3, "penta": [0, 1, 6, 2, 1],
+                     "timelosses": {"subject": 0, "opponent": 0}, "crashes": {"subject": 1, "opponent": 0},
+                     "illegal": {"subject": 0, "opponent": 0}}],
+        "sprt": {"elo0": 0.0, "elo1": 5.0, "alpha": 0.05, "beta": 0.05, "model": "penta", "llr": 0.55,
+                 "lower": -2.94, "upper": 2.94, "result": None},
+        "stats": {"elo": 21.74, "error": 114.47, "model": "penta"},
+        "machines": [{"name": "hunt", "games": 20}],
+    }
+    for path, value in changes.items():
+        target = document
+        *parents, last = path.split("__")
+        for part in parents:
+            target = target[part]
+        target[last] = value
+    return document
 
 
 def gauntlet(**changes):
@@ -146,29 +156,35 @@ class CreateAndUpdate(MatchTestCase):
         self.assertEqual(Engine.objects.filter(name="Elephant").count(), 1)
         self.assertEqual(Engine.objects.count(), 3)
 
-    def test_openbench_sprt_payload_is_accepted(self):
-        response = self.put_match(OPENBENCH_SPRT, match_id="openbench-bobby-123")
+    def test_openbench_sprt_is_accepted(self):
+        response = self.put_match(v1())
         self.assertEqual(response.status_code, 201, response.content)
-        match = Match.objects.get(pk="openbench-bobby-123")
+        match = Match.objects.get(pk=ID)
         self.assertEqual((match.kind, match.state, match.producer_name), ("sprt", "running", "OpenBench"))
         self.assertEqual(match.subject.commit, "abc123")
+        self.assertEqual(match.subject_info["branch"], "feature-x")
         self.assertEqual(match.subject_info["options"], {"Threads": "1", "Hash": "64"})
         row = match.results.get()
-        self.assertEqual((row.games, row.wins, row.draws, row.losses), (18, 9, 6, 3))
-        self.assertEqual(row.penta, [12, 8, 5, 4, 3])
-        self.assertEqual((match.sprt["llr"], match.sprt["lower"], match.sprt["upper"]), (0.4, -1.0, 1.0))
+        self.assertEqual((row.opponent, row.games, row.wins, row.draws, row.losses), ("base", 20, 10, 7, 3))
+        self.assertEqual(row.penta, [0, 1, 6, 2, 1])
+        self.assertEqual((match.sprt["llr"], match.sprt["lower"], match.sprt["upper"]), (0.55, -2.94, 2.94))
 
     def test_openbench_sprt_update_grows_counts_and_llr(self):
-        self.put_match(OPENBENCH_SPRT, match_id="openbench-bobby-123")
-        later = copy.deepcopy(OPENBENCH_SPRT)
-        later["updated_at"] = "2026-10-16T12:44:56Z"
-        later["results"][0].update(games=20, wins=10, draws=7, losses=3, LL=12, LD=9, DD=6, DW=4, WW=3)
-        later["sprt"]["current_llr"] = 0.55
-        response = self.put_match(later, match_id="openbench-bobby-123")
+        self.put_match(v1())
+        later = v1()
+        later["match"]["updated_at"] = "2026-10-16T12:44:56Z"
+        later["results"][0].update(games=22, wins=11, draws=8, losses=3, penta=[0, 1, 7, 2, 1])
+        later["sprt"]["llr"] = 0.7
+        response = self.put_match(later)
         self.assertEqual(response.status_code, 200, response.content)
         row = MatchResult.objects.get()
-        self.assertEqual((row.games, row.wins, row.draws, row.losses), (20, 10, 7, 3))
-        self.assertEqual(Match.objects.get().sprt["llr"], 0.55)
+        self.assertEqual((row.games, row.wins, row.draws, row.losses), (22, 11, 8, 3))
+        self.assertEqual(Match.objects.get().sprt["llr"], 0.7)
+
+    def test_the_old_top_level_shape_is_no_longer_accepted(self):
+        response = self.put_match({"id": ID, "kind": "sprt", "state": "running", "updated_at": "2026-10-16T12:34:56Z"},
+                                  match_id=ID)
+        self.assertRefused(response, 400, "schema_version")
 
 
 class Snapshots(MatchTestCase):
