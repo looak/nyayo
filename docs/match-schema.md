@@ -10,8 +10,8 @@ The producer re-sends the **whole document** as the match grows and says the sta
 its own on a producer's behalf, so a lost report costs nothing.
 
 Optional additions that leave every existing document valid (`stats`, batches) stay within version 1. **Written ahead
-of the code** (2026-10-17), marked *planned* below: batches, the export, and OpenBench sending version 1
-(`stats` and the move of an old match to version 1 are built).
+of the code** (2026-10-17), marked *planned* below: the export, and OpenBench sending version 1
+(`stats`, the move of an old match to version 1 and batches are built).
 
 ### OpenBench compatibility
 
@@ -27,7 +27,7 @@ below) and every OpenBench match has been resent.
 | `PUT /api/matches/{match.id}` | the match document, JSON, optionally `Content-Encoding: gzip` |
 | `PUT /api/matches/{match.id}/games/{game}` | one game's PGN so far, `application/x-chess-pgn`, optionally gzipped |
 | `GET /api/matches/{match.id}/games/{game}` | the stored PGN, open like the pages |
-| `PUT /api/matches/{match.id}/pgns/{batch}` | *planned*: a batch of finished games, `application/x-bzip2` (see *Batches*) |
+| `PUT /api/matches/{match.id}/pgns/{batch}` | a batch of finished games, `application/x-bzip2` (see *Batches*) |
 | `GET /api/games?…` | *planned*: every stored game matching a filter, one bz2 stream (see *Export*) |
 
 `Authorization: Bearer <token>`, the per-machine tokens made in the admin (the same as for runs). Responses are plain
@@ -36,7 +36,7 @@ with the reason, `404` an unknown match (PUT the match first), `409` a change th
 `413` a body over 64 MB.
 
 Ids are `[A-Za-z0-9._-]`, starting with a letter or digit, at most 128 characters for a match and 64 for a game or a
-batch; they end up in URLs and file names.
+batch; they end up in URLs and file names. The match id `batches` is reserved (it is a directory of the games).
 
 ## The match document
 
@@ -173,7 +173,7 @@ means `COMPACT` to keep only the score but keeps the whole comment, so both mode
 
 ## Batches
 
-*Planned.* Games kept **as data**, for training: finished games sent in bulk once played, not followed live. A producer that sends
+Games kept **as data**, for training: finished games sent in bulk once played, not followed live. A producer that sends
 batches doesn't PUT the same games one by one.
 
 `PUT /api/matches/{id}/pgns/{batch}` carries a batch of finished games, the PGNs one after the other.
@@ -217,7 +217,7 @@ of positions.
 
 ## OpenBench
 
-*Partly planned: `stats` and the move to version 1 are built, batches are not.* OpenBench (the fork, [looak/openbench_eg](https://github.com/looak/openbench_eg)) sends a test as
+*Partly planned: `stats`, the move to version 1 and batches are built.* OpenBench (the fork, [looak/openbench_eg](https://github.com/looak/openbench_eg)) sends a test as
 version 1 once its reporter switches; until then it sends the compatibility shape above, and each finished game
 through the games endpoint, tagged `[Subject]` and `[Opponent]`. OpenBench is the source of truth for an SPRT: its
 LLR, bounds and result, and with `stats` its Elo and error; nyayo computes no SPRT. One document per test, after every
@@ -260,7 +260,7 @@ PUT. The database is an index: matches, per-opponent results, snapshots (the cou
 of the progress graph) and a row per game (result, termination, colour, opponent). `manage.py purge_games --match ID |
 --older-than DAYS` removes games' files and rows without touching a match's document, counts or snapshots.
 
-*Planned:* batches are `games/batches/<match id>/<batch>.pgn.bz2`, bz2 whatever the upload's encoding (a plain or gzipped upload
+Batches are `games/batches/<match id>/<batch>.pgn.bz2`, bz2 whatever the upload's encoding (a plain or gzipped upload
 is recompressed; the sha256 is of the stored file), with a row each (match, batch, games, bytes, sha256, machine,
 received) and no row per game: picking a training set filters on the match, which is indexed already. `purge_games`
 never touches them; `manage.py purge_batches --match ID` removes a match's batches and is only run by hand. They are

@@ -1,3 +1,4 @@
+from django.core.exceptions import RequestDataTooBig
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -5,7 +6,7 @@ from django.views.decorators.http import require_http_methods
 from nyayo.runs.ingest import IngestError
 from nyayo.runs.views import decompress, machine_for, text, unauthorized
 
-from . import games
+from . import batches, games
 from .ingest import ingest
 
 
@@ -44,3 +45,24 @@ def api_game(request, match_id, game):
     except IngestError as error:
         return text(error.status, error.reason)
     return text(201 if created else 200, "created" if created else "updated")
+
+
+@csrf_exempt
+@require_http_methods(["PUT"])
+def api_batch(request, match_id, batch):
+    """PUT /api/matches/{id}/pgns/{batch}: a batch of finished games, bz2 or PGN. 201 stored, 200 an identical
+    resend, 400 invalid with the reason, 404 an unknown match, 409 different content under a stored name, 413 too
+    large."""
+    machine = machine_for(request)
+    if machine is None:
+        return unauthorized()
+    try:
+        body = request.body
+    except RequestDataTooBig:
+        return text(413, "batch is too large")
+    try:
+        created = batches.store(match_id, batch, body, request.headers.get("Content-Type"),
+                                request.headers.get("Content-Encoding"), machine)
+    except IngestError as error:
+        return text(error.status, error.reason)
+    return text(201 if created else 200, "created" if created else "unchanged")

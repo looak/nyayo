@@ -232,6 +232,8 @@ def validate(document, match_id=None):
 
     if not valid_id(m.get("id"), MATCH_ID_MAX):
         raise invalid(f"match.id must be 1 to {MATCH_ID_MAX} characters of letters, digits, . _ -, got {m.get('id')!r}")
+    if m.get("id") == "batches":
+        raise invalid("match.id batches is reserved")
     if match_id is not None and m["id"] != match_id:
         raise invalid(f"match.id {m['id']} doesn't match the url's {match_id}")
     if m.get("kind") not in KINDS:

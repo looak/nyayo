@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 
 from . import games
 from .ingest import delete_archived
@@ -24,6 +24,10 @@ class MatchAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, match=None):
         return False
 
+    def has_delete_permission(self, request, match=None):
+        # a match with batches of games is data to keep: purge_batches by hand first
+        return match is None or not match.batches.exists()
+
     def get_actions(self, request):
         actions = super().get_actions(request)
         actions.pop("delete_selected", None)
@@ -36,6 +40,11 @@ class MatchAdmin(admin.ModelAdmin):
 
     @admin.action(description="Delete the selected matches and their archived files")
     def delete_with_archive(self, request, queryset):
+        kept = [m.pk for m in queryset if m.batches.exists()]
+        if kept:
+            self.message_user(request, f"Not deleted, they have batches of games (manage.py purge_batches first): "
+                                       f"{', '.join(kept)}", level=messages.ERROR)
+        queryset = queryset.exclude(pk__in=kept)
         for match in queryset:
             delete_archived(match.pk)
             games.delete_files(match.pk)

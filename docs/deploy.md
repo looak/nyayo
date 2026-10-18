@@ -106,8 +106,11 @@ Once, on bobby: make a private repository, clone it (`git clone git@github.com:<
 `.env`, and run `python manage.py backup` by hand to see it work. The dump holds the machines' token hashes and the
 admin users, hence private.
 
-`games/batches/` (the game database, later) is not in the repo: it is gigabytes of bz2. Put it on the Synology's share
-and let the NAS's own backup cover it.
+`games/batches/` (the game database: batches of finished games, `PUT /api/matches/{id}/pgns/{batch}`) is not in the
+repo: it is gigabytes of bz2. Put it on the Synology's share and let the NAS's own backup cover it: mount the share on
+bobby and set `NYAYO_BATCHES_DIR` to it in `.env` (it defaults to `games/batches` in the data directory). Batches are
+never purged with the live games; `manage.py purge_batches --match ID` removes a match's by hand, and a match that has
+batches can't be deleted in the admin until then.
 
 To restore on a new machine: install nyayo, set `NYAYO_DATA_DIR` to an empty directory, clone the backup repository,
 stop nyayo, then `python manage.py restore_backup <path to the clone>`. It refuses a data directory that already has

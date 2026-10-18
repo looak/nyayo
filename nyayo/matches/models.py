@@ -122,6 +122,30 @@ class MatchSnapshot(models.Model):
         ordering = ["match", "received_at"]
 
 
+class GameBatch(models.Model):
+    """The index of a batch of finished games (games/batches/<match id>/<batch>.pgn.bz2), sealed on arrival. One row
+    per batch and none per game: picking a training set filters on the match, which is indexed already. PROTECT: a
+    match with batches isn't deleted from under them; `manage.py purge_batches --match ID` comes first."""
+
+    match = models.ForeignKey(Match, on_delete=models.PROTECT, related_name="batches")
+    batch = models.CharField(max_length=GAME_ID_MAX, validators=[id_validator])
+    games = models.PositiveIntegerField()
+    bytes = models.PositiveBigIntegerField()
+    # of the bytes as stored
+    sha256 = models.CharField(max_length=64)
+    machine = models.ForeignKey("runs.Machine", null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="batches")
+    received_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name_plural = "game batches"
+        ordering = ["match", "batch"]
+        constraints = [models.UniqueConstraint(fields=["match", "batch"], name="one_row_per_batch")]
+
+    def __str__(self):
+        return f"{self.match_id}/{self.batch}"
+
+
 class Game(models.Model):
     """The index of a game's PGN file (games/<match id>/<game>.pgn). Kept apart from the match's results so games can
     be purged without touching counts, snapshots or the document. Only touched when something other than a move

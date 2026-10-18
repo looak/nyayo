@@ -60,12 +60,20 @@ NYAYO_COMMITTED_DAYS = int(os.environ.get("NYAYO_COMMITTED_DAYS", 30))
 # the database to. Unset, backup only makes a local copy of the database.
 NYAYO_BACKUP_REPO = os.environ.get("NYAYO_BACKUP_REPO", "")
 
+# Batches of finished games (games/batches/<match id>/<batch>.pgn.bz2) are data to keep, apart from the live games so
+# purge_games never touches them; put them on the NAS's share by pointing this there. A batch is at most 64 MB as sent
+# and 256 MB once decompressed.
+NYAYO_BATCHES_DIR = Path(os.environ.get("NYAYO_BATCHES_DIR") or NYAYO_GAMES_DIR / "batches").resolve()
+NYAYO_MAX_BATCH_UPLOAD_BYTES = 64 * 1024 * 1024
+NYAYO_MAX_BATCH_BYTES = 256 * 1024 * 1024
+
 # A running match with no report for this many minutes is shown as silent (derived when a page is drawn, never stored).
 NYAYO_SILENT_AFTER = int(os.environ.get("NYAYO_SILENT_AFTER", 30))
 
 # A run's largest size once decompressed; uploads are gzipped and far smaller on the wire.
 NYAYO_MAX_RUN_BYTES = 64 * 1024 * 1024
-DATA_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024
+# a batch of games may be up to NYAYO_MAX_BATCH_UPLOAD_BYTES as sent
+DATA_UPLOAD_MAX_MEMORY_SIZE = 64 * 1024 * 1024
 
 INSTALLED_APPS = [
     "django.contrib.admin",

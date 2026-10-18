@@ -70,7 +70,10 @@ class NyayoTestCase(TestCase):
         self.addCleanup(shutil.rmtree, self.archive, ignore_errors=True)
         self.games = Path(tempfile.mkdtemp(prefix="nyayo-games-"))
         self.addCleanup(shutil.rmtree, self.games, ignore_errors=True)
-        overrides = override_settings(NYAYO_ARCHIVE_DIR=self.archive, NYAYO_GAMES_DIR=self.games)
+        self.batches = Path(tempfile.mkdtemp(prefix="nyayo-batches-"))
+        self.addCleanup(shutil.rmtree, self.batches, ignore_errors=True)
+        overrides = override_settings(NYAYO_ARCHIVE_DIR=self.archive, NYAYO_GAMES_DIR=self.games,
+                                      NYAYO_BATCHES_DIR=self.batches)
         overrides.enable()
         self.addCleanup(overrides.disable)
         self.machine = Machine(name="babylon")

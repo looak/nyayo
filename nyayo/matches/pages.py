@@ -115,6 +115,13 @@ def sprt_view(match):
     }
 
 
+def stored_games(match):
+    """Games kept as data for this match, in batches."""
+    from django.db.models import Sum
+
+    return match.batches.aggregate(total=Sum("games"))["total"] or 0
+
+
 def sprt_progress(match):
     """The SPRT card's graphs and projection, from the snapshots; empty for a match that isn't an SPRT."""
     if not isinstance(match.sprt, dict):
@@ -233,7 +240,7 @@ def match_detail(request, match_id):
             played, len(groups["playing"]), durations, (match.settings or {}).get("concurrency"),
             timezone.now()),
         "groups": groups, "entries": entries, "refresh": match.state == "running", "settings": match.settings,
-        "host": match.host, "subject_name": subject_name,
+        "host": match.host, "subject_name": subject_name, "stored_games": stored_games(match),
         "producer_url": (match.producer or {}).get("url"),
     })
     if chosen in RESULT_VIEWS:
