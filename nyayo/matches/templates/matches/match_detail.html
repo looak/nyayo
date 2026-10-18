@@ -74,6 +74,7 @@
   </div>
   {% endif %}
   <dl class="chips">
+    {% if sprt.stats %}<div><dt>Elo <span class="muted">({{ sprt.producer }}'s, {{ sprt.stats.model }})</span></dt><dd>{{ sprt.stats.elo|elo }} <span class="muted">{{ sprt.stats.error|error }}</span></dd></div>{% endif %}
     {% if sprt.elo0 is not None %}<div><dt>Elo0</dt><dd>{{ sprt.elo0|floatformat:2 }}</dd></div>{% endif %}
     {% if sprt.elo1 is not None %}<div><dt>Elo1</dt><dd>{{ sprt.elo1|floatformat:2 }}</dd></div>{% endif %}
     {% if sprt.elo0 is None and sprt.source_lower is not None and sprt.source_upper is not None %}<div><dt>Elo window</dt><dd>{{ sprt.source_lower|floatformat:2 }} .. {{ sprt.source_upper|floatformat:2 }}</dd></div>{% endif %}

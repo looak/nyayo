@@ -103,7 +103,9 @@ def sprt_view(match):
             return None
         return max(0.0, min(100.0, (value - low) / (high - low) * 100.0))
 
+    produced = match.stats if isinstance(match.stats, dict) else None
     return {
+        "stats": produced, "producer": match.producer_name or "the producer",
         "llr": llr, "lower": lower, "upper": upper, "result": data.get("result"),
         "alpha": number(data.get("alpha")), "beta": number(data.get("beta")),
         "elo0": number(data.get("elo0")), "elo1": number(data.get("elo1")), "model": data.get("model"),

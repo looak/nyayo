@@ -10,7 +10,8 @@ The producer re-sends the **whole document** as the match grows and says the sta
 its own on a producer's behalf, so a lost report costs nothing.
 
 Optional additions that leave every existing document valid (`stats`, batches) stay within version 1. **Written ahead
-of the code** (2026-10-17), marked *planned* below: `stats`, batches, the export, and OpenBench sending version 1.
+of the code** (2026-10-17), marked *planned* below: batches, the export, and OpenBench sending version 1
+(`stats` and the move of an old match to version 1 are built).
 
 ### OpenBench compatibility
 
@@ -93,7 +94,7 @@ whatever the comments carry, so a match played with fewer options just shows les
 Statistics (Elo, its error, the performance rating) are computed by nyayo from the counts; `sprt.llr` and
 `sprt.result` are the producer's own and shown as such.
 
-**`stats`** (*planned*), when a match carries it, is the producer's own Elo and error (95%) for the match, from the subject's side,
+**`stats`**, when a match carries it, is the producer's own Elo and error (95%) for the match, from the subject's side,
 and `model` says how it was computed (`penta` or `tri`). nyayo shows it as the match's Elo, labelled as the producer's,
 and keeps its own calculation for matches without it and for each opponent on the page. It is how an SPRT's figures
 are OpenBench's, the source of truth for an SPRT, rather than a second calculation that disagrees with it.
@@ -216,7 +217,7 @@ of positions.
 
 ## OpenBench
 
-*Planned.* OpenBench (the fork, [looak/openbench_eg](https://github.com/looak/openbench_eg)) sends a test as
+*Partly planned: `stats` and the move to version 1 are built, batches are not.* OpenBench (the fork, [looak/openbench_eg](https://github.com/looak/openbench_eg)) sends a test as
 version 1 once its reporter switches; until then it sends the compatibility shape above, and each finished game
 through the games endpoint, tagged `[Subject]` and `[Opponent]`. OpenBench is the source of truth for an SPRT: its
 LLR, bounds and result, and with `stats` its Elo and error; nyayo computes no SPRT. One document per test, after every

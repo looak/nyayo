@@ -1,5 +1,6 @@
 """Elo, its error and a gauntlet's performance rating, from the counts a producer sends. The producer's own figures are
-never used; the counts are, so two producers' matches read the same way.
+not used for these, the counts are, so two producers' matches read the same way. The one exception is an SPRT's `stats`
+(OpenBench decides the test, so its Elo and error are shown as its own, next to this calculation).
 
 Points come from wins, draws and losses of every game. The error comes from the pentanomial when it covers all the
 games (games played in pairs on one opening share a result more than chance, which the trinomial would ignore), else

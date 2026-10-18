@@ -3,8 +3,10 @@
 A match document is archived first, unchanged, as archive/matches/<id>.json, then indexed. The producer re-sends the
 whole document as the match grows and says the state every time, so nothing here decides a state on its behalf.
 
-Under one id only the state, the timestamps of progress, the counts, the producer's LLR and result, the machines that
-played and the pgn may change, and counts only grow. Anything else is a different match under the same id (409).
+Under one id only the state, the timestamps of progress, the counts, the producer's LLR, result and stats, the machines
+that played and the pgn may change, and counts only grow. Anything else is a different match under the same id (409).
+The one exception is a match stored from OpenBench's old shape: its first version 1 document replaces the fixed part,
+once (see migrate_to_v1).
 """
 
 import copy
@@ -52,22 +54,32 @@ def ingest(raw, machine=None, match_id=None):
     """Stores one match from its raw JSON bytes. machine is who sent it, match_id the id the request was addressed
     to. Returns Ingested(match, created); raises IngestError for a document that's invalid (400) or an update that
     changes what may not change (409)."""
-    document = normalize(parse(raw))
+    parsed = parse(raw)
+    document = normalize(parsed)
     validate(document, match_id)
     m = document["match"]
 
     existing = Match.objects.filter(pk=m["id"]).first()
+    moving = False
     if existing is not None:
         previous = read_archived(existing.pk)
-        if previous is not None:
-            previous = normalize(previous)
-            check_update(previous, document)
-        else:
+        if previous is None:
             check_update_against(existing, document)
+        elif "match" not in previous and "match" in parsed:
+            # stored in the compatibility shape, now sent as version 1: the fixed part is replaced, once
+            moving = True
+            check_move(existing, document)
+        else:
+            check_update(normalize(previous), document)
 
     write_archive(m["id"], raw, machine)
     with transaction.atomic():
-        match = create_match(document, machine) if existing is None else update_match(existing, document)
+        if existing is None:
+            match = create_match(document, machine)
+        else:
+            if moving:
+                migrate_to_v1(existing, document)
+            match = update_match(existing, document)
         snapshot(match, document)
     return Ingested(match, existing is None)
 
@@ -268,9 +280,23 @@ def validate(document, match_id=None):
     if sprt and sprt.get("llr") is not None and (not isinstance(sprt["llr"], (int, float))
                                                   or isinstance(sprt["llr"], bool)):
         raise invalid("sprt.llr must be a number")
+    validate_stats(document.get("stats"))
     if not isinstance(document.get("machines", []), list):
         raise invalid("machines must be a list")
     validate_schedule(document, known)
+
+
+def validate_stats(stats):
+    if stats is None:
+        return
+    if not isinstance(stats, dict):
+        raise invalid("stats must be an object or null")
+    for name in ("elo", "error"):
+        value = stats.get(name)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or value != value:
+            raise invalid(f"stats.{name} must be a number")
+    if stats.get("model") not in ("penta", "tri"):
+        raise invalid("stats.model must be penta or tri")
 
 
 def validate_schedule(document, opponents):
@@ -346,7 +372,7 @@ def validate_result(row, where, opponents, seen):
 def fixed_part(document):
     """The document without what a producer may change as the match goes on."""
     fixed = copy.deepcopy(document)
-    for name in ("results", "machines", "pgn", "progress", "games"):
+    for name in ("results", "machines", "pgn", "progress", "games", "stats"):
         fixed.pop(name, None)
     m = fixed.get("match") or {}
     for name in ("state", "updated_at", "finished_at"):
@@ -391,6 +417,31 @@ def check_schedule(before, after):
         if game.get("state") == "finished" and (current["state"], current.get("result")) != ("finished",
                                                                                            game.get("result")):
             raise IngestError(409, f"games[{number}] finished with {game.get('result')} and can't change")
+
+
+def opponent_map(existing, document):
+    """Old opponent id to the id it has in the version 1 document, by position: OpenBench has the one opponent."""
+    old = [r.opponent for r in existing.results.all()]
+    new = [o["id"] for o in document["opponents"]]
+    if len(old) != len(new):
+        raise IngestError(409, f"opponents changed from {len(old)} to {len(new)}, only the move to version 1 may "
+                               f"change who played")
+    return dict(zip(old, new))
+
+
+def check_move(existing, document):
+    """The counts still only grow across the move, whatever the opponent is now called."""
+    mapping = opponent_map(existing, document)
+    new = {row["opponent"]: row for row in document["results"]}
+    for result in existing.results.all():
+        row = new.get(mapping[result.opponent])
+        before = {name: getattr(result, name) for name in COUNTS + SIDES}
+        before["penta"] = result.penta
+        if row is None:
+            if result.games == 0:
+                continue
+            raise IngestError(409, f"results for {mapping[result.opponent]} are missing, counts only grow")
+        check_counts_grow(mapping[result.opponent], before, row)
 
 
 def check_update_against(existing, document):
@@ -480,7 +531,7 @@ def create_match(document, machine):
         finished_at=timestamp(m, "finished_at"), host_name=host.get("name") or "", host=host,
         settings=m.get("settings") or {}, subject=engine_for(document["subject"]),
         subject_info=participant_info(document["subject"], "branch", "repo", "bench", "options"),
-        sprt=document.get("sprt"), machines=document.get("machines") or [], schedule=document.get("games") or [],
+        sprt=document.get("sprt"), stats=document.get("stats"), machines=document.get("machines") or [], schedule=document.get("games") or [],
         progress=document.get("progress"), received_at=now,
         updated_at=timestamp(m, "updated_at"),
     )
@@ -494,8 +545,42 @@ def create_match(document, machine):
     return match
 
 
+def migrate_to_v1(match, document):
+    """Replaces what was fixed when the match was stored from the compatibility shape with the version 1 document's,
+    carrying the opponent's old id over to its results, snapshots and games."""
+    mapping = opponent_map(match, document)
+    m = document["match"]
+    host = m.get("host") or {}
+    match.kind = m["kind"]
+    match.producer, match.producer_name = m["producer"], m["producer"]["name"]
+    match.name = m.get("name") or ""
+    match.started_at = timestamp(m, "started_at")
+    match.host, match.host_name = host, host.get("name") or ""
+    match.settings = m.get("settings") or {}
+    match.subject = engine_for(document["subject"])
+    match.subject_info = participant_info(document["subject"], "branch", "repo", "bench", "options")
+    match.save(update_fields=["kind", "producer", "producer_name", "name", "started_at", "host", "host_name",
+                              "settings", "subject", "subject_info"])
+    opponents = {o["id"]: (i, o) for i, o in enumerate(document["opponents"])}
+    for result in match.results.all():
+        ordinal, opponent = opponents[mapping[result.opponent]]
+        result.opponent, result.ordinal = opponent["id"], ordinal
+        result.engine = engine_for(opponent)
+        result.info = participant_info(opponent, "branch", "repo", "bench", "options")
+        result.rating = opponent.get("rating")
+        result.save()
+    for game in match.games.all():
+        if game.opponent in mapping:
+            game.opponent = mapping[game.opponent]
+            game.save(update_fields=["opponent"])
+    for snap in match.snapshots.all():
+        snap.counts = {mapping.get(k, k): v for k, v in snap.counts.items()}
+        snap.save(update_fields=["counts"])
+
+
 def update_match(match, document):
     m = document["match"]
+    match.stats = document.get("stats")
     match.state = m["state"]
     match.finished_at = timestamp(m, "finished_at")
     match.updated_at = timestamp(m, "updated_at")
@@ -503,7 +588,8 @@ def update_match(match, document):
     match.machines = document.get("machines") or []
     match.schedule = document.get("games") or []
     match.progress = document.get("progress")
-    match.save(update_fields=["state", "finished_at", "updated_at", "sprt", "machines", "schedule", "progress"])
+    match.save(update_fields=["state", "finished_at", "updated_at", "sprt", "stats", "machines", "schedule",
+                              "progress"])
     rows = {row["opponent"]: row for row in document["results"]}
     for result in match.results.all():
         row = rows.get(result.opponent)
@@ -523,4 +609,4 @@ def snapshot(match, document):
     wins, draws, losses = (sum(c[i] for c in counts.values()) for i in range(3))
     llr = (document.get("sprt") or {}).get("llr")
     MatchSnapshot.objects.create(match=match, games=wins + draws + losses, wins=wins, draws=draws, losses=losses,
-                                 counts=counts, llr=llr)
+                                 counts=counts, llr=llr, stats=document.get("stats"))

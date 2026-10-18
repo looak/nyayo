@@ -50,6 +50,8 @@ class Match(models.Model):
     subject_info = models.JSONField(default=dict)
     # SPRT bounds and the producer's own LLR and result, kind sprt only
     sprt = models.JSONField(null=True, blank=True)
+    # the producer's own Elo and error { elo, error, model }, which may change as the match goes on
+    stats = models.JSONField(null=True, blank=True)
     machines = models.JSONField(default=list)
     # a gauntlet's whole schedule from its first report on, and { total, played, playing }; see ingest.validate_games
     schedule = models.JSONField(default=list)
@@ -113,6 +115,8 @@ class MatchSnapshot(models.Model):
     # { opponent: [wins, draws, losses] }, to tell a change in one opponent's row from another's
     counts = models.JSONField(default=dict)
     llr = models.FloatField(null=True, blank=True)
+    # the producer's { elo, error, model } at the time, when it sent them
+    stats = models.JSONField(null=True, blank=True)
 
     class Meta:
         ordering = ["match", "received_at"]
