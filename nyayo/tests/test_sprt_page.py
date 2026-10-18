@@ -143,3 +143,32 @@ class Bar(MatchTestCase):
     def test_zero_is_not_in_the_middle_of_uneven_bounds(self):
         # lower -1, upper 3: zero a quarter of the way along
         self.assertIn('class="mark zero" style="left: 25.000%"', self.bar(0.5, lower=-1.0, upper=3.0))
+
+
+class Columns(MatchTestCase):
+    def page(self, document=None):
+        self.assertIn(self.put_match(document or example_document()).status_code, (200, 201))
+        return self.client.get(f"/matches/{ID}").content.decode()
+
+    def test_the_paste_block_and_the_results_share_a_row(self):
+        page = self.page()
+        row = page[page.index('class="match-grid sprt-columns"'):page.index("<h2>Progress</h2>")]
+        self.assertIn('id="copy-sprt"', row)
+        self.assertIn("<h3>Results</h3>", row)
+        self.assertLess(row.index('id="copy-sprt"'), row.index("<h3>Results</h3>"))
+
+    def test_the_pentanomial_has_a_pillar_per_column_scaled_to_the_tallest(self):
+        page = self.page()  # [1, 5, 11, 13, 6]: DW is the tallest
+        for tone, height in (("ll", "7.7"), ("ld", "38.5"), ("dd", "84.6"), ("dw", "100.0"), ("ww", "46.2")):
+            self.assertIn(f'<span class="pillar {tone}" style="height: {height}%">', page)
+        self.assertIn('title="DW: 13 pairs, 36.1%"', page)
+
+    def test_the_table_is_still_there(self):
+        page = self.page()
+        self.assertIn('<th class="num">DW</th>', page)
+        self.assertIn('<td class="num muted">36.1%</td>', page)
+
+    def test_no_pillars_before_a_pair_is_played(self):
+        document = example_document()
+        document["results"][0].update(games=0, wins=0, losses=0, draws=0, penta=[0, 0, 0, 0, 0])
+        self.assertNotIn('class="pillars"', self.page(document))

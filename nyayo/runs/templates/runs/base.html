@@ -152,6 +152,21 @@
   .chip-groups h4 { margin: .5rem 0 0; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase;
                     color: var(--muted); }
   .vs { opacity: .7; }
+  .sprt-columns { align-items: start; margin: .75rem 0; }
+  .sprt-columns .copy-box { height: 100%; }
+  .pillars { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .6rem; height: 7.5rem;
+             margin: .8rem 0 .3rem; align-items: end; }
+  .pillar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%;
+                min-width: 0; }
+  .pillar-count { font-size: .8rem; font-variant-numeric: tabular-nums; }
+  .pillar { display: block; width: 100%; max-width: 3.2rem; min-height: 2px; border-radius: 3px 3px 0 0;
+            background: var(--muted); }
+  .pillar.ll { background: var(--cell-fail); }
+  .pillar.ld { background: var(--cell-fail); opacity: .55; }
+  .pillar.dd { background: var(--muted); opacity: .6; }
+  .pillar.dw { background: var(--cell-pass); opacity: .55; }
+  .pillar.ww { background: var(--cell-pass); }
+  .pillar-label { font-size: .75rem; margin-top: .15rem; }
   table.penta { width: auto; margin: .6rem 0 .2rem; }
   table.penta th, table.penta td { padding: .15rem .8rem; }
   .graph-title { margin: 1rem 0 .3rem; font-size: .9rem; }

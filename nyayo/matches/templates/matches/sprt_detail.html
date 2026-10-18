@@ -90,19 +90,10 @@
   {% if silent %}<p class="note">Silent: no report for over {{ silent_minutes }} minutes while the producer says running. Its next report clears this.</p>{% endif %}
 </div>
 
-<div class="copy-panels">
+<div class="match-grid sprt-columns">
   {% include "runs/_copy_field.html" with title="Result" target_id="copy-sprt" value=clipboard rows=6 copy_label="Copy" %}
-</div>
-
-<h2>Progress</h2>
-{% if graphs %}
-{% include "matches/_sprt_progress.html" %}
-{% else %}
-<p class="muted">The graphs start once the test has reported more than once.</p>
-{% endif %}
-
-<h2>Results</h2>
 <div class="card">
+  <div class="card-head"><h3>Results</h3><span class="muted">{{ row.games }} games</span></div>
   {% if row %}
   <div class="score-row">
     <div class="score-figure">
@@ -125,6 +116,15 @@
     </div>
   </div>
   {% if penta_rows %}
+  <div class="pillars" role="img" aria-label="Pairs by result: {% for p in penta_rows %}{{ p.label }} {{ p.count }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+    {% for p in penta_rows %}
+    <div class="pillar-col" title="{{ p.label }}: {{ p.count }} pairs, {{ p.share }}">
+      <span class="pillar-count">{{ p.count }}</span>
+      <span class="pillar {{ p.tone }}" style="height: {{ p.height }}%"></span>
+      <span class="pillar-label muted">{{ p.label }}</span>
+    </div>
+    {% endfor %}
+  </div>
   <table class="penta">
     <thead><tr><th>Pairs</th>{% for p in penta_rows %}<th class="num">{{ p.label }}</th>{% endfor %}</tr></thead>
     <tbody>
@@ -144,6 +144,14 @@
   <dl class="chips"><div><dt>Stored games</dt><dd>{{ stored_games }} <a href="{% url 'api_games' %}?match={{ match.pk|urlencode }}" class="muted">export</a></dd></div></dl>
   {% endif %}
 </div>
+</div>
+
+<h2>Progress</h2>
+{% if graphs %}
+{% include "matches/_sprt_progress.html" %}
+{% else %}
+<p class="muted">The graphs start once the test has reported more than once.</p>
+{% endif %}
 
 {% if entries %}
 <h2>Games</h2>

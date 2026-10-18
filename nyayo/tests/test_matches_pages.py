@@ -152,6 +152,16 @@ class Pages(GameTestCase):
         Match.objects.update(state="finished", updated_at=django_timezone.now() - timedelta(days=3))
         self.assertNotContains(self.client.get("/matches/gauntlet-test-1"), "badge silent")
 
+    def test_the_list_colours_elo_by_its_sign(self):
+        self.put_match(v1())  # +21.74 from the producer
+        losing = v1(stats={"elo": -8.5, "error": 30.0, "model": "penta"})
+        losing["match"]["id"] = "openbench-openbench-124"
+        self.put_match(losing, match_id="openbench-openbench-124")
+        page = self.client.get("/matches").content.decode()
+        self.assertRegex(page, r'class="better">\+21\.7</span>')
+        self.assertRegex(page, r'class="worse">.8\.5</span>')
+        self.assertRegex(page, r'class="better">\+107\.5</span>')
+
     def test_a_finished_match_does_not_refresh(self):
         document = gauntlet()
         document["match"].update(state="finished", finished_at="2026-10-15T10:00:00Z")

@@ -139,11 +139,13 @@ PENTA_LABELS = ("LL", "LD", "DD", "DW", "WW")
 
 
 def penta_rows(row):
-    """The pentanomial as columns with each one's share of the pairs, None before it has any."""
+    """The pentanomial as columns: each one's count, its share of the pairs and the height of its pillar as a
+    percentage of the tallest, None before it has any."""
     if not row or not row.penta or not sum(row.penta):
         return None
-    pairs = sum(row.penta)
-    return [{"label": label, "count": count, "share": f"{count / pairs:.1%}"}
+    pairs, tallest = sum(row.penta), max(row.penta)
+    return [{"label": label, "count": count, "share": f"{count / pairs:.1%}", "tone": label.lower(),
+             "height": f"{count / tallest * 100:.1f}"}
             for label, count in zip(PENTA_LABELS, row.penta)]
 
 
@@ -192,6 +194,10 @@ def matches_list(request):
     for match in page.object_list:
         match.summary = stats.summarize(match.results.all())
         match.silent = is_silent(match, cutoff)
+        # an SPRT's Elo is its producer's; the rest are nyayo's from the counts
+        produced = match.stats if isinstance(match.stats, dict) else None
+        match.elo = produced.get("elo") if produced else match.summary.overall.elo
+        match.elo_error = produced.get("error") if produced else match.summary.overall.error
     return render(request, "matches/matches_list.html", {
         "page": page, "kind": kind, "kinds": KINDS, "state": state, "states": STATES + ["silent"], "engine": engine,
         "engines": Engine.objects.filter(matches_as_subject__isnull=False).distinct(),
