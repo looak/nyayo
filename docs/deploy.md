@@ -68,7 +68,7 @@ deploy/install-service.sh
 It fills in the units in `deploy/` for this checkout, user and conda env (found through `conda info --base`; set
 `NYAYO_CONDA_ENV` if the env isn't called `nyayo`), installs them with `sudo`, starts them and shows their status:
 
-- `nyayo.service`, the site on port 8001, four sync workers: live game pages poll ten times a second and a gauntlet
+- `nyayo.service`, the site on port 8001, four workers of four threads each (`gthread`): live game pages poll ten times a second and a gauntlet
   runner PUTs every move, so a couple of slow pages must not queue them;
 - `nyayo-expire.timer`, which runs `manage.py expire_runs` daily at 04:30 through `nyayo-expire.service`. It deletes
   wip runs never promoted within 14 days and committed runs not published within 30 (`NYAYO_WIP_DAYS`,
@@ -115,6 +115,25 @@ batches can't be deleted in the admin until then.
 To restore on a new machine: install nyayo, set `NYAYO_DATA_DIR` to an empty directory, clone the backup repository,
 stop nyayo, then `python manage.py restore_backup <path to the clone>`. It refuses a data directory that already has
 a database, archive or games. Restore `games/batches/` from the share.
+
+## When a page gives an error
+
+A server error's traceback goes to the journal, with the time and the address that failed:
+
+```bash
+journalctl -u nyayo --since "15 min ago" | grep -B2 -A25 "ERROR"
+journalctl -u nyayo -f            # follow it while you reproduce the error
+```
+
+The access log beside it (`"GET /matches HTTP/1.1" 500`) says which request and when; the lines above it say why.
+From a client, `curl -i http://172.16.100.11:8001/matches` shows the status line and headers, and the browser's network
+tab shows the same; neither shows the cause, which only the server knows. `NYAYO_LOG_LEVEL=DEBUG` in `.env` makes
+nyayo's own messages chattier.
+
+Two things to tell apart: **a 500** is Django failing on a request, and has a traceback; **a hang, a 502 or a dropped
+connection** is the server not answering, and shows as `WORKER TIMEOUT` in the same journal. Workers are threaded
+(`gthread`) so a browser holding a connection open and sending nothing doesn't tie one up; with the old sync workers
+that produced a timeout every half hour.
 
 ## Machines and tokens
 

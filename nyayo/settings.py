@@ -142,3 +142,19 @@ STATIC_ROOT = DATA_DIR / "static"
 STATIC_ROOT.mkdir(exist_ok=True)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# A server error's traceback goes to stderr, which systemd keeps: `journalctl -u nyayo`. Django's own setup only mails
+# them to admins when DEBUG is off, and nothing is set up to mail, so a 500 used to leave one access-log line and no
+# reason. Only errors (5xx) are logged here, not the 404s bots cause; NYAYO_LOG_LEVEL is for nyayo's own messages.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"plain": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
+    "loggers": {
+        "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
+        "django.server": {"handlers": ["console"], "level": "ERROR", "propagate": False},
+        "nyayo": {"handlers": ["console"], "level": os.environ.get("NYAYO_LOG_LEVEL", "INFO").upper(),
+                  "propagate": False},
+    },
+}
