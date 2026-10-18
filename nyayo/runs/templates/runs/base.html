@@ -152,19 +152,26 @@
   .chip-groups h4 { margin: .5rem 0 0; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase;
                     color: var(--muted); }
   .vs { opacity: .7; }
-  .sprt-columns { align-items: start; margin: .75rem 0; }
-  .sprt-columns .copy-box { height: 100%; }
-  .pillars { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .6rem; height: 7.5rem;
-             margin: .8rem 0 .3rem; align-items: end; }
+  .sprt-columns { align-items: stretch; margin: .5rem 0 .75rem; }
+  .sprt-columns .stack { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
+  .sprt-columns .stack > .card, .sprt-columns > .card { margin: 0; }
+  .sprt-columns .copy-field { resize: none; }
+  .stored { margin: .6rem 0 0; font-size: .85rem; }
+  table.workers td { vertical-align: baseline; }
+  tr.spec-row td { padding-top: 0; font-size: .85rem; }
+  details.flags { display: inline; margin-left: .4rem; }
+  details.flags summary { display: inline; cursor: pointer; }
+  .pillars { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; height: 10rem;
+             margin: 1rem 0 .4rem; align-items: end; border-bottom: 1px solid var(--line); }
   .pillar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%;
                 min-width: 0; }
   .pillar-count { font-size: .8rem; font-variant-numeric: tabular-nums; }
   .pillar { display: block; width: 100%; max-width: 3.2rem; min-height: 2px; border-radius: 3px 3px 0 0;
             background: var(--muted); }
   .pillar.ll { background: var(--cell-fail); }
-  .pillar.ld { background: var(--cell-fail); opacity: .55; }
-  .pillar.dd { background: var(--muted); opacity: .6; }
-  .pillar.dw { background: var(--cell-pass); opacity: .55; }
+  .pillar.ld { background: color-mix(in srgb, var(--cell-fail) 60%, white); }
+  .pillar.dd { background: var(--muted); }
+  .pillar.dw { background: color-mix(in srgb, var(--cell-pass) 60%, white); }
   .pillar.ww { background: var(--cell-pass); }
   .pillar-label { font-size: .75rem; margin-top: .15rem; }
   table.penta { width: auto; margin: .6rem 0 .2rem; }

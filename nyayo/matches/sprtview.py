@@ -82,3 +82,39 @@ def engine_line(name, info, commit):
     if info.get("bench") is not None:
         parts.append(f"bench {info['bench']}")
     return " · ".join(parts)
+
+
+# the CPU features worth a glance, best first; the full list is under the row
+NOTABLE_FLAGS = ("AVX512VNNI", "AVX512F", "AVX2", "BMI2", "POPCNT")
+
+
+def size(megabytes):
+    if not isinstance(megabytes, (int, float)) or megabytes <= 0:
+        return ""
+    return f"{megabytes / 1024:.0f} GB" if megabytes >= 1024 else f"{megabytes:.0f} MB"
+
+
+def workers(machines, games):
+    """The machines that played a test as rows for a list, busiest first. Only `name` and `games` are required of a
+    machine; the CPU, cores, memory, system and the rest are shown when it reported them."""
+    from django.utils.dateparse import parse_datetime
+
+    rows = []
+    for machine in machines if isinstance(machines, list) else []:
+        if not isinstance(machine, dict):
+            continue
+        played = machine.get("games") if isinstance(machine.get("games"), int) else 0
+        cores = [f"{machine[k]} {label}" for k, label in (("physical_cores", "cores"), ("logical_cores", "threads"))
+                 if isinstance(machine.get(k), int)]
+        flags = [f for f in machine.get("cpu_flags") or [] if isinstance(f, str)]
+        specs = [part for part in (
+            machine.get("cpu"), " / ".join(cores), size(machine.get("ram_mb")), machine.get("os"),
+            f"{machine['concurrency']} at a time" if isinstance(machine.get("concurrency"), int) else "") if part]
+        rows.append({
+            "name": machine.get("name") or "unnamed", "user": machine.get("user") or "",
+            "games": played, "share": f"{played / games:.0%}" if games else "",
+            "crashes": machine.get("crashes") or 0, "timelosses": machine.get("timeloss") or 0,
+            "updated": parse_datetime(machine["updated_at"]) if isinstance(machine.get("updated_at"), str) else None,
+            "specs": specs, "flags": [f for f in NOTABLE_FLAGS if f in flags], "all_flags": flags,
+        })
+    return sorted(rows, key=lambda r: -r["games"])

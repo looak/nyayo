@@ -74,7 +74,7 @@ batch; they end up in URLs and file names. The match id `batches` is reserved (i
   ],
   "sprt": null,                                      // kind sprt: elo0, elo1, alpha, beta, model, llr, lower, upper, result
   "stats": null,                                     // optional, the producer's own figures: { elo, error, model }
-  "machines": []                                     // OpenBench: [{ "name": ..., "games": n }]
+  "machines": []                                     // the workers, see Machines
 }
 ```
 
@@ -90,6 +90,25 @@ Statistics (Elo, its error, the performance rating) are computed by nyayo from t
 and `model` says how it was computed (`penta` or `tri`). nyayo shows it as the match's Elo, labelled as the producer's,
 and keeps its own calculation for matches without it and for each opponent on the page. It is how an SPRT's figures
 are OpenBench's, the source of truth for an SPRT, rather than a second calculation that disagrees with it.
+
+### Machines
+
+`machines` lists the workers that played a test, shown as a list on an SPRT's page, busiest first. Only `name` and
+`games` are needed; the rest is shown when a producer sends it and left out when it doesn't.
+
+| Field | Meaning |
+|:--|:--|
+| `name` | the machine's name |
+| `games` | games it has played in this match |
+| `user` | whose machine it is |
+| `crashes`, `timeloss` | engine crashes and time losses on it |
+| `updated_at` | when it last reported |
+| `cpu` | the processor's name, as the system gives it |
+| `physical_cores`, `logical_cores` | cores and hardware threads |
+| `ram_mb` | memory in megabytes |
+| `os` | the operating system and its release, `Linux 6.8.0` |
+| `concurrency` | games it plays at a time |
+| `cpu_flags` | the instruction sets it has (`AVX2`, `BMI2`, `AVX512VNNI`, ...); the notable ones show beside the row, all of them under it |
 
 ### What may change under one id
 
@@ -228,7 +247,7 @@ batch of results and every action by hand:
 | `sprt` | `elo0`, `elo1`, `alpha`, `beta`, `model` (`penta` or `tri`), `llr`, `lower`, `upper`, `result` (`passed`, `failed` or null) |
 | `stats` | OpenBench's Elo and error, as its test page shows them |
 | `progress`, `games` | null: an OpenBench test has no schedule; games played is `results.games` |
-| `machines` | `[{ "name": <machine>, "games": n }]` |
+| `machines` | one per worker, see *Machines*: its name, `user`, `games`, `crashes`, `timeloss`, and from the worker's own record the `cpu`, cores, `ram_mb`, `os`, `concurrency` and `cpu_flags` |
 
 The branch is the subject's and opponent's `branch`, never their name: a test of `feature-x` against `main` is
 *Elephant feature-x* against *Elephant main* on the page.

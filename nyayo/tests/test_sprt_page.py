@@ -150,12 +150,12 @@ class Columns(MatchTestCase):
         self.assertIn(self.put_match(document or example_document()).status_code, (200, 201))
         return self.client.get(f"/matches/{ID}").content.decode()
 
-    def test_the_paste_block_and_the_results_share_a_row(self):
+    def test_progress_comes_first_then_the_paste_block_beside_the_pairs(self):
         page = self.page()
-        row = page[page.index('class="match-grid sprt-columns"'):page.index("<h2>Progress</h2>")]
-        self.assertIn('id="copy-sprt"', row)
-        self.assertIn("<h3>Results</h3>", row)
-        self.assertLess(row.index('id="copy-sprt"'), row.index("<h3>Results</h3>"))
+        self.assertLess(page.index("<h2>Progress</h2>"), page.index('class="match-grid sprt-columns"'))
+        row = page[page.index('class="match-grid sprt-columns"'):]
+        self.assertLess(row.index('id="copy-sprt"'), row.index("<h3>Score</h3>"))
+        self.assertLess(row.index("<h3>Score</h3>"), row.index("<h3>Pairs</h3>"))
 
     def test_the_pentanomial_has_a_pillar_per_column_scaled_to_the_tallest(self):
         page = self.page()  # [1, 5, 11, 13, 6]: DW is the tallest
@@ -172,3 +172,39 @@ class Columns(MatchTestCase):
         document = example_document()
         document["results"][0].update(games=0, wins=0, losses=0, draws=0, penta=[0, 0, 0, 0, 0])
         self.assertNotIn('class="pillars"', self.page(document))
+
+
+class Workers(MatchTestCase):
+    def page(self, machines):
+        document = example_document()
+        document["machines"] = machines
+        self.assertIn(self.put_match(document).status_code, (200, 201))
+        return self.client.get(f"/matches/{ID}").content.decode()
+
+    def test_workers_are_their_own_list_after_the_results(self):
+        page = self.page([{"name": "hunt", "games": 50}])
+        self.assertLess(page.index('class="match-grid sprt-columns"'), page.index("<h2>Workers</h2>"))
+        self.assertNotIn("<dt>Workers</dt>", page)
+
+    def test_busiest_first_with_share_and_faults(self):
+        page = self.page([{"name": "small", "games": 22, "crashes": 0, "timeloss": 0},
+                          {"name": "big", "games": 50, "crashes": 2, "timeloss": 1, "user": "alex"}])
+        self.assertLess(page.index("<strong>big</strong>"), page.index("<strong>small</strong>"))
+        self.assertIn('<td class="num muted">69%</td>', page)  # 50 of 72
+        self.assertIn('<td class="num worse">2</td>', page)
+
+    def test_the_machines_details_show_when_they_were_reported(self):
+        page = self.page([{"name": "hunt", "games": 72, "cpu": "AMD Ryzen 9 7950X", "physical_cores": 16,
+                           "logical_cores": 32, "ram_mb": 65536, "os": "Linux 6.8.0", "concurrency": 14,
+                           "cpu_flags": ["SSE41", "AVX2", "BMI2", "AVX512F"]}])
+        self.assertIn("AMD Ryzen 9 7950X · 16 cores / 32 threads · 64 GB · Linux 6.8.0 · 14 at a time", page)
+        self.assertIn('<span class="tier">AVX512F</span>', page)
+        self.assertIn("all 4 CPU flags", page)
+
+    def test_a_machine_with_only_a_name_and_games_still_lists(self):
+        page = self.page([{"name": "hunt", "games": 72}])
+        self.assertIn("<strong>hunt</strong>", page)
+        self.assertNotIn('<tr class="spec-row">', page)
+
+    def test_no_machines_no_section(self):
+        self.assertNotIn("<h2>Workers</h2>", self.page([]))

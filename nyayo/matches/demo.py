@@ -69,6 +69,19 @@ def stats_of(wins, draws, losses, penta):
     return {"elo": round(rating.elo or 0.0, 2), "error": round(rating.error or 99.0, 2), "model": "penta"}
 
 
+def machines(games, now):
+    """Two workers sharing the games, the way OpenBench's reporter lists them (details as the schema allows)."""
+    first = games * 7 // 10
+    return [
+        {"name": "hunt", "user": "alex", "games": first, "crashes": 0, "timeloss": 1 if games > 500 else 0,
+         "updated_at": now.isoformat(), "cpu": "AMD Ryzen 9 7950X 16-Core Processor", "physical_cores": 16,
+         "logical_cores": 32, "ram_mb": 65536, "os": "Linux 6.8.0", "concurrency": 14,
+         "cpu_flags": ["SSE41", "AVX2", "BMI2", "POPCNT", "AVX512F", "AVX512VNNI"]},
+        {"name": "babylon", "user": "alex", "games": games - first, "crashes": 0, "timeloss": 0,
+         "updated_at": now.isoformat()},
+    ]
+
+
 def document(match_id, state, now, started, counts, llr, result, stats_):
     wins, draws, losses, penta = counts
     return {
@@ -91,7 +104,7 @@ def document(match_id, state, now, started, counts, llr, result, stats_):
                      "crashes": {"subject": 0, "opponent": 0}, "illegal": {"subject": 0, "opponent": 0}}],
         "sprt": {"elo0": ELO0, "elo1": ELO1, "alpha": ALPHA, "beta": BETA, "model": "penta", "llr": round(llr, 3),
                  "lower": round(LOWER, 3), "upper": round(UPPER, 3), "result": result},
-        "stats": stats_, "machines": [{"name": "hunt", "games": wins + draws + losses}],
+        "stats": stats_, "machines": machines(wins + draws + losses, now),
     }
 
 

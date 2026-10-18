@@ -132,6 +132,7 @@ def sprt_page(match, sprt, projection):
         "subject_line": sprtview.engine_line(match.subject.name, match.subject_info, match.subject.commit),
         "base_line": sprtview.engine_line(base["name"], base["info"], base["commit"]) if base else "",
         "projection": projection, "penta_rows": penta_rows(row), "faults": faults(row),
+        "workers": sprtview.workers(match.machines, row.games if row else 0),
     }
 
 
