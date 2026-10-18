@@ -102,6 +102,14 @@ class Pages(GameTestCase):
         self.assertContains(response, "Barbarossa 0.6.0")
         self.assertContains(response, "2465")
         self.assertContains(response, "65.0%")  # 5 wins and 3 draws in 10
+        self.assertContains(response, "Clipboard table")
+        self.assertContains(response, "Engine	Penta	Strength	Elo")
+        self.assertContains(response, "Games	10")
+        self.assertContains(response, "Time control	120+1")
+        self.assertContains(response, "Date	2026-10-15 08:30 UTC")
+        self.assertContains(response, "Barbarossa 0.6.0	0 1 2 2 0	2465	+107.5")
+        self.assertContains(response, "Belette 1.0	-	-	-")
+        self.assertContains(response, "Subject Elo	+107.5")
         self.assertContains(response, 'http-equiv="refresh"')
 
     def test_match_page_shows_sprt_viewer_for_openbench_payload(self):

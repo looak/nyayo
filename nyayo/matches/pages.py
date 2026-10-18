@@ -32,6 +32,42 @@ def number(value):
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
+def format_elo(value):
+    if value is None:
+        return "-"
+    return f"{value:+.1f}"
+
+
+def format_penta(penta):
+    return " ".join(str(n) for n in penta) if penta else "-"
+
+
+def summary_clipboard_text(match, subject_name, summary, settings):
+    date = (match.finished_at or match.updated_at or match.started_at or match.received_at)
+    lines = [
+        f"Match\t{match.name or match.pk}",
+        f"Subject\t{subject_name}",
+        f"Games\t{summary.performance_games}",
+        f"Time control\t{settings.get('tc', '-')}",
+        f"Date\t{date:%Y-%m-%d %H:%M UTC}",
+        "",
+        "Engine\tPenta\tStrength\tElo",
+    ]
+    for row in summary.rows:
+        result = row.result
+        strength = "-"
+        if isinstance(result.rating, dict) and result.rating.get("value") is not None:
+            strength = f"{result.rating['value']:.0f}"
+        lines.append(
+            f"{result.engine}\t{format_penta(result.penta)}\t{strength}\t{format_elo(row.rating.elo)}"
+        )
+    lines.extend([
+        "",
+        f"Subject Elo\t{format_elo(summary.overall.elo)}",
+    ])
+    return "\n".join(lines)
+
+
 def sprt_view(match):
     data = match.sprt if isinstance(match.sprt, dict) else None
     if not data:
@@ -154,16 +190,19 @@ def match_detail(request, match_id):
     chosen = request.GET.get("view")
     view = chosen if chosen in RESULT_VIEWS else request.COOKIES.get(VIEW_COOKIE)
     view = view if view in RESULT_VIEWS else RESULT_VIEWS[0]
+    summary = stats.summarize(match.results.all(), excluded)
+    subject_name = engine_label(match.subject)
     response = render(request, "matches/match_detail.html", {
         "view": view, "match": match, "boards": live_boards(match, groups["playing"]),
-        "summary": stats.summarize(match.results.all(), excluded), "excluded": excluded,
+        "summary": summary, "excluded": excluded,
+        "summary_clipboard": summary_clipboard_text(match, subject_name, summary, match.settings or {}),
         "sprt": sprt_view(match),
         "timing": timing.summarize(
             match.state, match.started_at or match.received_at, match.finished_at, match.updated_at, total,
             len(groups["finished"]), len(groups["playing"]), durations, (match.settings or {}).get("concurrency"),
             timezone.now()),
         "groups": groups, "entries": entries, "refresh": match.state == "running", "settings": match.settings,
-        "host": match.host, "subject_name": engine_label(match.subject),
+        "host": match.host, "subject_name": subject_name,
         "producer_url": (match.producer or {}).get("url"),
     })
     if chosen in RESULT_VIEWS:
