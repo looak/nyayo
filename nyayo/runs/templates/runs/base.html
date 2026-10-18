@@ -10,7 +10,7 @@
     --bg: #fbfbf9; --fg: #1d1f21; --muted: #6b6f76; --line: #e2e2dc; --card: #ffffff; --link: #2357b5;
     --wip: #8a6d00; --wip-bg: #fff4c2; --committed: #2357b5; --committed-bg: #e3ecfb;
     --published: #1f7a3d; --published-bg: #dff3e5; --worse: #b3261e; --better: #1f7a3d; --error-bg: #fde7e5;
-    --code-bg: #f1f1ec; --cell-pass: #2da44e; --cell-fail: #cf222e; --cell-newly-failing: #8250df;
+    --code-bg: #f1f1ec; --stripe: #f4f4ef; --cell-pass: #2da44e; --cell-fail: #cf222e; --cell-newly-failing: #8250df;
     --cell-newly-passing: #0969da;
     --smoke: #6a3fb5; --smoke-bg: #efe7fb; --extended: #a12a7a; --extended-bg: #fbe6f3;
     --series-white: #2357b5; --series-black: #c2561a;
@@ -21,7 +21,7 @@
       --bg: #17181a; --fg: #e6e6e3; --muted: #9a9ea6; --line: #2e3034; --card: #1e2023; --link: #8ab4f8;
       --wip: #f2d36b; --wip-bg: #3a3214; --committed: #8ab4f8; --committed-bg: #1d2a40;
       --published: #7fd49a; --published-bg: #173222; --worse: #f28b82; --better: #7fd49a; --error-bg: #3b1f1d;
-      --code-bg: #26282c; --cell-pass: #2ea043; --cell-fail: #da3633; --cell-newly-failing: #a371f7;
+      --code-bg: #26282c; --stripe: #232528; --cell-pass: #2ea043; --cell-fail: #da3633; --cell-newly-failing: #a371f7;
       --cell-newly-passing: #388bfd;
       --smoke: #c4a7f5; --smoke-bg: #2d2342; --extended: #f0a3d6; --extended-bg: #3d1f33;
       --series-white: #8ab4f8; --series-black: #f0a35e;
@@ -44,6 +44,9 @@
   .scroll { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; }
   th, td { text-align: left; padding: .35rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--stripe); }
+  /* a name that would wrap is cut short instead; the full name is in the title attribute */
+  td.clip { max-width: 0; width: 24%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   th { font-weight: 600; color: var(--muted); font-size: .85rem; white-space: nowrap; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .badge { display: inline-block; padding: 0 .45rem; border-radius: 999px; font-size: .78rem; font-weight: 600; }
@@ -58,7 +61,8 @@
   .status-pass, .better { color: var(--better); }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .75rem 1rem; margin: .75rem 0; }
   .card-head { display: flex; flex-wrap: wrap; gap: .25rem 1rem; align-items: baseline; }
-  .card-head h3 { margin: 0; }
+  .card-head h3 { margin: 0; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+                  white-space: nowrap; }
   .card-head .outcome { margin-left: auto; }
   .card-head .timing { font-size: .85rem; font-variant-numeric: tabular-nums; }
   .card-head .params { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: .3rem; margin: .4rem 0 .6rem; }

@@ -7,7 +7,7 @@
 {% for c in running %}
 <a class="card running-card" href="{% url 'match' c.match.pk %}">
   <div class="card-head">
-    <h3>{{ c.match.name|default:c.match.pk }}</h3>
+    <h3 title="{{ c.match.name|default:c.match.pk }}">{{ c.match.name|default:c.match.pk }}</h3>
     <span class="tier">{{ c.match.kind }}</span>
     {% if c.tc %}<span class="muted">{{ c.tc }}</span>{% endif %}
     <span class="outcome running card-state">running</span>
@@ -94,7 +94,7 @@
   {% for match in page.object_list %}
     <tr>
       <td class="nowrap">{{ match.updated_at|date:"Y-m-d H:i" }}</td>
-      <td><a href="{% url 'match' match.pk %}">{{ match.name|default:match.pk }}</a></td>
+      <td class="clip" title="{{ match.name|default:match.pk }}"><a href="{% url 'match' match.pk %}">{{ match.name|default:match.pk }}</a></td>
       <td><span class="tier">{{ match.kind }}</span></td>
       <td>{% if match.silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}</td>
       <td>{{ match.subject }}</td>
