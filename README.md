@@ -55,6 +55,9 @@ cp .env.example .env
 .venv/Scripts/python manage.py test nyayo
 ```
 
+`manage.py seed_demo` (debug mode only) makes six simulated SPRTs (passed, failed, stopped, running, silent, just
+started) with a history, a few games and a batch, for working on the pages without a real test running.
+
 Add a machine in the admin to get a push token. Installing on a server (bobby, next to OpenBench, as a systemd
 service in a conda env) and connecting Elephant are described in [docs/deploy.md](docs/deploy.md).
 
