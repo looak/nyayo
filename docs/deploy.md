@@ -69,7 +69,9 @@ It fills in the units in `deploy/` for this checkout, user and conda env (found 
 `NYAYO_CONDA_ENV` if the env isn't called `nyayo`), installs them with `sudo`, starts them and shows their status:
 
 - `nyayo.service`, the site on port 8001, four workers of four threads each (`gthread`): live game pages poll ten times a second and a gauntlet
-  runner PUTs every move, so a couple of slow pages must not queue them;
+  runner PUTs every move, so a couple of slow pages must not queue them. Game requests (a game's moves, a batch of
+  games) may take at most `NYAYO_GAME_THREADS` (2) of each worker's threads; the others are kept for match reports and
+  pages, so a flood of games never holds up a test's status (see *Game threads*);
 - `nyayo-expire.timer`, which runs `manage.py expire_runs` daily at 04:30 through `nyayo-expire.service`. It deletes
   wip runs never promoted within 14 days and committed runs not published within 30 (`NYAYO_WIP_DAYS`,
   `NYAYO_COMMITTED_DAYS` in `.env`). Published runs are kept. `python manage.py expire_runs --dry-run` shows what
@@ -91,6 +93,23 @@ deploy/update.sh
 
 It pulls, reinstalls the package, migrates the database, collects static files and restarts the service. No need to
 activate the env first.
+
+## Game threads
+
+Producers send games far more often than anything else: uwanja PUTs a live game after every move, OpenBench a batch
+per workload. Each gunicorn worker lets at most `NYAYO_GAME_THREADS` of its threads handle them at once (2 of 4 by
+default, set in `.env`); a game request that finds them taken is answered `503` with `Retry-After: 1` before its body
+is read, and the producer sends it again. A match report (`PUT /api/matches/{id}`) and the pages never wait for a game
+slot, so with four workers there are always eight threads for them. The count is per worker, being per process; keep
+it below `--threads` in `deploy/nyayo.service`, and raise both together if games lag behind while the CPU is idle.
+
+The `503`s show in the access log, not as errors. Under a flood of games they are many; what matters is that
+`PUT /api/matches/...` keeps answering `200` quickly.
+
+Tried under gunicorn 26 with the service's settings (four workers of four threads, pinned to two cores) and 32
+clients sending 100 KB games at 100 KB/s, as over a slow link: without the cap a match report waited 0.6 s for a
+thread (median), with it 5 ms. With games sent at full speed the CPU is the limit rather than the threads, and the
+cap makes little difference (a median of 30 to 45 ms either way).
 
 ## Backup
 
