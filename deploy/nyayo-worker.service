@@ -1,0 +1,21 @@
+# nyayo's worker: reads uploads of finished games into the matches' batches, in the background (manage.py worker).
+# Bound to nyayo.service, so it starts, stops and restarts with it; deploy/install-service.sh fills in User,
+# WorkingDirectory and the python path like it does for nyayo.service.
+
+[Unit]
+Description=nyayo: put away the games kept as data
+After=nyayo.service
+BindsTo=nyayo.service
+PartOf=nyayo.service
+
+[Service]
+User=fischer
+WorkingDirectory=/home/fischer/dev/nyayo
+ExecStart=/home/fischer/miniconda3/envs/nyayo/bin/python manage.py worker
+Restart=always
+RestartSec=5
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=nyayo.service

@@ -6,7 +6,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
 
-from nyayo.matches.models import GameBatch, Match
+from nyayo.matches.models import Batch, Match
 
 from .helpers import NyayoTestCase
 
@@ -43,7 +43,9 @@ class SeedDemo(NyayoTestCase):
         self.assertContains(self.client.get("/matches/demo-sprt-silent"), "badge silent")
         self.assertNotContains(self.client.get("/matches/demo-sprt-running"), "badge silent")
         # games and a batch are there and the game page loads
-        self.assertEqual(GameBatch.objects.get().games, 8)
+        self.assertEqual(Batch.objects.get().games, 8)
+        self.assertEqual(Batch.objects.get().state, "sealed")
+        self.assertEqual(self.client.get("/matches/demo-sprt-passed/games/demo.0.3").status_code, 200)
         self.assertEqual(self.client.get("/matches/demo-sprt-running/games/7").status_code, 200)
         self.assertEqual(self.client.get("/matches/demo-sprt-running/games/1").status_code, 200)
 
@@ -51,4 +53,4 @@ class SeedDemo(NyayoTestCase):
         self.seed()
         self.seed()
         self.assertEqual(Match.objects.filter(pk__startswith="demo-").count(), 6)
-        self.assertEqual(GameBatch.objects.count(), 1)
+        self.assertEqual(Batch.objects.count(), 1)
