@@ -32,12 +32,13 @@ def card_of(match_id, number):
 
 class Facts(BatchCase):
     def test_python_chess_gives_phant_indexers_facts(self):
-        text = pgn("1. e4 d5 2. exd5 c5 3. dxc6 Nf6 4. cxb7 Nbd7 5. bxa8=N e5 6. Nf3 Bd6 7. O-O O-O", "1-0").replace(
-            b"\n\n", b'\n[Subject "white"]\n\n', 1)
+        text = pgn("1. e4 d5 2. exd5 c5 3. dxc6 Nf6 4. cxb7 Nbd7 5. bxa8=N e5 6. Nf3 Bd6 7. Be2 O-O 8. O-O", "1-0")
         record = reader.PythonChess().read(text)[0]
+        self.assertTrue(record["ok"], record.get("error"))
+        # exd5, dxc6 en passant, cxb7 and bxa8=N take; black castles at ply 14, white at 15
         self.assertEqual((record["captures"], record["ep_captures"], record["promotions"], record["castled"]),
-                         (3, 1, {"q": 0, "r": 0, "b": 0, "n": 1}, {"white": 13, "black": 14}))
-        self.assertEqual((record["ended"], record["start"], record["min_pieces"]), (None, "463b96181691fc9c", 29))
+                         (4, 1, {"q": 0, "r": 0, "b": 0, "n": 1}, {"white": 15, "black": 14}))
+        self.assertEqual((record["ended"], record["start"], record["min_pieces"]), (None, "463b96181691fc9c", 28))
         self.assertIsNone(record["opening"])
         fields = cards.reader_fields(record)
         self.assertEqual(fields["reader_flags"], cards.EN_PASSANT | cards.UNDERPROMOTION | cards.KNIGHT_PROMOTION)
@@ -54,14 +55,16 @@ class Facts(BatchCase):
     def test_evals_from_the_comments(self):
         self.keep(bz2.compress(batch_text(game("0-1", moves=RESIGNED))))
         card = card_of("gauntlet-test-1", "1.0.1")
-        # white's view: -410, -400, -450, -420, -500, -500; the largest change is 50
-        self.assertEqual((card["eval_20"], card["swing"]), (None, 50))
+        # white's view: -410, -400, -450, -420, -500, -500; the largest change, -420 to -500, is 80
+        self.assertEqual((card["eval_20"], card["swing"]), (None, 80))
 
 
 class Endings(BatchCase):
     def setUp(self):
         super().setUp()
         Match.objects.update(settings=OPENBENCH)
+        # the gauntlet fixture reports a time loss, and a match that does has nothing inferred
+        MatchResult.objects.update(timelosses={}, crashes={}, illegal={})
 
     def ending(self, number="1.0.1"):
         card = card_of("gauntlet-test-1", number)
@@ -130,7 +133,7 @@ class Reindex(BatchCase):
     def test_a_new_version_of_one_extractor_visits_its_batches_only_for_it(self):
         catalogue.index().execute("UPDATE card SET ending = NULL, captures = 99")
         with mock.patch.object(cards, "ENDING_VERSION", "2"):
-            self.assertIn("1 batch, 2 games indexed", self.reindex())
+            self.assertIn("2 batches, 4 games indexed", self.reindex())
             self.assertEqual(catalogue.filled(self.sealed)["ending"], "2")
         self.assertEqual(cards.ENDINGS[card_of("gauntlet-test-1", "1.0.2")["ending"]], "rule")
         self.assertEqual(card_of("gauntlet-test-1", "1.0.2")["captures"], 99)  # the reader's columns untouched
@@ -140,7 +143,7 @@ class Reindex(BatchCase):
         with mock.patch.object(cards, "EVAL_VERSION", "2"), mock.patch.object(cards, "ENDING_VERSION", "2"):
             self.reindex("--only", "eval")
             self.assertEqual(catalogue.filled(self.sealed)["ending"], "1")
-        self.assertEqual(card_of("gauntlet-test-1", "1.0.1")["swing"], 50)
+        self.assertEqual(card_of("gauntlet-test-1", "1.0.1")["swing"], 80)
 
     def test_the_index_is_rebuilt_from_the_batches_alone(self):
         before = {row[0]: row for row in catalogue.index().execute(
