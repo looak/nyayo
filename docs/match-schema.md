@@ -375,8 +375,13 @@ sides; the tags still tell them apart.
 
 ## Storage
 
-Each accepted match document is archived unchanged as `archive/matches/<id>.json`, replaced on every update, with a
-`<id>.meta.json` naming the machine that sent it. Each game's PGN is `games/<match id>/<game>.pgn`, replaced on every
+Each accepted whole match document is archived unchanged as `archive/matches/<id>.json`, replaced on every update,
+with a `<id>.meta.json` naming the machine that sent it. A report by changes isn't a document: the archive is then
+written from the match as it now stands, the whole schedule from the rows and `report` `{seq, base: null}`, when the
+match isn't running any more and otherwise at most every `NYAYO_ARCHIVE_EVERY` seconds (60; 0 for every report), so a
+lost database can be rebuilt from the archive and a report costs what changed. The schedule is a row per game
+(`ScheduleEntry`: the eight fields and the entry's hash), the match keeps the last `report.seq` and the digest, and
+the digest is updated by the entries a report changes. Each game's PGN is `games/<match id>/<game>.pgn`, replaced on every
 PUT. The database is an index: matches, per-opponent results, snapshots (the counts each time they change, the basis
 of the progress graph) and a row per game (result, termination, colour, opponent). `manage.py purge_games --match ID |
 --older-than DAYS` removes games' files and rows without touching a match's document, counts or snapshots.

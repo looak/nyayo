@@ -67,6 +67,10 @@ NYAYO_BATCHES_DIR = Path(os.environ.get("NYAYO_BATCHES_DIR") or NYAYO_GAMES_DIR 
 NYAYO_MAX_BATCH_UPLOAD_BYTES = 64 * 1024 * 1024
 NYAYO_MAX_BATCH_BYTES = 256 * 1024 * 1024
 
+# A match whose producer reports by changes is archived whole this often while it runs (and when it ends), not on every
+# report; 0 archives every report.
+NYAYO_ARCHIVE_EVERY = int(os.environ.get("NYAYO_ARCHIVE_EVERY", 60))
+
 # A running match with no report for this many minutes is shown as silent (derived when a page is drawn, never stored).
 NYAYO_SILENT_AFTER = int(os.environ.get("NYAYO_SILENT_AFTER", 30))
 
