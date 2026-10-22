@@ -70,6 +70,11 @@ NYAYO_BATCH_GAMES = int(os.environ.get("NYAYO_BATCH_GAMES", 64))
 # A match's last batch is sealed short once the match has ended and nyayo has heard nothing of it for this long.
 NYAYO_SEAL_AFTER = int(os.environ.get("NYAYO_SEAL_AFTER", 300))
 
+# The game reader, elephant's phant-indexer: the path of its release binary and that release's sha256, which the
+# worker checks before it starts (it refuses to start on a mismatch). Unset, games are read with python-chess.
+NYAYO_READER = os.environ.get("NYAYO_READER", "")
+NYAYO_READER_SHA256 = os.environ.get("NYAYO_READER_SHA256", "")
+
 # Uploads of finished games wait here, as sent, until the worker has put their games in batches (then they're
 # deleted). Not in the backup: a pending upload is the producer's to send again.
 NYAYO_UPLOADS_DIR = DATA_DIR / "uploads"
