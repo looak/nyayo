@@ -136,6 +136,9 @@ M") and must stay the same across a resume. A scheduled game that hasn't started
 
 - A PGN with a final `[Result]` seals the game: further different PUTs are `409`. A byte-identical resend of the final
   PGN is `200`. While the result is `*`, a PUT may replace the game with a shorter one (a resumed game starts over).
+- **A sealed game is kept as data**: nyayo's worker appends it, as it came, to its match's batches with every other
+  game kept (*Batches*, *Storage*), within a second or so, and once only however often it is sent. Its id stays the
+  game number. Its PGN file stays until its batch is sealed, so the game page finds it either way.
 - An illegal move or an unreadable PGN is `400`.
 - Which engine under test and which opponent a game is comes, in order, from the schedule's entry for its number, the
   tags `[Subject "white|black"]` and `[Opponent "<opponent id>"]`, then the players' names matched against the match's
@@ -223,7 +226,8 @@ per-game files and never purged with them.
 
 `GET /api/games` streams every stored game that matches, as **one bz2 stream**: each of nyayo's batches, sealed or
 still being filled, as a bz2 stream of its own, concatenated (a valid multi-stream bz2 file; Python's `bz2` and
-`bzip2 -d` read it whole), with sealed single games compressed and added, so it is every game nyayo has. An upload
+`bzip2 -d` read it whole), with sealed single games not in a batch yet compressed and added, so it is every game
+nyayo has, each once. An upload
 still waiting for the worker isn't in it yet. Open like the pages. `manage.py export_games` takes the same filters and writes
 a file.
 
@@ -283,8 +287,11 @@ in pawns and a mate's distance in plies, as fastchess writes it. The game page r
 Each accepted match document is archived unchanged as `archive/matches/<id>.json`, replaced on every update, with a
 `<id>.meta.json` naming the machine that sent it. Each game's PGN is `games/<match id>/<game>.pgn`, replaced on every
 PUT. The database is an index: matches, per-opponent results, snapshots (the counts each time they change, the basis
-of the progress graph) and a row per game (result, termination, colour, opponent). `manage.py purge_games --match ID |
---older-than DAYS` removes games' files and rows without touching a match's document, counts or snapshots.
+of the progress graph) and a row per game (result, termination, colour, opponent, and the batch it is kept in).
+`manage.py purge_games --match ID | --older-than DAYS` removes games' files and rows without touching a match's
+document, counts or snapshots. A finished game is removed only once its batch is sealed, so it is never lost between
+the two; one that isn't is kept back and counted. Games finished before nyayo kept batches join them through
+`manage.py keep_games`, not the worker, and are kept back until then.
 
 An upload waits as sent in `uploads/<match id>/<name>` in the data directory until the worker has put its games
 away, then the file goes and its row stays (name, sha256, machine, state, games, the batches they went to). A refused

@@ -209,6 +209,11 @@ class Game(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     received_at = models.DateTimeField(default=timezone.now)
+    # A finished game waits for the worker to put it in its match's batches (worker.py), then says which batch it is
+    # in; its file stays until that batch is sealed, and purge_games leaves it until then. Games finished before
+    # nyayo kept batches wait for `manage.py keep_games`, not for the worker.
+    waiting = models.BooleanField(default=False, db_index=True)
+    kept_in = models.ForeignKey(Batch, null=True, blank=True, on_delete=models.SET_NULL, related_name="single_games")
 
     class Meta:
         ordering = ["match", "game"]

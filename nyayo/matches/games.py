@@ -2,7 +2,8 @@
 
 The PGN is a file, games/<match id>/<game>.pgn, replaced on every PUT. The index row (models.Game) is written when a
 game is first seen and again only when its result or termination changes, so the stream of moves costs a file write
-and a read, not a database write. A game with a final result is sealed.
+and a read, not a database write. A game with a final result is sealed, and waits for the worker to keep it in its
+match's batches with every other game kept as data (worker.py); its file stays until that batch is sealed.
 
 Which of the game's players is the subject and which opponent it is comes from two optional tags the runner can add,
 `Subject` (white or black) and `Opponent` (the opponent's id in the match); without them the players' names are
@@ -112,12 +113,14 @@ def store(match_id, game_id, raw):
         Game.objects.create(
             match=match, game=game_id, opponent=opponent, colour=colour, white=headers.get("White", "")[:200],
             black=headers.get("Black", "")[:200], result=result, termination=termination, started_at=now,
-            finished_at=now if result != "*" else None, received_at=now)
+            finished_at=now if result != "*" else None, received_at=now, waiting=result != "*")
         return True
     if (result, termination) != (row.result, row.termination):
         row.result, row.termination = result, termination
         row.finished_at = now if result != "*" else None
-        row.save(update_fields=["result", "termination", "finished_at"])
+        # sealed now: the worker puts it in the match's batches
+        row.waiting = result != "*" and row.kept_in_id is None
+        row.save(update_fields=["result", "termination", "finished_at", "waiting"])
     return False
 
 
