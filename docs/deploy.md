@@ -148,6 +148,26 @@ python manage.py reindex               # at low priority, one batch at a time, s
 It visits only the batches whose cards were filled by an older reader or extractor version. `--rebuild` writes every
 card again and is how a lost index is made again from the batches. `--only eval` runs one extractor.
 
+## Migrating the stored games into batches
+
+Once, after the worker and the reader are installed (see *The game reader*) and `NYAYO_BATCHES_DIR` is on the share:
+
+```bash
+python manage.py backup                      # first, by hand
+python manage.py keep_games --dry-run        # reads every finished single game, prints what it would keep
+python manage.py keep_games                  # does it, and checks itself
+```
+
+Each finished single game is read, appended as it came to its match's batches with its id kept (batches are sealed
+at 64 games, a match that has ended has its last one sealed short), and indexed with how it ended. A game that
+carries no ending is deduced against its match's adjudication settings and marked inferred. Nothing in `games/` or
+`archive/` is changed or deleted. It then checks, and fails naming the problem unless: each match's games in batches
+equal its finished games; the export before and after holds the same games; the reader and python-chess read the
+batches' games the same. Run again it finds nothing to do. Games still being played stay where they are.
+
+Only after it passes, `python manage.py purge_games --match ID` (or `--older-than DAYS`) removes the single files of
+games in sealed batches; it keeps back any that aren't, and counts them. It takes about four minutes for 45,000 games.
+
 ## Backup
 
 Everything nyayo knows is the database, `archive/` (the raw runs and matches) and `games/` (the only copy of each
