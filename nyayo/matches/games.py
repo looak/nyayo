@@ -10,6 +10,7 @@ matched against the match's engines, and left blank when that's ambiguous.
 """
 
 import io
+import logging
 import shutil
 import time
 from pathlib import Path
@@ -20,8 +21,11 @@ from django.utils import timezone
 
 from nyayo.runs.ingest import IngestError, atomic_write, invalid
 
+from . import liveplies
 from .ingest import valid_id
 from .models import GAME_ID_MAX, MATCH_ID_MAX, RESULTS, Game, Match
+
+log = logging.getLogger("nyayo.games")
 
 
 def games_dir():
@@ -72,6 +76,7 @@ def delete_files(match_id):
 
 def delete_game_file(match_id, game):
     game_path(match_id, game).unlink(missing_ok=True)
+    liveplies.forget(game_path(match_id, game))
     try:
         (games_dir() / match_id).rmdir()
     except OSError:
@@ -83,8 +88,7 @@ def store(match_id, game_id, raw):
     a PGN that isn't one, 404 for a match nyayo hasn't been told about, 409 for a game that's sealed."""
     if not valid_id(game_id, GAME_ID_MAX):
         raise invalid(f"game id must be 1 to {GAME_ID_MAX} characters of letters, digits, . _ -")
-    if not Match.objects.filter(pk=match_id).exists():
-        raise IngestError(404, f"unknown match {match_id}, PUT the match document first")
+    tc = match_time_control(match_id)
 
     # a sealed game is answered before anything is parsed
     row = Game.objects.filter(match_id=match_id, game=game_id).order_by().first()
@@ -93,7 +97,8 @@ def store(match_id, game_id, raw):
             return False
         raise IngestError(409, f"game {game_id} is sealed with result {row.result}, it can't change")
 
-    headers, _ = parse(raw)
+    game = read(raw)
+    headers = dict(game.headers)
     result = headers.get("Result", "*")
     if result not in RESULTS:
         raise invalid(f"[Result] must be one of {', '.join(RESULTS)}, got {result!r}")
@@ -104,6 +109,7 @@ def store(match_id, game_id, raw):
     path = game_path(match_id, game_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(path, raw)
+    keep_record(path, raw, game, result, tc)
 
     now = timezone.now()
     if row is None:
@@ -121,8 +127,53 @@ def store(match_id, game_id, raw):
     return False
 
 
-def parse(raw):
-    """The PGN's headers as a dict and its number of plies; 400 when there's no game or a move is illegal."""
+def match_time_control(match_id):
+    """The match's settings.tc, 404 when nyayo has no such match."""
+    found = Match.objects.filter(pk=match_id).values_list("settings", flat=True)[:1]
+    if not found:
+        raise IngestError(404, f"unknown match {match_id}, PUT the match document first")
+    return (found[0] or {}).get("tc")
+
+
+def keep_record(path, raw, game, result, tc):
+    """Builds the per-ply record and state of a live game from its whole PGN, or deletes them when the game is
+    sealed (after saying if its final PGN differs from the moves appended). Never fails the request: a state that
+    isn't there only makes the next request for moves by changes a 409."""
+    try:
+        if result == "*":
+            liveplies.rebuild(path, raw, game, tc)
+        else:
+            liveplies.check_sealed(path, game)
+    except Exception:
+        log.exception("%s: the record of its plies could not be written", path)
+        liveplies.forget(path)
+
+
+def patch(match_id, game_id, body):
+    """Appends the moves of a moves request (docs/match-schema.md, Moves by changes) to a live game. Returns the plies
+    held after. 400 for a body or move that isn't valid, 404 for an unknown match, 409 (NotAtEnd) when the game isn't
+    held, is sealed or isn't at the ply the request starts from."""
+    if not valid_id(game_id, GAME_ID_MAX):
+        raise invalid(f"game id must be 1 to {GAME_ID_MAX} characters of letters, digits, . _ -")
+    match_time_control(match_id)
+    start, moves = liveplies.parse_body(body)
+    row = Game.objects.filter(match_id=match_id, game=game_id).order_by().first()
+    if row is None:
+        raise liveplies.NotAtEnd(f"nyayo holds no game {game_id}, send the whole PGN", 0)
+    if not row.live:
+        raise liveplies.NotAtEnd(f"game {game_id} is sealed with result {row.result}, it can't change", None)
+    return liveplies.append(game_path(match_id, game_id), start, moves)
+
+
+def plies_held(match_id, game_id):
+    """The plies nyayo holds of a live game, None when it holds no record of it (or it is sealed)."""
+    if not (valid_id(match_id, MATCH_ID_MAX) and valid_id(game_id, GAME_ID_MAX)):
+        return None
+    return liveplies.plies_held(game_path(match_id, game_id))
+
+
+def read(raw):
+    """The PGN as a python-chess game; 400 when there's no game or a move is illegal."""
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
@@ -135,6 +186,12 @@ def parse(raw):
         raise invalid("no game in the PGN")
     if game.errors:
         raise invalid(f"the PGN has an illegal or unreadable move: {game.errors[0]}")
+    return game
+
+
+def parse(raw):
+    """The PGN's headers as a dict and its number of plies; 400 when there's no game or a move is illegal."""
+    game = read(raw)
     return dict(game.headers), sum(1 for _ in game.mainline_moves())
 
 
