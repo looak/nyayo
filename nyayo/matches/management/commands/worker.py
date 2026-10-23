@@ -1,6 +1,6 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
-from nyayo.matches import worker
+from nyayo.matches import reader, worker
 
 
 class Command(BaseCommand):
@@ -14,6 +14,10 @@ class Command(BaseCommand):
                             help="how often to look for work when there is none (default 1)")
 
     def handle(self, *args, once=False, interval=1.0, **options):
-        done = worker.run(once=once, interval=interval)
+        try:
+            chosen = reader.default()
+        except (reader.WrongReader, OSError) as error:
+            raise CommandError(f"not starting: {error}")
+        done = worker.run(once=once, interval=interval, reader=chosen)
         if once:
             self.stdout.write(f"{done} thing{'s' if done != 1 else ''} done")

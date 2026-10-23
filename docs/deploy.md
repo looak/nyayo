@@ -119,6 +119,41 @@ clients sending 100 KB games at 100 KB/s, as over a slow link: without the cap a
 thread (median), with it 5 ms. With games sent at full speed the CPU is the limit rather than the threads, and the
 cap makes little difference (a median of 30 to 45 ms either way).
 
+## The game reader
+
+The worker reads every game it keeps through a game reader: python-chess unless `.env` names elephant's
+**phant-indexer**, a release binary pinned by its sha256. The worker checks the binary's hash and its `--version`
+before it starts and refuses to start on a mismatch (the unit then fails and says why in
+`journalctl -u nyayo-worker`), so a binary replaced under it is never run. Each batch and upload records the reader
+that read it (`phant-indexer 1.3.1`, `python-chess 1.11.2`).
+
+```bash
+mkdir -p ~/dev/nyayo-bin
+cp phant-indexer-1.3.1-linux-x86-64 ~/dev/nyayo-bin/ && chmod +x ~/dev/nyayo-bin/phant-indexer-1.3.1-linux-x86-64
+sha256sum ~/dev/nyayo-bin/phant-indexer-1.3.1-linux-x86-64      # compare with the release's
+```
+
+and in `.env`:
+
+```bash
+NYAYO_READER=/home/fischer/dev/nyayo-bin/phant-indexer-1.3.1-linux-x86-64
+NYAYO_READER_SHA256=<the release's sha256>
+```
+
+then `sudo systemctl restart nyayo-worker`. A new release is a new file and a new hash, never the old file replaced.
+
+Measured on 2026-10-21 in WSL (one thread of a Ryzen 9 9900X) on a restore of bobby's 2026-10-20 backup, every
+stored game read as one input per producer through nyayo's own interface (a pipe in, JSON lines out, parsed):
+
+| Games | python-chess 1.11.2 | phant-indexer 1.3.1 (elephant#29, `40623e8`) |
+|:--|--:|--:|
+| OpenBench, 42,116 games, 155 MB | 75.3 s, 559 games/s | 2.01 s, 20,934 games/s |
+| uwanja, 2,737 games, 59 MB (fastchess, PVs in the comments) | 6.8 s, 405 games/s | 0.26 s, 10,469 games/s |
+
+They agree on every game: its place, offset and length, whether it read, its result, its plies and its tags (the
+tags a PGN has; python-chess also fills in the seven-tag roster). bobby's CPU is slower than this one; the ratio,
+about 37 to 1, is what carries over.
+
 ## Backup
 
 Everything nyayo knows is the database, `archive/` (the raw runs and matches) and `games/` (the only copy of each
