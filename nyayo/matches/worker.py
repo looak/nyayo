@@ -80,7 +80,10 @@ def process_upload(upload, reader):
         return refuse(upload, error.reason)
     except OSError as error:
         return refuse(upload, f"its file can't be read: {error}")
-    records = reader.read(raw)
+    try:
+        records = reader.read(raw)
+    except readers.ReaderError as error:
+        return refuse(upload, f"the reader couldn't read it: {error}")
     reason = problem(records, opponents)
     if reason:
         return refuse(upload, reason)
