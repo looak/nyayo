@@ -7,9 +7,12 @@ SPRTs later. It has its own endpoint and document because it has a different ide
 untouched. The schema changes only by bumping `schema_version`, agreed with the owner.
 
 The producer re-sends the **whole document** as the match grows and says the state every time; nyayo keeps no state of
-its own on a producer's behalf, so a lost report costs nothing.
+its own on a producer's behalf, so a lost report costs nothing. A producer that nyayo has told its seq may instead send
+only the schedule entries that changed (*Reports by changes*), and a live game's new moves rather than its whole PGN
+(*Moves by changes*); whenever the two sides disagree the whole state is sent again, and it is always accepted.
 
-Optional additions that leave every existing document valid (`stats`, batches) stay within version 1. OpenBench sends
+Optional additions that leave every existing document valid (`stats`, batches, `report`, the moves request) stay
+within version 1. OpenBench sends
 version 1 too; the top-level shape it sent before is no longer accepted (`400`, no `schema_version` at the top).
 
 ## Endpoints
@@ -18,6 +21,7 @@ version 1 too; the top-level shape it sent before is no longer accepted (`400`, 
 |:--|:--|
 | `PUT /api/matches/{match.id}` | the match document, JSON, optionally `Content-Encoding: gzip` |
 | `PUT /api/matches/{match.id}/games/{game}` | one game's PGN so far, `application/x-chess-pgn`, optionally gzipped |
+| `PATCH /api/matches/{match.id}/games/{game}` | a live game's new moves, `application/json`, optionally gzipped (see *Moves by changes*) |
 | `GET /api/matches/{match.id}/games/{game}` | the stored PGN, open like the pages |
 | `PUT /api/matches/{match.id}/pgns/{batch}` | a batch of finished games, `application/x-bzip2` (see *Batches*) |
 | `GET /api/games?…` | every stored game matching a filter, one bz2 stream (see *Export*) |
@@ -25,7 +29,8 @@ version 1 too; the top-level shape it sent before is no longer accepted (`400`, 
 `Authorization: Bearer <token>`, the per-machine tokens made in the admin (the same as for runs). Responses are plain
 text: `201` created, `200` updated (or an identical resend of a sealed game or a batch), `401` bad token, `400` invalid
 with the reason, `404` an unknown match (PUT the match first), `409` a change that isn't allowed, naming the field,
-`413` a body over 64 MB.
+`413` a body over 64 MB. The body never changes meaning; what nyayo has after a report or a game request is said in
+headers (`Nyayo-Seq`, `Nyayo-Schedule-Digest`, `Nyayo-Plies`, below), on the success and on the `409` alike.
 
 A game or batch PUT may also be `503` with `Retry-After` (seconds): nyayo is busy with other games and didn't read it.
 Send it again after that long; it is never a refusal. Game requests are held to part of nyayo's threads so that match
@@ -78,7 +83,8 @@ batch; they end up in URLs and file names. The match id `batches` is reserved (i
   ],
   "sprt": null,                                      // kind sprt: elo0, elo1, alpha, beta, model, llr, lower, upper, result
   "stats": null,                                     // optional, the producer's own figures: { elo, error, model }
-  "machines": []                                     // the workers, see Machines
+  "machines": [],                                    // the workers, see Machines
+  "report": { "seq": 42, "base": 41 }                // optional, see Reports by changes
 }
 ```
 
@@ -117,7 +123,7 @@ are OpenBench's, the source of truth for an SPRT, rather than a second calculati
 ### What may change under one id
 
 `state`, `updated_at`, `finished_at`, the counts in `results`, `sprt.llr` and `sprt.result`, `stats`, `machines`,
-`pgn`, `progress`, and each game's `state`, `result`, `termination` and `fault`. **Counts only grow**, across restarts too (a
+`pgn`, `progress`, `report`, and each game's `state`, `result`, `termination` and `fault`. **Counts only grow**, across restarts too (a
 row can't disappear, `penta` and the per-side counts can't shrink). Everything else (subject, opponents, settings,
 SPRT bounds, a started game's number, round, opponent and colour) is fixed once received, and a change is `409` naming
 the field.
@@ -131,6 +137,81 @@ the field.
 - A match that isn't `running` is never shown as playing.
 
 Matches don't expire.
+
+### Reports by changes
+
+A long gauntlet's schedule is most of its document, and most of it doesn't change between two reports. A producer may
+send only the entries that changed, once nyayo has said what it holds. The rule: **a producer sends what changed since
+the last report nyayo acknowledged, nyayo applies it only on top of what it has, and its answer says what it has
+now.** When the two disagree, the producer sends the whole document, which is always accepted.
+
+**`report`**, optional, says where a report starts:
+
+| Field | Meaning |
+|:--|:--|
+| `seq` | this report's number, counting from 1 for each run of the producer and growing by at least 1 with each report |
+| `base` | the seq of the report nyayo last acknowledged (its `Nyayo-Seq`), or `null` for a whole document |
+
+- **A report without `report`, or with `base: null`, is whole**, as every report was before `report` existed: `games`
+  is the whole schedule. It is always applied on the rules above (*What may change under one id*), whatever seq nyayo
+  had, and nyayo's seq becomes its `seq` (none, without `report`). OpenBench sends no schedule and no `report`, and
+  changes nothing.
+- **A report with a `base` is a change.** Its `games` holds only the entries that changed since `base`, whole (all
+  eight fields), each replacing the entry with its `number` or adding one; an entry left out is unchanged. A change
+  can't drop an entry; only a whole document can, under the rules above. Everything else in the document (the
+  counts, state, `progress`, `sprt`, `stats`, `machines` and the rest) stays whole, being small.
+- **nyayo applies a change only on its base.** When `base` isn't nyayo's seq for the match (another report came in
+  between, one was lost, or nyayo has none), the answer is `409` with nyayo's seq in `Nyayo-Seq` (left out when it has
+  none) and a plain-text reason naming both, and nothing is applied: nothing is merged on a guess. A change whose
+  entries break a rule is `409` naming the field, as for a whole document. On any `409` to a change, the producer's
+  next report is whole.
+- **nyayo's answer says what it has.** Every answer to `PUT /api/matches/{id}`, `200`, `201` and `409`, carries
+  `Nyayo-Seq: <seq>` and `Nyayo-Schedule-Digest: <digest>` when nyayo holds a seq for the match; after a whole document
+  without `report`, neither. The producer computes the digest over its own schedule as it was when it sent the report;
+  when they differ, its next report is whole.
+- **A producer sends changes only after an answer carried `Nyayo-Seq`.** Until then, and after any answer without it,
+  it sends whole documents. So a nyayo that doesn't know `report` yet is only ever sent whole documents (it ignores the
+  unknown field, keeps the archive whole, and answers without the headers), and the order the two sides are deployed
+  in doesn't matter.
+- **Whole again at the end.** A producer sends the whole document first in a run, when the match ends (finished or
+  stopped), and from `uwanja report`, so the state nyayo keeps at the end was sent whole once.
+
+#### The schedule's digest
+
+The digest is a check that both sides hold the same schedule, not a security measure.
+
+- **An entry's hash** is the SHA-256 of its canonical JSON: an object of exactly the eight fields an entry has
+  (`number`, `round`, `opponent`, `subject_colour`, `state`, `result`, `termination`, `fault`), a field the entry
+  doesn't carry as `null`, and no others; keys sorted, at every level (`fault` is an object); no whitespace (`,` and
+  `:` alone as separators); ASCII, anything else escaped as `\uXXXX` with lowercase hex, as Python's
+  `json.dumps(entry, sort_keys=True, separators=(",", ":"), ensure_ascii=True)` writes it. Numbers are integers.
+- **The digest** is the XOR of every entry's hash, written as 64 lowercase hex digits. An empty schedule's is 64 zeros.
+  Every entry carries its number, so no two entries are the same and cancel out.
+- **It is kept, not recomputed**: when a report changes an entry, the old entry's hash is XORed out and the new one's
+  in, so either side's cost follows the entries that changed, not the schedule's length.
+
+Worked example, a schedule of three entries:
+
+```
+{"fault":null,"number":1,"opponent":"barbarossa","result":"1/2-1/2","round":1,"state":"finished","subject_colour":"white","termination":"Draw by 3-fold repetition"}
+  c31c00e90ed62959e35278b90fcfb92de04b5f1fa78b01dfcb8e84c01a199ab0
+{"fault":null,"number":2,"opponent":"barbarossa","result":null,"round":1,"state":"playing","subject_colour":"black","termination":null}
+  0db81474e1538aa80df49d2626e122f6ddabffd0e707b1faebe745c60bb9adb6
+{"fault":{"kind":"timelosses","side":"subject"},"number":3,"opponent":"belette","result":"0-1","round":2,"state":"finished","subject_colour":"white","termination":"White loses on time"}
+  3c5ba5518743232fd8af04f6f385fb73f39614544606195a51859da121507494
+
+digest  f2ffb1cc68c680de3609e169daab60a8ce76b49b068aa97f71ec5ca730f04392
+```
+
+Game 2 then finishes, and a change report carries only it:
+
+```
+{"fault":null,"number":2,"opponent":"barbarossa","result":"0-1","round":1,"state":"finished","subject_colour":"black","termination":"Black mates"}
+  0b3a62f58887d7801725b496b73c802815eb24d20691076bb327b42703b3c425
+
+digest  f2ffb1cc…30f04392 XOR 0db81474…0bb9adb6 (out) XOR 0b3a62f5…27b3c425 (in)
+      = f47dc74d0112ddf62cd8c8d94b76c27606366f99e71c1fee292cad4638fa2a01
+```
 
 ## Games
 
@@ -149,6 +230,41 @@ M") and must stay the same across a resume. A scheduled game that hasn't started
   engines; blank when ambiguous (an engine playing a copy of itself by name).
 - `[TimeControl "120+1"]` (else `settings.tc`) gives the clocks. `base+increment` in seconds; anything else and the
   clocks are left out.
+- The answer carries `Nyayo-Plies: <n>`, the number of plies nyayo now holds for the game (see *Moves by changes*).
+
+### Moves by changes
+
+Once nyayo holds a live game, a producer may send only its new moves:
+
+```
+PATCH /api/matches/{id}/games/{game}
+Content-Type: application/json
+
+{"from": 3, "moves": [{"san": "Nc6", "comment": "-0.21/12 0.104s, n=241005, nps=0, pv=\"b8c6 f1b5\""},
+                      {"san": "Bb5", "comment": "+0.30/12 0.131s, n=301772, nps=0, pv=\"f1b5 a7a6\""}]}
+```
+
+| Field | Meaning |
+|:--|:--|
+| `from` | the number of plies nyayo holds (its `Nyayo-Plies`), which the new moves follow |
+| `moves` | the new moves in order, each `san` (the move in SAN, as in the PGN) and `comment` |
+| `comment` | fastchess's comment for the move without its braces, exactly as it is in the PGN (see *Move comments*); `null` when the move has none |
+
+- **nyayo appends only at its own end.** When `from` isn't the number of plies nyayo holds, the answer is `409` with
+  that number in `Nyayo-Plies` and a plain-text reason, and nothing is appended. The producer sends the whole PGN next
+  (`PUT`), which is always accepted while the game is live; a game restarted on a resume is a whole PGN, shorter.
+- **A game nyayo doesn't hold is a `409`** (`Nyayo-Plies: 0`): its first send is the whole PGN, which carries its tags.
+  An unknown match is `404`, as for every game request.
+- **The moves are checked as a whole**: every one must be legal SAN in the position it is played in, or the answer is
+  `400` naming the first bad one, and none are appended. A comment is read as in a PGN.
+- **Moves never end a game.** A game ends, and is sealed, only by the whole final PGN with its `[Result]` (`PUT`), as
+  before: fastchess's own final PGN, which may carry `tl=` and `latency=` the live comments lack. A `PATCH` to a sealed
+  game is `409`.
+- **The answer** is `200` with `Nyayo-Plies: <n>`, the plies nyayo holds after the append. An empty `moves` appends
+  nothing and answers the same.
+- **A producer sends moves only after a game answer carried `Nyayo-Plies`.** Until then, and after any answer without
+  it, it sends the whole PGN. So a nyayo that doesn't know the moves request is only ever sent whole PGNs, and the
+  order the two sides are deployed in doesn't matter.
 
 ### Move comments
 
