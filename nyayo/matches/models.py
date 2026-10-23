@@ -53,9 +53,12 @@ class Match(models.Model):
     # the producer's own Elo and error { elo, error, model }, which may change as the match goes on
     stats = models.JSONField(null=True, blank=True)
     machines = models.JSONField(default=list)
-    # a gauntlet's whole schedule from its first report on, and { total, played, playing }; see ingest.validate_games
-    schedule = models.JSONField(default=list)
+    # { total, played, playing }; the schedule itself is rows (ScheduleEntry)
     progress = models.JSONField(null=True, blank=True)
+    # the seq of the last report that carried one, which a report by changes must name as its base, and the digest of
+    # the schedule as it now stands; both null/empty for a match whose producer sends whole documents
+    report_seq = models.PositiveBigIntegerField(null=True, blank=True)
+    schedule_digest = models.CharField(max_length=64, blank=True)
     received_at = models.DateTimeField(default=timezone.now)
     # when the producer last said anything, from the document; received_at is when nyayo heard it
     updated_at = models.DateTimeField(default=timezone.now, db_index=True)
@@ -66,6 +69,42 @@ class Match(models.Model):
 
     def __str__(self):
         return self.name or self.pk
+
+    @property
+    def schedule(self):
+        """The schedule as the eight-field dicts of the match document, by game number. Cached on the instance;
+        schedule.apply_* clear it."""
+        if getattr(self, "_schedule", None) is None:
+            self._schedule = [entry.as_dict() for entry in self.scheduled.order_by("number")]
+        return self._schedule
+
+
+class ScheduleEntry(models.Model):
+    """One game of a gauntlet's schedule, the eight fields of an entry of the match document, with the hash the
+    schedule's digest is made of. Kept apart from Game, the index of a PGN file that purge_games removes."""
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="scheduled")
+    number = models.PositiveIntegerField()
+    round = models.IntegerField(null=True, blank=True)
+    opponent = models.CharField(max_length=GAME_ID_MAX)
+    subject_colour = models.CharField(max_length=5)
+    state = models.CharField(max_length=10)
+    result = models.CharField(max_length=10, null=True, blank=True)
+    termination = models.CharField(max_length=200, null=True, blank=True)
+    fault = models.JSONField(null=True, blank=True)
+    hash = models.CharField(max_length=64)
+
+    class Meta:
+        ordering = ["match", "number"]
+        verbose_name_plural = "schedule entries"
+        constraints = [models.UniqueConstraint(fields=["match", "number"], name="one_entry_per_game_number")]
+
+    def __str__(self):
+        return f"{self.match_id}/{self.number}"
+
+    def as_dict(self):
+        return {name: getattr(self, name) for name in ("number", "round", "opponent", "subject_colour", "state",
+                                                       "result", "termination", "fault")}
 
 
 class MatchResult(models.Model):

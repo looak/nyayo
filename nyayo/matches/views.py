@@ -8,6 +8,7 @@ from nyayo.runs.views import decompress, machine_for, text, unauthorized
 
 from . import export, games, uploads
 from .ingest import ingest
+from .models import Match
 
 
 @csrf_exempt
@@ -22,8 +23,23 @@ def api_match(request, match_id):
         raw = decompress(request.body, request.headers.get("Content-Encoding"))
         result = ingest(raw, machine, match_id)
     except IngestError as error:
-        return text(error.status, error.reason)
-    return text(201 if result.created else 200, "created" if result.created else "updated")
+        response = text(error.status, error.reason)
+        if error.status == 409:
+            held = Match.objects.filter(pk=match_id).values_list("report_seq", "schedule_digest").first()
+            if held:
+                say_what_it_holds(response, *held)
+        return response
+    response = text(201 if result.created else 200, "created" if result.created else "updated")
+    say_what_it_holds(response, result.match.report_seq, result.match.schedule_digest)
+    return response
+
+
+def say_what_it_holds(response, seq, schedule_digest):
+    """Nyayo-Seq and Nyayo-Schedule-Digest on the answer, once nyayo holds a seq for the match (docs/match-schema.md,
+    Reports by changes); a producer sends changes only after an answer carried them."""
+    if seq is not None:
+        response["Nyayo-Seq"] = str(seq)
+        response["Nyayo-Schedule-Digest"] = schedule_digest
 
 
 @csrf_exempt
