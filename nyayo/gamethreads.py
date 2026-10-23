@@ -1,7 +1,7 @@
 """Keeps game requests off some of each worker's threads, so a flood of them leaves status and pages answering.
 
-Producers send a game's moves (PUT .../games/{game}) and batches of finished games (PUT .../pgns/{batch}) far more
-often than anything else. Each gunicorn worker lets at most NYAYO_GAME_THREADS of its threads handle those at once; a
+Producers send a game's moves (PUT or PATCH .../games/{game}) and batches of finished games (PUT .../pgns/{batch})
+far more often than anything else. Each gunicorn worker lets at most NYAYO_GAME_THREADS of its threads handle those at once; a
 game request that finds them all taken is answered 503 with Retry-After at once, before its body is read, and the
 producer sends it again later. Match reports (PUT /api/matches/{id}), the pages and everything else never wait for a
 game slot. The count is per process: gunicorn's workers are processes, each with its own threads.
@@ -32,7 +32,7 @@ class GameThreadsMiddleware:
                 _slots.release()
 
     def process_view(self, request, view_func, view_args, view_kwargs):
-        if request.method != "PUT" or view_func not in GAME_VIEWS:
+        if request.method not in ("PUT", "PATCH") or view_func not in GAME_VIEWS:
             return None
         if not _slots.acquire(blocking=False):
             response = text(503, "busy with other games, send it again shortly")
