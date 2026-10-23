@@ -308,7 +308,26 @@ plain PGN, `<number>.pgn`, compressed with zstd when it is sealed and never chan
 (match, number, state, games, sizes, sha256 of the stored file, the reader that read its games, and its sources:
 which uploads' games it holds, in order), and each game a **card** in the index database (`NYAYO_INDEX_DB`, its own
 SQLite file on local disk): its batch, its place and offset in it, its id, the subject's colour, the opponent, the
-result, `Termination` and plies. The cards are derived and can be written again from the batches.
+result, `Termination` and plies, and the facts below. The cards are derived: `manage.py reindex` writes them again
+from the sealed batches alone.
+
+A card's facts come from **extractors**, each with a name and a version; the index records which version of each
+filled a batch, and `reindex` visits only the batches an extractor has changed for (`--only` picks one, `--rebuild`
+writes every card whole, `--dry-run` counts), one batch at a time, so it can be stopped and run again:
+
+| Extractor | Facts |
+|:--|:--|
+| `reader` | how the final position ended it by the rules (`checkmate`, `stalemate`, `insufficient_material`, `fifty_moves`, `repetition`), the Polyglot hashes of the start position and of the one after 16 plies, promotions by piece, the ply each side castled, captures, en passant captures, checks, the fewest pieces, material (white's less black's) after plies 20 and 40 and at the end |
+| `ending` | how the game ended: by a `rule`; else the `Termination` tag (`adjudication`, `time_forfeit`, `illegal_move`, `crash`, other); else deduced; else `unexplained` |
+| `eval` | the eval from white's side in centipawns at plies 20 and 40 and the largest change between two plies, from the comments, for games where every move has one |
+
+yes/no facts (an en passant capture, an underpromotion, a promotion to a knight, mate on the board, an ending that
+was inferred) are bits of one `flags` column. **An ending is deduced** only for a game with no rule, no `Termination`
+and a match that reports no time loss, crash or illegal move, against the match's adjudication settings
+(`settings.openbench.win_adj` and `draw_adj`, or `reindex --win-adj/--draw-adj` for a match without): a `resignation`
+when the loser's last `movecount` scores are `score` centipawns or more below zero, a `draw_adjudication` when, from
+move `movenumber`, both engines were within `score` for `movecount` moves each. A deduced ending is marked inferred,
+so a query can tell it from one the game carried.
 `purge_games` never touches batches; `manage.py purge_batches --match ID` removes a match's batches, cards and
 uploads and is only run by hand. They are data to keep: a backup has to cover `games/batches/` (on bobby, the
 Synology's share), not the git backup.

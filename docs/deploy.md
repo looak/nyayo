@@ -154,6 +154,19 @@ They agree on every game: its place, offset and length, whether it read, its res
 tags a PGN has; python-chess also fills in the seven-tag roster). bobby's CPU is slower than this one; the ratio,
 about 37 to 1, is what carries over.
 
+## The index
+
+Every game kept as data has a card in `index.sqlite3` (see *Storage* in `match-schema.md`). The worker writes a
+card as it appends a game. After a new release of the reader, or a change to what a card holds, run
+
+```bash
+python manage.py reindex --dry-run     # how many batches are out of date
+python manage.py reindex               # at low priority, one batch at a time, safe to stop and start again
+```
+
+It visits only the batches whose cards were filled by an older reader or extractor version. `--rebuild` writes every
+card again and is how a lost index is made again from the batches. `--only eval` runs one extractor.
+
 ## Backup
 
 Everything nyayo knows is the database, `archive/` (the raw runs and matches) and `games/` (the only copy of each
