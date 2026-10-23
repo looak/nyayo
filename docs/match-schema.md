@@ -27,6 +27,10 @@ text: `201` created, `200` updated (or an identical resend of a sealed game or a
 with the reason, `404` an unknown match (PUT the match first), `409` a change that isn't allowed, naming the field,
 `413` a body over 64 MB.
 
+A game or batch PUT may also be `503` with `Retry-After` (seconds): nyayo is busy with other games and didn't read it.
+Send it again after that long; it is never a refusal. Game requests are held to part of nyayo's threads so that match
+reports always find one free, and a report is never answered `503` for being busy.
+
 Ids are `[A-Za-z0-9._-]`, starting with a letter or digit, at most 128 characters for a match and 64 for a game or a
 batch; they end up in URLs and file names. The match id `batches` is reserved (it is a directory of the games).
 
