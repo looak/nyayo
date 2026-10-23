@@ -43,10 +43,11 @@ def say_what_it_holds(response, seq, schedule_digest):
 
 
 @csrf_exempt
-@require_http_methods(["GET", "PUT"])
+@require_http_methods(["GET", "PUT", "PATCH"])
 def api_game(request, match_id, game):
-    """PUT /api/matches/{id}/games/{game}: the PGN so far, replacing the last (201 first time, 200 after). GET is the
-    stored PGN, open like the pages so a viewer can poll it."""
+    """PUT /api/matches/{id}/games/{game}: the PGN so far, replacing the last (201 first time, 200 after). PATCH: the
+    moves since the ply nyayo holds (docs/match-schema.md, Moves by changes), 200 with the plies held after, 409 with
+    them when the request doesn't follow. GET is the stored PGN, open like the pages so a viewer can poll it."""
     if request.method == "GET":
         pgn = games.read_pgn(match_id, game)
         if pgn is None:
@@ -57,10 +58,25 @@ def api_game(request, match_id, game):
         return unauthorized()
     try:
         raw = decompress(request.body, request.headers.get("Content-Encoding"))
+        if request.method == "PATCH":
+            response = text(200, "appended")
+            say_plies(response, games.patch(match_id, game, raw))
+            return response
         created = games.store(match_id, game, raw)
     except IngestError as error:
-        return text(error.status, error.reason)
-    return text(201 if created else 200, "created" if created else "updated")
+        response = text(error.status, error.reason)
+        say_plies(response, getattr(error, "plies", None))
+        return response
+    response = text(201 if created else 200, "created" if created else "updated")
+    say_plies(response, games.plies_held(match_id, game))
+    return response
+
+
+def say_plies(response, plies):
+    """Nyayo-Plies: the plies nyayo holds of the live game (docs/match-schema.md, Moves by changes); a producer sends
+    moves only after an answer carried it."""
+    if plies is not None:
+        response["Nyayo-Plies"] = str(plies)
 
 
 @csrf_exempt

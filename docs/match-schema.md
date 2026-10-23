@@ -230,7 +230,8 @@ M") and must stay the same across a resume. A scheduled game that hasn't started
   engines; blank when ambiguous (an engine playing a copy of itself by name).
 - `[TimeControl "120+1"]` (else `settings.tc`) gives the clocks. `base+increment` in seconds; anything else and the
   clocks are left out.
-- The answer carries `Nyayo-Plies: <n>`, the number of plies nyayo now holds for the game (see *Moves by changes*).
+- While the game is live, the answer carries `Nyayo-Plies: <n>`, the number of plies nyayo now holds for it (see
+  *Moves by changes*). A sealed game's answer carries none.
 
 ### Moves by changes
 
@@ -262,6 +263,13 @@ Content-Type: application/json
   game is `409`.
 - **The answer** is `200` with `Nyayo-Plies: <n>`, the plies nyayo holds after the append. An empty `moves` appends
   nothing and answers the same.
+- **The moves are written once.** The PGN's movetext is extended in place, move numbers and comments in braces as
+  fastchess writes them, and the result token stays `*`. Next to it nyayo keeps a record of each ply, appended once
+  (SAN, UCI, the position after it, the comment read: score, depth, time, nodes, nps, time left, the PV as UCI
+  moves) and the current state (position, last move, the latest score and depth of each side, the clocks), for as
+  long as the game is live. A request costs its new moves, not the game.
+- **A record that doesn't describe the PGN** (the file was changed, a write was cut short, the game is older than the
+  record) is not appended to: the answer is `409`, and the whole PGN builds it again.
 - **A producer sends moves only after a game answer carried `Nyayo-Plies`.** Until then, and after any answer without
   it, it sends the whole PGN. So a nyayo that doesn't know the moves request is only ever sent whole PGNs, and the
   order the two sides are deployed in doesn't matter.
@@ -417,6 +425,9 @@ of the progress graph) and a row per game (result, termination, colour, opponent
 document, counts or snapshots. A finished game is removed only once its batch is sealed, so it is never lost between
 the two; one that isn't is kept back and counted. Games finished before nyayo kept batches join them through
 `manage.py keep_games`, not the worker, and are kept back until then.
+
+A live game also has `games/<match id>/<game>.plies` (one JSON line per ply) and `<game>.state` beside its
+PGN, both derived and deleted when the game is sealed (*Moves by changes*).
 
 An upload waits as sent in `uploads/<match id>/<name>` in the data directory until the worker has put its games
 away, then the file goes and its row stays (name, sha256, machine, state, games, the batches they went to). A refused
