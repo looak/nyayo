@@ -72,8 +72,9 @@ class TheRealOne(BatchCase):
         text = batch_text(game("1-0"), game("0-1", Subject="black"), game("1-0", moves="1. e4 e5 2. Ke3"),
                           game("1/2-1/2", moves="1. e4 {+0.31/12 0.1s} e5 {+0.1 3/4 5 6} 2. Nf3"))
         mine, theirs = reader.PythonChess().read(text), real.read(text)
-        keys = ("game", "offset", "length", "ok", "result", "plies")
-        self.assertEqual([{k: r[k] for k in keys} for r in mine], [{k: r[k] for k in keys} for r in theirs])
+        keys = ("game", "offset", "length", "ok", "result", "plies", "ended", "start", "opening", "promotions",
+                "castled", "captures", "ep_captures", "checks", "min_pieces", "material")
+        self.assertEqual([{k: r.get(k) for k in keys} for r in mine], [{k: r.get(k) for k in keys} for r in theirs])
         self.assertEqual([r.get("error", {}).get("ply") for r in mine], [r.get("error", {}).get("ply") for r in theirs])
         # python-chess fills in the seven tag roster ("?" for what a PGN lacks); phant-indexer keeps what is written
         self.assertEqual([{k: v for k, v in a["tags"].items() if k in b["tags"]} for a, b in zip(mine, theirs)],

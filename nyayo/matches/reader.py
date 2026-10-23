@@ -16,6 +16,7 @@ from pathlib import Path
 
 import chess
 import chess.pgn
+import chess.polyglot
 from django.conf import settings
 
 
@@ -110,7 +111,66 @@ class PythonChess:
             record["error"] = {"ply": 0, "reason": "two games where one was expected, a blank line is missing"}
             return record
         record["ok"] = True
+        record.update(facts(game))
         return record
+
+
+OPENING_PLY = 16
+MATERIAL_PLIES = (20, 40)
+VALUES = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9}
+PROMOTIONS = {chess.QUEEN: "q", chess.ROOK: "r", chess.BISHOP: "b", chess.KNIGHT: "n"}
+
+
+def material(board):
+    return sum(VALUES.get(p.piece_type, 0) * (1 if p.color == chess.WHITE else -1) for p in board.piece_map().values())
+
+
+def ended(board):
+    """How the final position ended the game by the rules, in the order phant-indexer checks them."""
+    if board.is_checkmate():
+        return "checkmate"
+    if board.is_stalemate():
+        return "stalemate"
+    if board.is_insufficient_material():
+        return "insufficient_material"
+    if board.halfmove_clock >= 100:
+        return "fifty_moves"
+    if board.is_repetition(3):
+        return "repetition"
+    return None
+
+
+def facts(game):
+    """What phant-indexer's entry (format 2) says of a game that read, worked out the way elephant's differential
+    test works it out with python-chess (test/indexer_smoke.py), so the two readers give the same card."""
+    board = game.board()
+    start, opening = chess.polyglot.zobrist_hash(board), None
+    promotions = dict.fromkeys("qrbn", 0)
+    castled = {"white": None, "black": None}
+    captures = ep_captures = checks = plies = 0
+    min_pieces = len(board.piece_map())
+    at = {}
+    for move in game.mainline_moves():
+        plies += 1
+        if move:  # a null move is falsy, and python-chess calls one taking on a1 a capture
+            captures += board.is_capture(move)
+            ep_captures += board.is_en_passant(move)
+            if move.promotion:
+                promotions[PROMOTIONS[move.promotion]] += 1
+            if board.is_castling(move):
+                castled["white" if board.turn == chess.WHITE else "black"] = plies
+        board.push(move)
+        if move and board.is_check():
+            checks += 1
+        min_pieces = min(min_pieces, len(board.piece_map()))
+        if plies in MATERIAL_PLIES:
+            at[str(plies)] = material(board)
+        if plies == OPENING_PLY:
+            opening = chess.polyglot.zobrist_hash(board)
+    at["end"] = material(board)
+    return {"ended": ended(board), "start": f"{start:016x}", "opening": None if opening is None else f"{opening:016x}",
+            "promotions": promotions, "castled": castled, "captures": captures, "ep_captures": ep_captures,
+            "checks": checks, "min_pieces": min_pieces, "material": at}
 
 
 class PhantIndexer:

@@ -29,8 +29,8 @@ from django.utils import timezone
 
 from nyayo.runs.ingest import IngestError
 
-from . import catalogue, games as single_games, reader as readers, uploads
-from .models import Batch, Game, MatchResult, Upload
+from . import cards, catalogue, games as single_games, reader as readers, uploads
+from .models import Batch, Game, Match, MatchResult, Upload
 
 log = logging.getLogger("nyayo.worker")
 
@@ -61,11 +61,20 @@ def problem(records, opponents):
     return None
 
 
-def card_fields(record, opponents):
+def card_fields(record, pgn, context, colour, opponent):
+    """A game's card: who played it, its result and plies, and every extractor's facts."""
     tags = record["tags"]
-    return {"colour": tags.get("Subject", "").lower(), "opponent": opponents.get(tags.get("Opponent", "")),
-            "result": tags.get("Result", "*"), "termination": tags.get("Termination", "")[:100],
-            "plies": record["plies"]}
+    return {"colour": colour, "opponent": opponent, "result": tags.get("Result", "*"),
+            "termination": tags.get("Termination", "")[:100], "plies": record["plies"],
+            **cards.all_fields(record, pgn, context)}
+
+
+def seal(batch, reader):
+    """Seals a batch; one whose games one reader read all of, as the worker writes them, is marked filled by the
+    extractors' current versions, so reindex passes it by."""
+    catalogue.seal(batch)
+    if batch.reader == reader.name:
+        catalogue.mark_filled(batch, cards.versions(reader))
 
 
 def refuse(upload, reason):
@@ -94,8 +103,13 @@ def process_upload(upload, reader):
         upload.games, upload.reader = len(records), reader.name
         upload.save(update_fields=["games", "reader"])
 
-    games = [(f"{upload.name}.{r['game']}", raw[r["offset"]:r["offset"] + r["length"]], card_fields(r, opponents))
-             for r in records]
+    context = cards.Context(upload.match)
+    games = []
+    for r in records:
+        pgn = raw[r["offset"]:r["offset"] + r["length"]]
+        tags = r["tags"]
+        games.append((f"{upload.name}.{r['game']}", pgn, card_fields(
+            r, pgn, context, tags.get("Subject", "").lower(), opponents.get(tags.get("Opponent", "")))))
     while upload.appended < len(games):
         batch = catalogue.open_batch(upload.match_id)
         start = upload.appended
@@ -109,7 +123,7 @@ def process_upload(upload, reader):
 
         catalogue.append(batch, group, reader.name, {"upload": upload.name, "first": start + 1}, progress)
         if catalogue.full(batch):
-            catalogue.seal(batch)
+            seal(batch, reader)
     upload.state, upload.done_at = "done", timezone.now()
     upload.save(update_fields=["state", "done_at"])
     uploads.upload_path(upload.match_id, upload.name).unlink(missing_ok=True)
@@ -156,8 +170,9 @@ def keep_singles(match_id, reader, rows=None):
     unread = {row.pk for row in rows} - {row.pk for row, _, _ in found}
     if unread:
         Game.objects.filter(pk__in=unread).update(waiting=False)
-    items = [(row.game, pgn, {"colour": row.colour, "opponent": opponents.get(row.opponent), "result": row.result,
-                              "termination": row.termination, "plies": record["plies"]}, row.pk)
+    context = cards.Context(Match.objects.get(pk=match_id))
+    items = [(row.game, pgn, {**card_fields(record, pgn, context, row.colour, opponents.get(row.opponent)),
+                              "result": row.result, "termination": row.termination}, row.pk)
              for row, pgn, record in found]
     while items:
         batch = catalogue.open_batch(match_id)
@@ -168,7 +183,7 @@ def keep_singles(match_id, reader, rows=None):
 
         catalogue.append(batch, [(game, pgn, fields) for game, pgn, fields, _ in group], reader.name, None, progress)
         if catalogue.full(batch):
-            catalogue.seal(batch)
+            seal(batch, reader)
     if found:
         log.info("match %s: %d finished game%s kept", match_id, len(found), "s" if len(found) != 1 else "")
     return len(found)
@@ -196,7 +211,7 @@ def step(reader):
         return True
     batch = ended_batches().first()
     if batch is not None:
-        catalogue.seal(batch)
+        seal(batch, reader)
         log.info("sealed %s/%d short, its match has ended", batch.match_id, batch.number)
         return True
     return False
