@@ -89,6 +89,10 @@ It fills in the units in `deploy/` for this checkout, user and conda env (found 
 A running match with no report for `NYAYO_SILENT_AFTER` minutes (30 by default, in `.env`) is shown as *silent* on
 `/matches` and its page; nothing is stored, and its next report clears it.
 
+A match whose producer reports by changes (uwanja, once it sends `report.seq`) is archived whole at most every
+`NYAYO_ARCHIVE_EVERY` seconds while it runs (60 by default) and when it ends, instead of on every report; the archive
+is still the whole truth the database can be rebuilt from.
+
 Running the script again reinstalls the units, which is how a change to a unit file reaches the server, and how
 `nyayo-worker.service` is installed the first time. Follow the
 log with `journalctl -u nyayo -f`.

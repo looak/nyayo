@@ -89,6 +89,10 @@ NYAYO_UPLOADS_DIR = DATA_DIR / "uploads"
 NYAYO_INDEX_DB = Path(os.environ.get("NYAYO_INDEX_DB") or DATA_DIR / "index.sqlite3").resolve()
 NYAYO_MAX_BATCH_BYTES = 256 * 1024 * 1024
 
+# A match whose producer reports by changes is archived whole this often while it runs (and when it ends), not on every
+# report; 0 archives every report.
+NYAYO_ARCHIVE_EVERY = int(os.environ.get("NYAYO_ARCHIVE_EVERY", 60))
+
 # A running match with no report for this many minutes is shown as silent (derived when a page is drawn, never stored).
 NYAYO_SILENT_AFTER = int(os.environ.get("NYAYO_SILENT_AFTER", 30))
 
