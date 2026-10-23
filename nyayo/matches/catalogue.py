@@ -86,6 +86,11 @@ CREATE TABLE IF NOT EXISTS filled (
 ) WITHOUT ROWID;
 """,
 }
+UPGRADES[3] = """
+-- the played extractor: when the game was played, Unix time (cards.played_fields), and a card_played index to list by it
+ALTER TABLE card ADD COLUMN played_at INTEGER;
+CREATE INDEX IF NOT EXISTS card_played ON card (played_at);
+"""
 SCHEMA_VERSION = max(UPGRADES)
 
 _local = threading.local()
@@ -216,8 +221,9 @@ EXTRACTOR_COLUMNS = {
                "captures", "ep_captures", "checks", "min_pieces", "material_20", "material_40", "material_end"),
     "ending": ("ending",),
     "eval": ("eval_20", "eval_40", "swing"),
+    "played": ("played_at",),
 }
-EXTRACTOR_FLAGS = {"reader": "reader_flags", "ending": "ending_flags"}
+EXTRACTOR_FLAGS = {"reader": "reader_flags", "ending": "ending_flags", "played": "played_flags"}
 BASE_COLUMNS = ("batch", "position", "game", "offset", "length", "colour", "opponent", "result", "termination",
                 "plies")
 ALL_COLUMNS = BASE_COLUMNS + tuple(c for columns in EXTRACTOR_COLUMNS.values() for c in columns) + ("flags",)
@@ -227,7 +233,7 @@ def card_row(batch, position, game_id, offset, length, f):
     base = (batch.pk, position, game_id, offset, length, COLOUR_CODES.get(f.get("colour") or "", 0), f.get("opponent"),
             RESULT_CODES.get(f.get("result"), 0), f.get("termination") or None, f.get("plies", 0))
     facts = tuple(f.get(c) for columns in EXTRACTOR_COLUMNS.values() for c in columns)
-    return base + facts + ((f.get("reader_flags") or 0) | (f.get("ending_flags") or 0),)
+    return base + facts + ((f.get("reader_flags") or 0) | (f.get("ending_flags") or 0) | (f.get("played_flags") or 0),)
 
 
 def write_cards(batch, cards):
@@ -244,7 +250,7 @@ def update_cards(batch, rows, extractors):
     """[(position, fields)]: only the columns of the extractors named, the other bits of flags kept."""
     from . import cards as extract
 
-    masks = {"reader": extract.READER_FLAGS, "ending": extract.ENDING_FLAGS}
+    masks = {"reader": extract.READER_FLAGS, "ending": extract.ENDING_FLAGS, "played": extract.PLAYED_FLAGS}
     columns = [c for name in extractors for c in EXTRACTOR_COLUMNS[name]]
     mask = sum(masks.get(name, 0) for name in extractors)
     flagged = [name for name in extractors if name in EXTRACTOR_FLAGS]

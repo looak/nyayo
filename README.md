@@ -58,6 +58,11 @@ cp .env.example .env
 `manage.py seed_demo` (debug mode only) makes six simulated SPRTs (passed, failed, stopped, running, silent, just
 started) with a history, a few games and a batch, for working on the pages without a real test running.
 
+The **Games** page (`/games`) lists every game kept as data, newest first, 64 to a page: when it was played, its id,
+who played white and black, its length, result and how it ended, the book position it started from (with a link to the
+other games from it) and the match it came from; a game opens in its own view with every move. `?match=` and
+`?opening=` filter it. It reads the index of cards, so it shows a game once the worker has put it away.
+
 Finished games sent in bulk (OpenBench uploads one per workload) are taken at once and put away by the worker,
 `manage.py worker`, which runs next to the site: it checks every game and keeps them in nyayo's own 64-game zstd
 batches, with a card per game in an index database of their own. `manage.py worker --once` does what is waiting and

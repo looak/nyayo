@@ -9,14 +9,18 @@ of each filled its cards, so `manage.py reindex` visits only batches an extracto
   for a game without one, deduced from the match's adjudication settings and the engines' scores in the comments
   (cutechess-ob's `-resign` and `-draw`), marked inferred; else unexplained.
 - **eval**: the eval at plies 20 and 40 and the largest swing, from the comments' scores, where every move has one.
+- **played**: when the game was played, as a Unix time: its own `GameEndTime` (or `GameStartTime`) when the PGN has
+  one, else its `Date` tag at midnight UTC, else when nyayo received it. Only the first is exact (a bit says so).
 """
 
 import re
+from datetime import datetime, timezone
 
 from .models import MatchResult
 
 ENDING_VERSION = "1"
 EVAL_VERSION = "1"
+PLAYED_VERSION = "1"
 
 ENDED = ("", "checkmate", "stalemate", "insufficient_material", "fifty_moves", "repetition")
 ENDINGS = ("unexplained", "rule", "resignation", "draw_adjudication", "adjudication", "time_forfeit", "illegal_move",
@@ -27,9 +31,10 @@ TERMINATIONS = {"adjudication": "adjudication", "time forfeit": "time_forfeit", 
                 "unterminated": "crash", "emergency": "crash"}
 
 # yes/no facts, bits of the card's flags column
-INFERRED, EN_PASSANT, UNDERPROMOTION, KNIGHT_PROMOTION, MATE = 1, 2, 4, 8, 16
+INFERRED, EN_PASSANT, UNDERPROMOTION, KNIGHT_PROMOTION, MATE, PLAYED_TIME = 1, 2, 4, 8, 16, 32
 READER_FLAGS = EN_PASSANT | UNDERPROMOTION | KNIGHT_PROMOTION | MATE
 ENDING_FLAGS = INFERRED
+PLAYED_FLAGS = PLAYED_TIME
 
 COMMENT = re.compile(rb"\{([^}]*)\}")
 SCORE = re.compile(rb"^\s*([+-]?)(M?)(\d+(?:\.\d+)?)")
@@ -41,7 +46,7 @@ ADJUDICATION = re.compile(r"(\w+)\s*=\s*(-?\d+)")
 
 def versions(reader):
     return {"reader": reader.name + (f" format {reader.format}" if hasattr(reader, "format") else ""),
-            "ending": ENDING_VERSION, "eval": EVAL_VERSION}
+            "ending": ENDING_VERSION, "eval": EVAL_VERSION, "played": PLAYED_VERSION}
 
 
 def hash_int(text):
@@ -184,9 +189,44 @@ def ending_fields(record, pgn, context):
     return out("unexplained")
 
 
-def all_fields(record, pgn, context):
+# --- when it was played ---
+
+def parse_time(text):
+    """A fastchess/cutechess time tag, `2026-10-15T16:29:31 -0700`, as a Unix time; None for anything else."""
+    for pattern in ("%Y-%m-%dT%H:%M:%S %z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f%z"):
+        try:
+            return int(datetime.strptime((text or "").strip(), pattern).timestamp())
+        except ValueError:
+            continue
+    return None
+
+
+def parse_date(text):
+    """A PGN `Date` tag, `2026.10.18` (`?` for what is unknown), as midnight UTC of that day; None if it isn't one."""
+    try:
+        return int(datetime.strptime((text or "").strip(), "%Y.%m.%d").replace(tzinfo=timezone.utc).timestamp())
+    except ValueError:
+        return None
+
+
+def played_fields(record, received=None):
+    """{"played_at": Unix time, "played_flags": PLAYED_TIME when it is the game's own}. received is when nyayo got
+    the game, the last resort."""
+    tags = record.get("tags") or {}
+    for name in ("GameEndTime", "GameStartTime"):
+        found = parse_time(tags.get(name))
+        if found is not None:
+            return {"played_at": found, "played_flags": PLAYED_TIME}
+    found = parse_date(tags.get("Date"))
+    if found is None and received is not None:
+        found = int(received.timestamp())
+    return {"played_at": found, "played_flags": 0}
+
+
+def all_fields(record, pgn, context, received=None):
     """Every extractor's columns for one game."""
     fields = reader_fields(record)
+    fields.update(played_fields(record, received))
     fields.update(ending_fields(record, pgn, context))
     fields.update(eval_fields(pgn, record.get("plies") or 0))
     return fields

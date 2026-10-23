@@ -61,12 +61,12 @@ def problem(records, opponents):
     return None
 
 
-def card_fields(record, pgn, context, colour, opponent):
+def card_fields(record, pgn, context, colour, opponent, received=None):
     """A game's card: who played it, its result and plies, and every extractor's facts."""
     tags = record["tags"]
     return {"colour": colour, "opponent": opponent, "result": tags.get("Result", "*"),
             "termination": tags.get("Termination", "")[:100], "plies": record["plies"],
-            **cards.all_fields(record, pgn, context)}
+            **cards.all_fields(record, pgn, context, received)}
 
 
 def seal(batch, reader):
@@ -109,7 +109,8 @@ def process_upload(upload, reader):
         pgn = raw[r["offset"]:r["offset"] + r["length"]]
         tags = r["tags"]
         games.append((f"{upload.name}.{r['game']}", pgn, card_fields(
-            r, pgn, context, tags.get("Subject", "").lower(), opponents.get(tags.get("Opponent", "")))))
+            r, pgn, context, tags.get("Subject", "").lower(), opponents.get(tags.get("Opponent", "")),
+            upload.received_at)))
     while upload.appended < len(games):
         batch = catalogue.open_batch(upload.match_id)
         start = upload.appended
@@ -171,7 +172,8 @@ def keep_singles(match_id, reader, rows=None):
     if unread:
         Game.objects.filter(pk__in=unread).update(waiting=False)
     context = cards.Context(Match.objects.get(pk=match_id))
-    items = [(row.game, pgn, {**card_fields(record, pgn, context, row.colour, opponents.get(row.opponent)),
+    items = [(row.game, pgn, {**card_fields(record, pgn, context, row.colour, opponents.get(row.opponent),
+                                            row.finished_at or row.received_at),
                               "result": row.result, "termination": row.termination}, row.pk)
              for row, pgn, record in found]
     while items:

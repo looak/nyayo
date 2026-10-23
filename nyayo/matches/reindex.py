@@ -56,11 +56,12 @@ def reindex_batch(batch, reader, extractors, rebuild=False, win=None, draw=None)
             rows.append((record["game"], game_id, record["offset"], record["length"], {
                 "colour": colour, "opponent": opponent, "result": tags.get("Result") or record.get("result"),
                 "termination": (tags.get("Termination") or "")[:100], "plies": record.get("plies") or 0,
-                **cards.all_fields(record, pgn, context)}))
+                **cards.all_fields(record, pgn, context, batch.created_at)}))
         catalogue.write_cards(batch, rows)
         catalogue.mark_filled(batch, versions)
     else:
-        rows = [(record["game"], cards.all_fields(record, pgn, context)) for record, pgn in pieces]
+        rows = [(record["game"], cards.all_fields(record, pgn, context, batch.created_at))
+                for record, pgn in pieces]
         catalogue.update_cards(batch, rows, extractors)
         catalogue.mark_filled(batch, {name: versions[name] for name in extractors})
     return len(records)
