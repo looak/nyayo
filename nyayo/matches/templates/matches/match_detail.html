@@ -41,7 +41,7 @@
     {% if timing.eta_at %}<div><dt>Estimated finish</dt><dd title="from {{ timing.eta_basis }}">{{ timing.eta_at|date:"D H:i" }} <span class="muted">in {{ timing.eta_seconds|seconds }}</span></dd></div>
     {% elif timing.running and timing.remaining %}<div><dt>Estimated finish</dt><dd class="muted">after the first games</dd></div>{% endif %}
     {% if match.finished_at and not timing.running %}<div><dt>Ended</dt><dd>{{ match.finished_at|date:"D H:i" }}</dd></div>{% endif %}
-    {% if stored_games %}<div><dt>Stored games</dt><dd title="batches of finished games kept as data">{{ stored_games }} <a href="{% url 'api_games' %}?match={{ match.pk|urlencode }}" class="muted">export</a></dd></div>{% endif %}
+    {% if stored_games or uploads %}<div><dt>Stored games</dt><dd title="finished games kept as data, in batches">{{ stored_games }}{% if uploads.pending %} <span class="muted">{{ uploads.pending }} upload{{ uploads.pending|pluralize }} waiting</span>{% endif %}{% if uploads.refused %} <span class="muted">{{ uploads.refused }} refused</span>{% endif %} {% if stored_games %}<a href="{% url 'api_games' %}?match={{ match.pk|urlencode }}" class="muted">export</a>{% endif %}</dd></div>{% endif %}
     <div><dt>Last report</dt><dd{% if timing.stale_seconds %} class="worse"{% endif %}>{{ match.updated_at|date:"H:i:s" }}{% if timing.stale_seconds %} <span class="muted">{{ timing.stale_seconds|seconds }} ago</span>{% endif %}</dd></div>
   </dl>
   {% if silent %}<p class="note">Silent: no report for over {{ silent_minutes }} minutes while the producer says running. Its next report clears this.</p>{% endif %}

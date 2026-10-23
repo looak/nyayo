@@ -1,6 +1,7 @@
 """The pages: the match list, a match, and a game, live."""
 
 from datetime import timedelta
+from types import SimpleNamespace
 
 import chess
 import chess.svg
@@ -13,7 +14,7 @@ from django.utils import timezone
 
 from nyayo.paging import paginate
 
-from . import games, pgnview, progress, sprtview, stats, timing
+from . import catalogue, games, pgnview, progress, sprtview, stats, timing
 from .models import KINDS, STATES, Engine, Game, Match
 
 OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): "loss", ("1-0", "black"): "loss",
@@ -170,6 +171,23 @@ def stored_games(match):
     return match.batches.aggregate(total=Sum("games"))["total"] or 0
 
 
+def upload_counts(match):
+    """The match's uploads by state, the ones it has."""
+    from django.db.models import Count
+
+    return dict(match.uploads.values_list("state").annotate(n=Count("pk")).order_by())
+
+
+def kept(card, opponents):
+    """A card as game_entries() takes a game's row: finished, the subject's colour, the opponent's id."""
+    return SimpleNamespace(live=False, result=card["result"], colour=card["colour"],
+                           opponent=opponents.get(card["opponent"], ""), termination=card["termination"])
+
+
+def opponent_ids(match):
+    return dict(match.results.values_list("pk", "opponent"))
+
+
 def sprt_progress(match):
     """The SPRT card's graphs and projection, from the snapshots; empty for a match that isn't an SPRT."""
     if not isinstance(match.sprt, dict):
@@ -261,6 +279,10 @@ def game_entries(match):
     the last word; a game of a match that isn't running is never live, it was cut off."""
     schedule = {str(entry.get("number")): entry for entry in match.schedule}
     stored = {game.game: game for game in match.games.all()}
+    # games kept in batches have cards, not rows; a game in both is the same game
+    opponents = opponent_ids(match)
+    for card in catalogue.cards(match.pk):
+        stored.setdefault(card["game"], kept(card, opponents))
     names = opponent_names(match)
     entries = [build_entry(match, number, schedule.get(number, {}), stored.get(number), names)
                for number in schedule.keys() | stored.keys()]
@@ -276,6 +298,9 @@ def game_entry(match, number):
     """One game as game_entries() shows it, without building the rest; None when nothing is known of it."""
     entry = next((e for e in match.schedule if str(e.get("number")) == number), None)
     row = Game.objects.filter(match=match, game=number).first()
+    if row is None:
+        found = catalogue.find(match.pk, number)
+        row = kept(found[1], opponent_ids(match)) if found else None
     if entry is None and row is None:
         return None
     return build_entry(match, number, entry or {}, row, opponent_names(match))
@@ -332,6 +357,7 @@ def match_detail(request, match_id):
             timezone.now()),
         "groups": groups, "entries": entries, "refresh": match.state == "running", "settings": match.settings,
         "host": match.host, "subject_name": subject_name, "stored_games": stored_games(match),
+        "uploads": upload_counts(match),
         "producer_url": (match.producer or {}).get("url"),
     }
     # the games table shows one page of them, in play order (playing, cut off, scheduled, finished); what was counted
@@ -370,7 +396,7 @@ def live_boards(match, playing):
 
 def game_context(match, game, ply=None):
     """What the game page and its live fragment show, or None when nothing is known of the game."""
-    raw = games.read_pgn(match.pk, game)
+    raw = games.read_pgn(match.pk, game) or catalogue.read_game(match.pk, game)
     entry = game_entry(match, game)
     if raw is None:
         return None if entry is None else {"match": match, "game": game, "entry": entry, "waiting": True}

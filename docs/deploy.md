@@ -72,6 +72,13 @@ It fills in the units in `deploy/` for this checkout, user and conda env (found 
   runner PUTs every move, so a couple of slow pages must not queue them. Game requests (a game's moves, a batch of
   games) may take at most `NYAYO_GAME_THREADS` (2) of each worker's threads; the others are kept for match reports and
   pages, so a flood of games never holds up a test's status (see *Game threads*);
+- `nyayo-worker.service`, nyayo's worker (`manage.py worker`): it reads uploads of finished games (OpenBench sends
+  one per workload) into the matches' batches in the background, so the upload itself is answered at once. It is bound
+  to `nyayo.service`, starting, stopping and restarting with it, `Restart=always`, at low CPU and disk priority, and
+  looks for work every second; nobody runs it by hand. `python manage.py worker --once` does what is waiting and
+  exits, and refuses to start while the service's worker runs (one worker at a time). Follow it with
+  `journalctl -u nyayo-worker -f`; a refused upload's reason is there and in the admin (Matches, Uploads), where it can
+  be read again;
 - `nyayo-expire.timer`, which runs `manage.py expire_runs` daily at 04:30 through `nyayo-expire.service`. It deletes
   wip runs never promoted within 14 days and committed runs not published within 30 (`NYAYO_WIP_DAYS`,
   `NYAYO_COMMITTED_DAYS` in `.env`). Published runs are kept. `python manage.py expire_runs --dry-run` shows what
@@ -82,7 +89,8 @@ It fills in the units in `deploy/` for this checkout, user and conda env (found 
 A running match with no report for `NYAYO_SILENT_AFTER` minutes (30 by default, in `.env`) is shown as *silent* on
 `/matches` and its page; nothing is stored, and its next report clears it.
 
-Running the script again reinstalls the units, which is how a change to a unit file reaches the server. Follow the
+Running the script again reinstalls the units, which is how a change to a unit file reaches the server, and how
+`nyayo-worker.service` is installed the first time. Follow the
 log with `journalctl -u nyayo -f`.
 
 ### Updating
@@ -125,11 +133,14 @@ Once, on bobby: make a private repository, clone it (`git clone git@github.com:<
 `.env`, and run `python manage.py backup` by hand to see it work. The dump holds the machines' token hashes and the
 admin users, hence private.
 
-`games/batches/` (the game database: batches of finished games, `PUT /api/matches/{id}/pgns/{batch}`) is not in the
-repo: it is gigabytes of bz2. Put it on the Synology's share and let the NAS's own backup cover it: mount the share on
+`games/batches/` (the game database: nyayo's 64-game batches of finished games, zstd) is not in the repo: it will be
+gigabytes. Put it on the Synology's share and let the NAS's own backup cover it: mount the share on
 bobby and set `NYAYO_BATCHES_DIR` to it in `.env` (it defaults to `games/batches` in the data directory). Batches are
 never purged with the live games; `manage.py purge_batches --match ID` removes a match's by hand, and a match that has
-batches can't be deleted in the admin until then.
+batches can't be deleted in the admin until then. Two more things are left out on purpose: `uploads/` (an upload
+waiting for the worker, OpenBench's to send again; it keeps the bytes in its own tars) and the index of the games,
+`index.sqlite3` (`NYAYO_INDEX_DB`), which is derived from the batches. Keep the index on bobby's own disk, never on
+the share: SQLite's locking isn't safe over SMB or NFS.
 
 To restore on a new machine: install nyayo, set `NYAYO_DATA_DIR` to an empty directory, clone the backup repository,
 stop nyayo, then `python manage.py restore_backup <path to the clone>`. It refuses a data directory that already has

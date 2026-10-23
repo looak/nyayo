@@ -58,6 +58,11 @@ cp .env.example .env
 `manage.py seed_demo` (debug mode only) makes six simulated SPRTs (passed, failed, stopped, running, silent, just
 started) with a history, a few games and a batch, for working on the pages without a real test running.
 
+Finished games sent in bulk (OpenBench uploads one per workload) are taken at once and put away by the worker,
+`manage.py worker`, which runs next to the site: it checks every game and keeps them in nyayo's own 64-game zstd
+batches, with a card per game in an index database of their own. `manage.py worker --once` does what is waiting and
+exits.
+
 Add a machine in the admin to get a push token. Installing on a server (bobby, next to OpenBench, as a systemd
 service in a conda env) and connecting Elephant are described in [docs/deploy.md](docs/deploy.md).
 

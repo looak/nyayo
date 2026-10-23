@@ -191,31 +191,44 @@ means `COMPACT` to keep only the score but keeps the whole comment, so both mode
 Games kept **as data**, for training: finished games sent in bulk once played, not followed live. A producer that sends
 batches doesn't PUT the same games one by one.
 
-`PUT /api/matches/{id}/pgns/{batch}` carries a batch of finished games, the PGNs one after the other.
+`PUT /api/matches/{id}/pgns/{batch}` carries an **upload** of finished games, the PGNs one after the other. nyayo
+takes it without reading it and its worker reads it within a second or so, in the background; nothing the producer
+sends waits for that.
 
-- **Body:** `application/x-bzip2`, a bz2-compressed PGN; or `application/x-chess-pgn`, plain or with
-  `Content-Encoding: gzip`, for producers that don't use bz2. At most 64 MB as sent (`413`).
-- **`{batch}`** is the producer's name for it, stable across resends. OpenBench sends one per workload,
+- **Body:** `application/x-bzip2`, a bz2-compressed PGN (concatenated bz2 streams are one upload); or
+  `application/x-chess-pgn`, plain or with `Content-Encoding: gzip`, for producers that don't use bz2. At most 64 MB
+  as sent (`413`), 256 MB decompressed.
+- **`{batch}`** is the producer's name for the upload, stable across resends. OpenBench sends one per workload,
   `<result id>.<book index>` (the name its worker gives the upload, `<test>.<result>.<book index>.pgn.bz2`, without the
   test).
-- **Checked on the way in**, before anything is stored: it decompresses, holds at least one game, every game parses
-  (python-chess, headers and moves), every move is legal, and every `[Result]` is final (`1-0`, `0-1`, `1/2-1/2`). Any
-  of these failing is `400` naming the game by its position in the batch; nothing of the batch is kept.
-- **Sealed on arrival:** a resend with the same content (sha256 of the bytes as stored) is `200`; different content
-  under a stored batch name is `409`. `404` for a match nyayo doesn't know.
-- **Who played whom**, per game, as for single games: `[Subject "white|black"]` and `[Opponent "<opponent id>"]`, then
-  the players' names matched against the match's engines; blank when neither tells. An `[Opponent]` that isn't one of
-  the match's opponents is `400`. OpenBench tags every game (see *OpenBench*).
-- A batch adds no counts: the match document's `results` stay the counts, and a batch's games needn't add up to them
-  (a stopped workload uploads games whose results were refused).
+- **The answer** checks only what needs no reading: `202` taken and waiting for the worker; `200` the same bytes
+  (sha256 of the body as sent) as an upload of that name already waiting or done, nothing added; `409` different
+  bytes under that name; `404` a match nyayo doesn't know (PUT the match first); `400` a bad name, `Content-Type` or
+  `Content-Encoding`. A bad upload is no longer a `400`: it is refused by the worker, below.
+- **Every game it holds**, checked by the worker before any of it is kept: it decompresses, holds at least one game,
+  every game reads (headers and moves) and every move is legal, every `[Result]` is final (`1-0`, `0-1`,
+  `1/2-1/2`), and every game says who played whom: **`[Subject "white|black"]`**, the colour the engine under test
+  played, and **`[Opponent "<opponent id>"]`**, one of the match's opponents. Nothing is matched by name; a game
+  without both tags refuses its upload. OpenBench's worker writes them (see *OpenBench*).
+- **States**, on the match page and in the admin: **pending** (taken, not read yet), **done** (every game kept), or
+  **refused** with the reason, naming the first game that failed by its place in the upload and, for a move, the ply.
+  A refused upload keeps none of its games. Sent again, the same bytes or fixed ones under the same name, it is
+  `202` and read again; it can also be read again from the admin.
+- **A game's id** is `<upload>.<n>`, its place in the upload from 1 (`9311.48.5`), as single games' ids are the
+  producer's: a game page is `/matches/{id}/games/9311.48.5`.
+- An upload adds no counts: the match document's `results` stay the counts, and an upload's games needn't add up to
+  them (a stopped workload uploads games whose results were refused).
 
-Batches are stored apart from the per-game files (see *Storage*) and never purged with them.
+nyayo keeps the games in **batches of its own**, 64 games each, one match per batch, every game as it came
+(*Storage*); an upload's games may span two batches, and a batch hold several uploads'. They are apart from the
+per-game files and never purged with them.
 
 ### Export
 
-`GET /api/games` streams every stored game that matches, as **one bz2 stream**: the stored batches concatenated (a
-valid multi-stream bz2 file; Python's `bz2` and `bzip2 -d` read it whole), with sealed single games compressed and
-added, so it is every game nyayo has. Open like the pages. `manage.py export_games` takes the same filters and writes
+`GET /api/games` streams every stored game that matches, as **one bz2 stream**: each of nyayo's batches, sealed or
+still being filled, as a bz2 stream of its own, concatenated (a valid multi-stream bz2 file; Python's `bz2` and
+`bzip2 -d` read it whole), with sealed single games compressed and added, so it is every game nyayo has. An upload
+still waiting for the worker isn't in it yet. Open like the pages. `manage.py export_games` takes the same filters and writes
 a file.
 
 | Filter | Matches |
@@ -224,7 +237,7 @@ a file.
 | `engine` | the subject's `name` |
 | `branch`, `commit` | the subject's `branch`, or its `commit` (a prefix of at least 7) |
 | `tc`, `book` | `settings.tc`, `settings.book` |
-| `since`, `until` | when the batch or game was received, ISO 8601 dates |
+| `since`, `until` | when the batch was begun or the game received, ISO 8601 dates |
 | `match` | one match id |
 
 Filters combine with *and*; no filter is every game. Matches are filtered on what is indexed already; there is no index
@@ -256,10 +269,18 @@ batch of results and every action by hand:
 The branch is the subject's and opponent's `branch`, never their name: a test of `feature-x` against `main` is
 *Elephant feature-x* against *Elephant main* on the page.
 
-**Games** come as batches, one per workload. Every game carries `[Subject]` (the colour dev played) and
-`[Opponent "base"]`, and its players are named `<engine> <branch>` (`Elephant feature-x`, `Elephant main`), rewritten
-from cutechess's `<engine>-dev` and `<engine>-base`. A test of a branch against itself has the same name on both
-sides; the tags still tell them apart.
+**Games** come as uploads, one per workload: the `.pgn.bz2` the worker uploaded to OpenBench, forwarded unchanged as
+`PUT .../pgns/<result id>.<book index>` (*Batches*). The worker names and tags every game before it uploads: its
+players are `<engine> <branch>` (`Elephant feature-x`, `Elephant main`), rewritten from cutechess's `<engine>-dev` and
+`<engine>-base`, and it carries `[Subject]` (the colour dev played) and `[Opponent "base"]`. A test of a branch
+against itself has the same name on both sides; the tags still tell them apart. Tests from before the worker did this
+are sent again from OpenBench's tars by `report_to_nyayo --games`, which names and tags their games on the server
+first. A game without the tags refuses its upload.
+
+The games are as cutechess-ob writes them and OpenBench's worker strips them: the 7-tag roster, `FEN`, `TimeControl`,
+`ScaleFactor` (and `Termination` from client 39 on), no move numbers, and each move's comment
+`{<score> <depth>/<seldepth> <milliseconds> <nodes>}` (`{+1.31 14/40 159 377044}`, `{book}`), the score the mover's
+in pawns and a mate's distance in plies, as fastchess writes it. The game page reads both.
 
 ## Storage
 
@@ -269,8 +290,18 @@ PUT. The database is an index: matches, per-opponent results, snapshots (the cou
 of the progress graph) and a row per game (result, termination, colour, opponent). `manage.py purge_games --match ID |
 --older-than DAYS` removes games' files and rows without touching a match's document, counts or snapshots.
 
-Batches are `games/batches/<match id>/<batch>.pgn.bz2`, bz2 whatever the upload's encoding (a plain or gzipped upload
-is recompressed; the sha256 is of the stored file), with a row each (match, batch, games, bytes, sha256, machine,
-received) and no row per game: picking a training set filters on the match, which is indexed already. `purge_games`
-never touches them; `manage.py purge_batches --match ID` removes a match's batches and is only run by hand. They are
-data to keep: a backup has to cover `games/batches/` (on bobby, the Synology's share), not the git backup.
+An upload waits as sent in `uploads/<match id>/<name>` in the data directory until the worker has put its games
+away, then the file goes and its row stays (name, sha256, machine, state, games, the batches they went to). A refused
+upload's file stays, to be looked at or read again.
+
+nyayo's batches are `games/batches/<match id>/<number>.pgn.zst` (`NYAYO_BATCHES_DIR`), numbered from 1 per match: 64
+games each (`NYAYO_BATCH_GAMES`; every batch records its own count), fewer in a match's last, sealed short once the
+match has ended and nothing has been heard of it for five minutes (`NYAYO_SEAL_AFTER`). The batch being filled is
+plain PGN, `<number>.pgn`, compressed with zstd when it is sealed and never changed after. Each batch has a row
+(match, number, state, games, sizes, sha256 of the stored file, the reader that read its games, and its sources:
+which uploads' games it holds, in order), and each game a **card** in the index database (`NYAYO_INDEX_DB`, its own
+SQLite file on local disk): its batch, its place and offset in it, its id, the subject's colour, the opponent, the
+result, `Termination` and plies. The cards are derived and can be written again from the batches.
+`purge_games` never touches batches; `manage.py purge_batches --match ID` removes a match's batches, cards and
+uploads and is only run by hand. They are data to keep: a backup has to cover `games/batches/` (on bobby, the
+Synology's share), not the git backup.

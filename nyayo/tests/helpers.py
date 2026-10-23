@@ -11,6 +11,7 @@ from pathlib import Path
 
 from django.test import TestCase, override_settings
 
+from nyayo.matches.catalogue import close_index
 from nyayo.runs.models import Machine
 
 FIXTURE = Path(__file__).parent / "fixtures" / "d695c0979c67-smoke-20261014T015748.json"
@@ -72,10 +73,14 @@ class NyayoTestCase(TestCase):
         self.addCleanup(shutil.rmtree, self.games, ignore_errors=True)
         self.batches = Path(tempfile.mkdtemp(prefix="nyayo-batches-"))
         self.addCleanup(shutil.rmtree, self.batches, ignore_errors=True)
+        self.data = Path(tempfile.mkdtemp(prefix="nyayo-data-"))
+        self.addCleanup(shutil.rmtree, self.data, ignore_errors=True)
         overrides = override_settings(NYAYO_ARCHIVE_DIR=self.archive, NYAYO_GAMES_DIR=self.games,
-                                      NYAYO_BATCHES_DIR=self.batches)
+                                      NYAYO_BATCHES_DIR=self.batches, NYAYO_UPLOADS_DIR=self.data / "uploads",
+                                      NYAYO_INDEX_DB=self.data / "index.sqlite3")
         overrides.enable()
         self.addCleanup(overrides.disable)
+        self.addCleanup(close_index)
         self.machine = Machine(name="babylon")
         self.token = self.machine.new_token()
         self.machine.save()

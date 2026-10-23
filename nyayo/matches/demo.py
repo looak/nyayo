@@ -15,9 +15,9 @@ import chess
 import chess.pgn
 from django.utils import timezone
 
-from . import batches, games
+from . import catalogue, games, reader, uploads, worker
 from .ingest import delete_archived, ingest
-from .models import Match, MatchSnapshot
+from .models import Batch, Match, MatchSnapshot, Upload
 
 ELO0, ELO1, ALPHA, BETA = 0.0, 5.0, 0.05, 0.05
 LOWER, UPPER = math.log(BETA / (1 - ALPHA)), math.log((1 - BETA) / ALPHA)
@@ -111,7 +111,7 @@ def document(match_id, state, now, started, counts, llr, result, stats_):
 def forget(match_id):
     match = Match.objects.filter(pk=match_id).first()
     if match is not None:
-        batches.delete_batches(match_id)
+        catalogue.purge(match_id)
         games.delete_files(match_id)
         delete_archived(match_id)
         match.delete()
@@ -207,7 +207,12 @@ def seed_batch(match_id):
     rng = random.Random(match_id + "-batch")
     text = "\n\n".join(make_game(rng, n, rng.choice(["1-0", "0-1", "1/2-1/2"]), rng.randint(40, 90),
                                   "white" if n % 2 else "black") for n in range(1, 9))
-    batches.store(match_id, "demo.0", bz2.compress(text.encode()), batches.BZIP2, None, None)
+    uploads.store(match_id, "demo.0", bz2.compress(text.encode()), uploads.BZIP2, None, None)
+    # put away at once, as the worker would within a second, and sealed short: the test has ended
+    worker.process_upload(Upload.objects.select_related("match").get(match_id=match_id, name="demo.0"),
+                          reader.default())
+    for batch in Batch.objects.filter(match_id=match_id, state="open"):
+        catalogue.seal(batch)
 
 
 def seed():
