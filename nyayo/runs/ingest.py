@@ -264,9 +264,13 @@ def write_archive(run_id, raw, machine):
 
 
 def atomic_write(path, data):
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_bytes(data)
-    os.replace(temporary, path)
+    # a name of its own, so two writers of the same file (two producers, two workers) don't replace each other's
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+    try:
+        temporary.write_bytes(data)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def delete_archived(run_id):

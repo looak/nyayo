@@ -68,11 +68,51 @@ def ingest(raw, machine=None, match_id=None):
     report = document.get("report")
     base = report["base"] if report else None
 
-    existing = Match.objects.filter(pk=m["id"]).first()
+    existing = find_match(m["id"])
+    if existing is None and base is None:
+        created = create_new(raw, document, machine)
+        if created is not None:
+            return created
+        # another producer created it first, while this one was waiting: this document is an update of what it wrote
+        existing = find_match(m["id"])
+    check_against(existing, document, base)
+
+    if base is None:
+        write_archive(m["id"], raw, machine)
+    match = store(existing, document, report, base)
+    if base is not None:
+        archive_merged(match, document, machine)
+    return Ingested(match, False)
+
+
+def create_new(raw, document, machine):
+    """Creates a match nyayo has no record of, or returns None when it finds there is one by now.
+
+    Two producers sending a new match's first document at the same moment both find no match. The lookup is made
+    again here under the database's write lock (the connection's transactions are IMMEDIATE), so the second one waits,
+    then finds the match the first created and goes on as an update, checked against what the first wrote and its
+    archive. Nothing is written, archive included, until the lock is held and the match is known to be new."""
+    m = document["match"]
+    with transaction.atomic():
+        if find_match(m["id"]) is not None:
+            return None
+        write_archive(m["id"], raw, machine)
+        match = create_match(document, machine)
+        snapshot(match, document)
+    return Ingested(match, True)
+
+
+def find_match(match_id):
+    return Match.objects.filter(pk=match_id).first()
+
+
+def check_against(existing, document, base):
+    """The rules for a document against the match it is an update of (nothing, for a new match)."""
     if base is not None:
         # a report by changes goes on top of what nyayo holds, or not at all
         if existing is None or existing.report_seq is None:
-            raise WrongBase(f"report.base is {base} but nyayo holds no seq for {m['id']}, send the whole document")
+            raise WrongBase(f"report.base is {base} but nyayo holds no seq for {document['match']['id']}, send the "
+                            f"whole document")
         previous = read_archived(existing.pk)
         if previous is not None:
             check_update(previous, document, changes=True)
@@ -83,22 +123,20 @@ def ingest(raw, machine=None, match_id=None):
         else:
             check_update_against(existing, document)
 
-    if base is None:
-        write_archive(m["id"], raw, machine)
+
+def store(existing, document, report, base):
+    """Updates existing, in one transaction."""
     with transaction.atomic():
         if base is not None:
             # compare and set in one statement: another report in between makes this one the wrong one
             if not Match.objects.filter(pk=existing.pk, report_seq=base).update(report_seq=report["seq"]):
                 current = Match.objects.values_list("report_seq", flat=True).get(pk=existing.pk)
-                raise WrongBase(f"report.base is {base} but nyayo's seq for {m['id']} is {current}, send the whole "
-                                f"document")
+                raise WrongBase(f"report.base is {base} but nyayo's seq for {existing.pk} is {current}, send the "
+                                f"whole document")
             existing.report_seq = report["seq"]
-        match = create_match(document, machine) if existing is None else update_match(existing, document,
-                                                                                         changes=base is not None)
+        match = update_match(existing, document, changes=base is not None)
         snapshot(match, document)
-    if base is not None:
-        archive_merged(match, document, machine)
-    return Ingested(match, existing is None)
+    return match
 
 
 # --- parsing & validation ---
