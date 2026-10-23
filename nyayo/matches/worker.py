@@ -9,8 +9,11 @@ producer sends waits for it.
   match's open batch, sealed at 64 games, each with its card; then the upload is done and its file deleted. Its row
   counts the games appended, and each batch's row which uploads' games it holds, so a worker stopped half way carries
   on where it was and appends nothing twice.
-- **A match that has ended** (finished, stopped or broken, nothing heard for NYAYO_SEAL_AFTER seconds and no upload
-  pending) has its open batch sealed short.
+- **A finished single game** (a gauntlet's, sent move by move and sealed by its final PGN) is read the same way and
+  appended to its match's open batch, as it came. Its file and row stay until that batch is sealed; purge_games
+  leaves it until then. Its row says which batch it is in, so it is kept once however often it is sent.
+- **A match that has ended** (finished, stopped or broken, nothing heard for NYAYO_SEAL_AFTER seconds, no upload
+  pending and no game waiting) has its open batch sealed short.
 """
 
 import contextlib
@@ -26,8 +29,8 @@ from django.utils import timezone
 
 from nyayo.runs.ingest import IngestError
 
-from . import catalogue, reader as readers, uploads
-from .models import Batch, Upload
+from . import catalogue, games as single_games, reader as readers, uploads
+from .models import Batch, Game, MatchResult, Upload
 
 log = logging.getLogger("nyayo.worker")
 
@@ -113,12 +116,72 @@ def process_upload(upload, reader):
     log.info("upload %s/%s: %d games kept", upload.match_id, upload.name, len(games))
 
 
+def read_singles(rows, reader):
+    """[(row, PGN as it came, record)] for single games, read in one go when they read as one input; a game that
+    doesn't read is left out (it was checked when it was stored, so this is a file gone missing or changed)."""
+    texts = [(row, single_games.read_pgn(row.match_id, row.game)) for row in rows]
+    for row, raw in texts:
+        if raw is None:
+            log.warning("game %s/%s has no file, not kept", row.match_id, row.game)
+    texts = [(row, raw.rstrip() + b"\n\n") for row, raw in texts if raw]
+    joined = b"".join(raw for _, raw in texts)
+    records = reader.read(joined) if texts else []
+    if len(records) != len(texts):
+        # one of them doesn't split as one game: read each on its own
+        records = [(reader.read(raw) or [None])[0] for _, raw in texts]
+        offsets = [0] * len(texts)
+    else:
+        offsets, at = [], 0
+        for _, raw in texts:
+            offsets.append(at)
+            at += len(raw)
+    out = []
+    for (row, raw), start, record in zip(texts, offsets, records):
+        if record is None or len(readers.spans(raw)) != 1 or not record["ok"] \
+                or record["result"] not in uploads.FINAL:
+            reason = (record or {}).get("error") or "it doesn't read as one finished game"
+            log.warning("game %s/%s doesn't read, not kept: %s", row.match_id, row.game, reason)
+            continue
+        offset = record["offset"] - start
+        out.append((row, raw[offset:offset + record["length"]], record))
+    return out
+
+
+def keep_singles(match_id, reader, rows=None):
+    """Puts a match's waiting single games in its batches, in the order they finished. Returns how many it kept."""
+    if rows is None:
+        rows = list(Game.objects.filter(match_id=match_id, waiting=True, kept_in=None).order_by("finished_at", "pk"))
+    opponents = dict(MatchResult.objects.filter(match_id=match_id).values_list("opponent", "pk"))
+    found = read_singles(rows, reader)
+    unread = {row.pk for row in rows} - {row.pk for row, _, _ in found}
+    if unread:
+        Game.objects.filter(pk__in=unread).update(waiting=False)
+    items = [(row.game, pgn, {"colour": row.colour, "opponent": opponents.get(row.opponent), "result": row.result,
+                              "termination": row.termination, "plies": record["plies"]}, row.pk)
+             for row, pgn, record in found]
+    while items:
+        batch = catalogue.open_batch(match_id)
+        group, items = items[:settings.NYAYO_BATCH_GAMES - batch.games], items[settings.NYAYO_BATCH_GAMES - batch.games:]
+
+        def progress(batch, keys=[pk for *_, pk in group]):
+            Game.objects.filter(pk__in=keys).update(kept_in=batch, waiting=False)
+
+        catalogue.append(batch, [(game, pgn, fields) for game, pgn, fields, _ in group], reader.name, None, progress)
+        if catalogue.full(batch):
+            catalogue.seal(batch)
+    if found:
+        log.info("match %s: %d finished game%s kept", match_id, len(found), "s" if len(found) != 1 else "")
+    return len(found)
+
+
 def ended_batches(now=None):
     """Open batches of matches that have ended and have nothing more on the way."""
     quiet = (now or timezone.now()) - timedelta(seconds=settings.NYAYO_SEAL_AFTER)
     pending = Upload.objects.filter(state="pending").values("match_id")
+    waiting = Game.objects.filter(waiting=True).values("match_id")
     return (Batch.objects.filter(state="open", games__gt=0, match__received_at__lt=quiet)
-            .exclude(match__state="running").exclude(match_id__in=pending).order_by("pk"))
+            .exclude(match__state="running").exclude(match_id__in=pending).exclude(match_id__in=waiting)
+            .order_by("pk"))
 
 
 def step(reader):
@@ -126,6 +189,10 @@ def step(reader):
     upload = Upload.objects.filter(state="pending").select_related("match").order_by("received_at", "pk").first()
     if upload is not None:
         process_upload(upload, reader)
+        return True
+    match_id = Game.objects.filter(waiting=True).order_by("finished_at", "pk").values_list("match_id", flat=True).first()
+    if match_id is not None:
+        keep_singles(match_id, reader)
         return True
     batch = ended_batches().first()
     if batch is not None:
