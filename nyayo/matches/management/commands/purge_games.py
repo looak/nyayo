@@ -10,7 +10,8 @@ from nyayo.matches.models import Game
 
 class Command(BaseCommand):
     help = ("Deletes games' PGN files and their index rows, nothing else: a match's document, counts and snapshots "
-            "stay. Pick the games with --match, --older-than or both.")
+            "stay. Pick the games with --match, --older-than or both. A finished game is only deleted once it is "
+            "in a sealed batch, where it is kept as data; until then it is left, and counted as kept back.")
 
     def add_arguments(self, parser):
         parser.add_argument("--match", help="only this match's games")
@@ -27,6 +28,10 @@ class Command(BaseCommand):
         if older_than is not None:
             cutoff = timezone.now() - timedelta(days=older_than)
             queryset = queryset.annotate(since=Coalesce("finished_at", "received_at")).filter(since__lt=cutoff)
+        # a finished game goes only once it is safe in a sealed batch: never lost between the two
+        kept_back = queryset.exclude(result="*").exclude(kept_in__state="sealed")
+        held = kept_back.count()
+        queryset = queryset.exclude(pk__in=kept_back.values("pk"))
         count = 0
         for game in queryset.order_by("match_id", "game"):
             self.stdout.write(f"{'would delete' if dry_run else 'deleting'} {game.match_id}/{game.game} {game.result}")
@@ -35,3 +40,5 @@ class Command(BaseCommand):
                 game.delete()
             count += 1
         self.stdout.write(f"{count} game{'s' if count != 1 else ''} {'would be ' if dry_run else ''}deleted")
+        if held:
+            self.stdout.write(f"{held} finished game{'s' if held != 1 else ''} kept back, not in a sealed batch yet")

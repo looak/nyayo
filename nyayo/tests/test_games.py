@@ -4,6 +4,7 @@ from io import StringIO
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.test import override_settings
 from django.utils import timezone
 
 from nyayo.matches import games
@@ -174,6 +175,11 @@ class Purging(GameTestCase):
         super().setUp()
         self.put_game(pgn(result="1-0"), game="1")
         self.put_game(pgn(), game="2")
+        # a finished game is purged only once it is in a sealed batch
+        from nyayo.matches import worker
+
+        with override_settings(NYAYO_BATCH_GAMES=1):
+            worker.run(once=True)
 
     def purge(self, *args):
         out = StringIO()

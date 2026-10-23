@@ -1,9 +1,9 @@
 """Every stored game matching a filter, as one bz2 stream (docs/match-schema.md, Export).
 
 Each of nyayo's batches, sealed or open, is compressed as a bz2 stream of its own and the streams concatenated (a
-multi-stream bz2 file is valid, Python's `bz2` and `bzip2 -d` read it whole), then the sealed single games of
-gauntlets, so the export is every game nyayo has for the filter. Matches are filtered on what is indexed already;
-there is no index of positions.
+multi-stream bz2 file is valid, Python's `bz2` and `bzip2 -d` read it whole), then the finished single games of
+gauntlets not in a batch yet, so the export is every game nyayo has for the filter, each once. Matches are filtered
+on what is indexed already; there is no index of positions.
 """
 
 import bz2
@@ -73,7 +73,8 @@ def chunks(filters):
     ids = matches(filters).values("pk")
     low, high = window(filters)
     batches = Batch.objects.filter(match_id__in=ids, games__gt=0)
-    singles = Game.objects.filter(match_id__in=ids).exclude(result="*")
+    # a finished game already in a batch is exported from there, once
+    singles = Game.objects.filter(match_id__in=ids, kept_in=None).exclude(result="*")
     if low:
         batches, singles = batches.filter(created_at__gte=low), singles.filter(received_at__gte=low)
     if high:
