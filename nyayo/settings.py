@@ -51,6 +51,10 @@ NYAYO_GAMES_DIR = DATA_DIR / "games"
 # one row query, so this can be fast; raise it if nyayo's workers are busy with many viewers.
 NYAYO_GAME_POLL_MS = int(os.environ.get("NYAYO_GAME_POLL_MS", 100))
 
+# How many of a gunicorn worker's threads may handle game requests (a game's moves, a batch of games) at once; the
+# rest are kept for match reports and pages (nyayo/gamethreads.py). Below the --threads in deploy/nyayo.service.
+NYAYO_GAME_THREADS = int(os.environ.get("NYAYO_GAME_THREADS", 2))
+
 # Runs that never became history expire (manage.py expire_runs): wip runs this many days after being recorded,
 # committed runs this many days after being committed if they weren't published by then.
 NYAYO_WIP_DAYS = int(os.environ.get("NYAYO_WIP_DAYS", 14))
@@ -88,6 +92,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "nyayo.gamethreads.GameThreadsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
