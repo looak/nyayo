@@ -32,7 +32,7 @@ with the reason, `404` an unknown match (PUT the match first), `409` a change th
 `413` a body over 64 MB. The body never changes meaning; what nyayo has after a report or a game request is said in
 headers (`Nyayo-Seq`, `Nyayo-Schedule-Digest`, `Nyayo-Plies`, below), on the success and on the `409` alike.
 
-A game or batch PUT may also be `503` with `Retry-After` (seconds): nyayo is busy with other games and didn't read it.
+A game PUT or PATCH, or a batch PUT, may also be `503` with `Retry-After` (seconds): nyayo is busy with other games and didn't read it.
 Send it again after that long; it is never a refusal. Game requests are held to part of nyayo's threads so that match
 reports always find one free, and a report is never answered `503` for being busy.
 
