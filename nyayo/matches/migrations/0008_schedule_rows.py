@@ -45,7 +45,7 @@ def to_json(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("matches", "0005_gamebatch"),
+        ("matches", "0007_kept_single_games"),
     ]
 
     operations = [
