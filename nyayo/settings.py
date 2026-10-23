@@ -69,6 +69,19 @@ NYAYO_BACKUP_REPO = os.environ.get("NYAYO_BACKUP_REPO", "")
 # and 256 MB once decompressed.
 NYAYO_BATCHES_DIR = Path(os.environ.get("NYAYO_BATCHES_DIR") or NYAYO_GAMES_DIR / "batches").resolve()
 NYAYO_MAX_BATCH_UPLOAD_BYTES = 64 * 1024 * 1024
+# Games in one of nyayo's batches; every batch records its own count, so changing this needs nothing else.
+NYAYO_BATCH_GAMES = int(os.environ.get("NYAYO_BATCH_GAMES", 64))
+# A match's last batch is sealed short once the match has ended and nyayo has heard nothing of it for this long.
+NYAYO_SEAL_AFTER = int(os.environ.get("NYAYO_SEAL_AFTER", 300))
+
+# Uploads of finished games wait here, as sent, until the worker has put their games in batches (then they're
+# deleted). Not in the backup: a pending upload is the producer's to send again.
+NYAYO_UPLOADS_DIR = DATA_DIR / "uploads"
+
+# The index of every game kept as data, a card per game: its own SQLite database, derived from the batches and
+# rebuilt from them, so it is on local disk (never on a network share, where SQLite's locking isn't safe) and not
+# in the backup.
+NYAYO_INDEX_DB = Path(os.environ.get("NYAYO_INDEX_DB") or DATA_DIR / "index.sqlite3").resolve()
 NYAYO_MAX_BATCH_BYTES = 256 * 1024 * 1024
 
 # A running match with no report for this many minutes is shown as silent (derived when a page is drawn, never stored).

@@ -11,8 +11,8 @@ main() {
     "$NYAYO_BIN/python" -m pip install --quiet -e .
     "$NYAYO_BIN/python" manage.py migrate
     "$NYAYO_BIN/python" manage.py collectstatic --noinput --verbosity 0
-    sudo systemctl restart nyayo
-    systemctl status nyayo --no-pager
+    sudo systemctl restart nyayo nyayo-worker
+    systemctl status nyayo nyayo-worker --no-pager
 }
 
 main "$@"
