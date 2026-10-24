@@ -10,6 +10,7 @@ from django.utils import timezone as django_timezone
 
 from nyayo.matches import pgnview, stats, timing
 from nyayo.matches.models import Match
+from nyayo.matches.templatetags.matches_extras import evalbar_share
 
 from .test_games import GameTestCase, pgn
 from .test_matches_ingest import ID, gauntlet, scheduled, v1
@@ -82,6 +83,24 @@ class Comments(SimpleTestCase):
         self.assertEqual(last.uci(), "e2e4")
         self.assertIsNotNone(board.piece_at(chess.E4))
         self.assertTrue(pgnview.board_svg(parsed, 0).startswith("<svg"))
+
+    def test_every_position_for_the_browser_board(self):
+        every = pgnview.positions(pgnview.load(COMMENTED))
+        self.assertEqual(len(every), 5)
+        self.assertEqual(every[0], {"fen": chess.STARTING_FEN, "last": None, "check": False, "eval": None,
+                                    "eval_text": ""})
+        self.assertEqual(every[1]["last"], ["e2", "e4"])
+        self.assertEqual((every[1]["eval"], every[1]["eval_text"]), (0.30, "0.3"))
+        self.assertEqual(every[3]["eval_text"], "M3")
+        # a book move has no score: the bar keeps the last one
+        self.assertEqual(every[4]["eval_text"], "M3")
+
+    def test_eval_bar_share(self):
+        self.assertEqual(evalbar_share(None), 50)
+        self.assertEqual(evalbar_share(0.0), 50.0)
+        self.assertGreater(evalbar_share(1.0), 55)
+        self.assertLess(evalbar_share(-1.0), 45)
+        self.assertGreater(evalbar_share(50.0), 99)
 
     def test_plain_pgn_omits_annotations(self):
         text = pgnview.plain_pgn(COMMENTED)
@@ -214,7 +233,9 @@ class Pages(GameTestCase):
         self.put_game(COMMENTED)
         response = self.client.get("/matches/gauntlet-test-1/games/1")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "<svg")
+        self.assertContains(response, 'class="board-slot" data-orientation="white"')
+        self.assertContains(response, 'id="game-positions"')
+        self.assertContains(response, "chessground.min.js")
         self.assertContains(response, "Nf3")
         self.assertContains(response, "+M3")
         self.assertContains(response, 'data-plies="4"')
@@ -245,7 +266,8 @@ class Pages(GameTestCase):
         data = json.loads(self.client.get("/matches/gauntlet-test-1/games/1/live").content)
         self.assertTrue(data["live"])
         self.assertEqual(data["plies"], 4)
-        self.assertIn("<svg", data["html"])
+        self.assertIn('class="board-slot"', data["html"])
+        self.assertIn('id="game-positions"', data["html"])
         self.put_game(COMMENTED.replace(b'"*"', b'"1-0"').replace(b"Nc6 {book} *", b"Nc6 {book} 1-0"))
         data = json.loads(self.client.get("/matches/gauntlet-test-1/games/1/live").content)
         self.assertFalse(data["live"])
@@ -277,7 +299,7 @@ class Pages(GameTestCase):
     def test_the_subject_is_at_the_bottom(self):
         self.put_game(pgn(white="Barbarossa 0.6.0", black="Elephant 1.0.0"))
         self.assertEqual(Match.objects.count(), 1)
-        self.assertContains(self.client.get("/matches/gauntlet-test-1/games/1"), "<svg")
+        self.assertContains(self.client.get("/matches/gauntlet-test-1/games/1"), 'data-orientation="black"')
 
 
 FROM_A_POSITION = "\n".join([

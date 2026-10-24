@@ -15,7 +15,15 @@
   <div class="game-layout">
     <div class="board-col">
       {% include "matches/_player_bar.html" with side=top %}
-      <div class="board-frame">{{ board|safe }}</div>
+      <div class="board-frame">
+        <div class="evalbar{% if orientation == "black" %} flipped{% endif %}" title="the latest score, from white's side">
+          <div class="evalbar-white" style="height: {% evalbar_share shown.eval %}%"></div>
+          <span class="evalbar-label">{{ shown.eval_text }}</span>
+        </div>
+        <div class="board-slot" data-orientation="{{ orientation }}" data-fen="{{ shown.fen }}"
+             data-last="{% if shown.last %}{{ shown.last|join:" " }}{% endif %}" data-check="{% if shown.check %}1{% endif %}"></div>
+      </div>
+      {{ positions|json_script:"game-positions" }}
       {% include "matches/_player_bar.html" with side=bottom %}
       <p class="board-nav nowrap">
         <a href="?ply=0" data-goto="0" title="first position (Home)">⏮</a>
