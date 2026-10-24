@@ -47,7 +47,8 @@ class Frame(BatchCase):
 
         self.assertIn("/matches", active(self.page("/matches")))
         self.assertIn("/matches", active(self.page("/matches/gauntlet-test-1")))
-        self.assertIn('href="/"', active(self.page("/")))
+        self.assertIn('href="/"', active(self.page("/")))  # the dashboard
+        self.assertIn('href="/runs"', active(self.page("/runs")))
         self.assertIn("/games", active(self.page("/games")))
         self.assertIn("Catalogue › Games", self.page("/games"))
 

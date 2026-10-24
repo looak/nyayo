@@ -1,4 +1,4 @@
-"""The dashboard (`/dashboard`): what nyayo holds and what is being played, at a glance, in Pi-hole's way.
+"""The dashboard (`/`, the home page): what nyayo holds and what is being played, at a glance, in Pi-hole's way.
 
 Its figures over the games kept come from the index database's cards, grouped in SQL, never from the batches
 themselves: a few scans of one table, each well under a second for a hundred thousand cards.

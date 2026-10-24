@@ -65,7 +65,7 @@ other games from it) and the match it came from; a game opens in its own view wi
 result for the engine under test, how the game ended, its length in moves and its opening. It reads the index of
 cards, so it shows a game once the worker has put it away.
 
-The **Dashboard** (`/dashboard`, the sidebar's brand links to it) shows what nyayo holds at a glance: tiles for the
+The **Dashboard** (`/`, the home page) shows what nyayo holds at a glance: tiles for the
 games kept, the matches running, the games played in the last day and the index, a GitHub-style calendar of the games
 kept by day, how the kept games ended and how they went for the engine under test, the running matches with their
 boards, the latest matches, and the most played book positions.

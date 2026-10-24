@@ -1,4 +1,4 @@
-"""The dashboard (/dashboard): tiles, a calendar of games kept, two donuts, matches and openings."""
+"""The dashboard (/, the home page): tiles, a calendar of games kept, two donuts, matches and openings."""
 
 import bz2
 from datetime import timedelta
@@ -15,7 +15,7 @@ BOOK = "rnbqkb1r/pp2pppp/3p1n2/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 0 5"
 
 class Dashboard(BatchCase):
     def page(self):
-        response = self.client.get("/dashboard")
+        response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
 
@@ -24,7 +24,7 @@ class Dashboard(BatchCase):
         self.assertIn(">Games kept<", page)
         self.assertIn("No games kept yet.", page)
         self.assertIn("No game has been read for its opening yet.", page)
-        self.assertIn('href="/dashboard" class="active"', page)
+        self.assertIn('href="/" class="active"', page)
 
     def test_the_games_kept(self):
         today = timezone.now().strftime("%Y.%m.%d")

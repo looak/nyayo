@@ -106,7 +106,7 @@ class Lists(GameTestCase):
         Run.objects.bulk_create([
             Run(id=uuid.uuid4(), kind="smoke", source="local", state="wip", branch="main", tree=f"{n:040d}",
                 recorded_at=now - timedelta(minutes=n)) for n in range(70)])
-        first = self.client.get("/").content.decode()
+        first = self.client.get("/runs").content.decode()
         self.assertEqual(first.count('<a href="/runs/'), 64)
         self.assertIn("page 1 of 2", first)
-        self.assertEqual(self.client.get("/?page=2").content.decode().count('<a href="/runs/'), 6)
+        self.assertEqual(self.client.get("/runs?page=2").content.decode().count('<a href="/runs/'), 6)
