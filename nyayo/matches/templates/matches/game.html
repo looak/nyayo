@@ -1,6 +1,31 @@
 {% extends "runs/base.html" %}
+{% load static %}
 {% block title %}Game {{ game }} · {{ match.name|default:match.pk }} · nyayo{% endblock %}
-{% block head %}<style>main { max-width: 1760px; }</style>{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{% static 'vendor/chessground-9.1.1/chessground.base.css' %}">
+<link rel="stylesheet" href="{% static 'vendor/chessground-9.1.1/chessground.brown.css' %}">
+<link rel="stylesheet" href="{% static 'vendor/chessground-9.1.1/chessground.cburnett.css' %}">
+<style>
+  main { max-width: 1760px; }
+  /* lichess's board, chessground, beside an eval bar */
+  .board-frame { display: flex; gap: 6px; align-items: stretch; }
+  .board-slot { flex: 1; min-width: 0; aspect-ratio: 1; }
+  .board-slot .cg-wrap { width: 100%; height: 100%; }
+  .evalbar { position: relative; width: 18px; flex: none; background: #403d39; border-radius: 3px; overflow: hidden;
+             border: 1px solid #111; }
+  .evalbar-white { position: absolute; left: 0; right: 0; bottom: 0; background: #e9e9e6; transition: height .25s; }
+  .evalbar.flipped .evalbar-white { bottom: auto; top: 0; }
+  .evalbar-label { position: absolute; left: 0; right: 0; bottom: 3px; text-align: center; font: 700 9px/1 system-ui, sans-serif;
+                   color: #333; }
+  .evalbar.flipped .evalbar-label { bottom: auto; top: 3px; }
+  /* the moves as lichess lists them: the move number in its own column, the move being shown in blue */
+  table.moves td.num { background: var(--code-bg); text-align: right; }
+  table.moves td.mv { cursor: pointer; }
+  table.moves td.mv:hover { background: #3a4248; }
+  table.moves td.here { background: #2e5a78; }
+  table.moves td.here a, table.moves td.here span { color: #fff; }
+</style>
+{% endblock %}
 {% block content %}
 <p class="muted"><a href="{% url 'match' match.pk %}">← {{ match.name|default:match.pk }}</a>
   · game {{ game }}{% if headers %}: {{ headers.White }} <span class="muted">v</span> {{ headers.Black }}{% endif %}</p>
@@ -9,9 +34,49 @@
      data-live="{% if live or waiting %}1{% endif %}">
 {% include "matches/_game_body.html" %}
 </div>
-<script>
+<script type="module">
+import { Chessground } from "{% static 'vendor/chessground-9.1.1/chessground.min.js' %}";
+
 (function () {
   var body = document.getElementById("game-body");
+
+  // --- the board: one chessground for the page's life, moved into each redrawn body, so moves animate ---
+  var boardEl = document.createElement("div");
+  var ground = null;
+  var positions = [];
+  function readPositions() {
+    var data = body.querySelector("#game-positions");
+    positions = data ? JSON.parse(data.textContent) : [];
+  }
+  function share(pawns) {   // lichess's winning chances, as matches_extras.evalbar_share works them out
+    if (pawns === null || pawns === undefined) return 50;
+    return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * pawns * 100)) - 1);
+  }
+  function setBoard(ply) {
+    var slot = body.querySelector(".board-slot");
+    if (!slot) return;
+    var p = positions[ply] || {fen: slot.dataset.fen, last: slot.dataset.last ? slot.dataset.last.split(" ") : null,
+                               check: slot.dataset.check === "1", eval: null, eval_text: ""};
+    if (boardEl.parentNode !== slot) slot.appendChild(boardEl);
+    var config = {fen: p.fen, lastMove: p.last || undefined, check: p.check, orientation: slot.dataset.orientation || "white"};
+    if (!ground) {
+      ground = Chessground(boardEl, Object.assign({viewOnly: true, coordinates: true, animation: {duration: 180}}, config));
+    } else {
+      ground.set(config);
+      ground.redrawAll();
+    }
+    var bar = body.querySelector(".evalbar-white"), label = body.querySelector(".evalbar-label");
+    if (bar) bar.style.height = share(p.eval) + "%";
+    if (label) label.textContent = p.eval_text || "";
+  }
+  // a step shows at once from the positions the page already has; the rest of the page follows from the server
+  function stepTo(ply) {
+    setBoard(ply);
+    body.querySelectorAll("td.mv").forEach(function (td) {
+      var a = td.querySelector("[data-goto]");
+      td.classList.toggle("here", !!a && parseInt(a.dataset.goto, 10) === ply);
+    });
+  }
   var url = body.dataset.url;
   var poll = parseInt(body.dataset.poll, 10) || 100;
   var version = body.dataset.version || "";
@@ -135,6 +200,8 @@
   setInterval(tick, 100);
 
   function shownNow() {
+    readPositions();
+    setBoard(current());
     readClocks();
     applyView();
     syncMovesHeight();
@@ -177,6 +244,7 @@
     ply = Math.max(0, Math.min(ply, plies()));
     following = ply === plies();
     shown = ply;
+    stepTo(ply);
     busy = false;
     load(following ? null : ply, false);
   }

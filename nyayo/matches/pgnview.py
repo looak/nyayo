@@ -182,6 +182,30 @@ def position(parsed, ply):
     return board, last
 
 
+def positions(parsed):
+    """Every position of the game for the board in the browser, from the start (ply 0) to the last move: its FEN, the
+    move that led to it as two squares, whether the side to move is in check, and the eval bar's figure, the latest
+    score from white's side at or before it (pawns, mates at the graph's limit, and the text to show)."""
+    board = parsed.start.copy()
+    out, pawns, text = [], None, ""
+
+    def entry(last):
+        return {"fen": board.fen(), "last": [last[:2], last[2:4]] if last else None, "check": board.is_check(),
+                "eval": pawns, "eval_text": text}
+
+    out.append(entry(None))
+    for move in parsed.moves:
+        board.push(chess.Move.from_uci(move.uci))
+        if move.pawns is not None:
+            pawns = move.pawns
+            if "M" in move.score:
+                text = ("" if pawns > 0 else "-") + move.score.lstrip("+-")
+            else:
+                text = f"{abs(pawns):.1f}"
+        out.append(entry(move.uci))
+    return out
+
+
 def board_svg(parsed, ply, orientation=chess.WHITE, size=400):
     board, last = position(parsed, ply)
     check = board.king(board.turn) if board.is_check() else None

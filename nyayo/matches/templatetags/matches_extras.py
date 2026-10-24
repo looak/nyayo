@@ -1,3 +1,5 @@
+import math
+
 from django import template
 
 register = template.Library()
@@ -65,3 +67,13 @@ def human(value):
 def spent(seconds):
     """The time a move took, 0.9 s or 12.4 s."""
     return "" if seconds is None else f"{seconds:.1f} s"
+
+
+@register.simple_tag
+def evalbar_share(pawns):
+    """White's share of the eval bar, in percent: lichess's winning chances, 2 / (1 + e^(-0.00368208 cp)) - 1, as a
+    share; half for no score. The page's script works it out the same way when it steps through the game."""
+    if pawns is None:
+        return 50
+    chances = 2 / (1 + math.exp(-0.00368208 * pawns * 100)) - 1
+    return round(50 + 50 * chances, 1)
