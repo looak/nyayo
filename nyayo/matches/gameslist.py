@@ -3,7 +3,9 @@
 It reads the index database's cards, a page of them at a time, and fills in the rest from nyayo's database for those 64
 rows only: the match a game belongs to and the engines that played it. Nothing is drawn that the cards don't hold.
 
-Filters (a query is its URL): `match` (a match's id) and `opening` (the 16 hex digits of a position, see below).
+Filters (a query is its URL): `match` (a match's id), `result` (win, draw or loss for the engine under test), `ended`
+(how it ended: a rule, cards.ENDED, or another ending, cards.ENDINGS), `moves_from` and `moves_to` (whole moves), and
+`opening` (the 16 hex digits of a position, see below). Each is ANDed with the rest.
 """
 
 from datetime import datetime, timezone
@@ -24,6 +26,10 @@ RULES = {1: "Checkmate", 2: "Stalemate", 3: "Insufficient material", 4: "Fifty-m
 ENDINGS = {"rule": "Rules", "resignation": "Resignation", "draw_adjudication": "Draw adjudicated",
            "adjudication": "Adjudicated", "time_forfeit": "Lost on time", "illegal_move": "Illegal move",
            "crash": "Crash", "other": "Other", "unexplained": "Unexplained"}
+# the engine under test's result as SQL over a card's colour (1 white, 2 black) and result (1 1-0, 2 0-1, 3 draw)
+WON = "((colour = 1 AND result = 1) OR (colour = 2 AND result = 2))"
+LOST = "((colour = 1 AND result = 2) OR (colour = 2 AND result = 1))"
+RESULT_FILTERS = {"win": WON, "loss": LOST, "draw": "(colour > 0 AND result = 3)"}
 COLUMNS = ", ".join(("batch", "position", "game", "colour", "opponent", "result", "plies", "ended", "ending",
                      "flags", "start", "opening", "played_at"))
 
@@ -109,6 +115,31 @@ def decorate(rows):
     return out
 
 
+def ending_choices():
+    """(value, label) for the `ended` filter: the rules first, then the other endings."""
+    rules = [(name, RULES[code]) for code, name in enumerate(cards.ENDED) if code]
+    return rules + [(name, ENDINGS[name]) for name in cards.ENDINGS if name != "rule"]
+
+
+def ending_filter(value):
+    """(SQL, params) for an `ended` value; ValueError for one that isn't."""
+    if value in cards.ENDED[1:]:
+        return "(ending = ? AND ended = ?)", [cards.ENDINGS.index("rule"), cards.ENDED.index(value)]
+    if value in cards.ENDINGS and value != "rule":
+        return "ending = ?", [cards.ENDINGS.index(value)]
+    raise ValueError(value)
+
+
+def whole(text):
+    """A whole number from a filter's field, None for an empty one; ValueError for anything else."""
+    text = text.strip()
+    if not text:
+        return None
+    if not text.isdigit():
+        raise ValueError(text)
+    return int(text)
+
+
 def parse_position(text):
     """The signed 64-bit hash of a position given as 16 hex digits; ValueError for anything else."""
     if len(text) != 16:
@@ -126,6 +157,32 @@ def games_list(request):
         ids = list(Batch.objects.filter(match_id=match_id).values_list("pk", flat=True))
         where.append(f"batch IN ({','.join('?' * len(ids))})" if ids else "0")
         params += ids
+    result = request.GET.get("result", "")
+    if result in RESULT_FILTERS:
+        filters["result"] = result
+        where.append(RESULT_FILTERS[result])
+    ended = request.GET.get("ended", "")
+    if ended:
+        try:
+            sql, values = ending_filter(ended)
+        except ValueError:
+            return HttpResponseBadRequest("ended must be one of " + ", ".join(v for v, _ in ending_choices()))
+        filters["ended"] = dict(ending_choices())[ended]
+        where.append(sql)
+        params += values
+    try:
+        least, most = whole(request.GET.get("moves_from", "")), whole(request.GET.get("moves_to", ""))
+    except ValueError:
+        return HttpResponseBadRequest("moves must be whole numbers")
+    # a game of n moves has 2n - 1 or 2n plies
+    if least is not None:
+        filters["moves_from"] = least
+        where.append("plies >= ?")
+        params.append(2 * least - 1)
+    if most is not None:
+        filters["moves_to"] = most
+        where.append("plies <= ?")
+        params.append(2 * most)
     opening = request.GET.get("opening", "").strip().lower()
     if opening:
         try:
@@ -137,5 +194,9 @@ def games_list(request):
         where.append("((start = ? AND start != ?) OR (start = ? AND opening = ?))")
         params += [key, signed(STARTPOS), signed(STARTPOS), key]
     page = paginate(Cards("WHERE " + " AND ".join(where) if where else "", params), request)
-    return render(request, "matches/games_list.html", {"games_page": page, "total": page.paginator.count,
-                                                       "filters": filters})
+    kept = Match.objects.filter(batches__isnull=False).distinct().order_by("-updated_at")
+    return render(request, "matches/games_list.html", {
+        "games_page": page, "total": page.paginator.count, "filters": filters,
+        "choices": {"matches": kept, "endings": ending_choices(), "results": ("win", "draw", "loss")},
+        "asked": {name: request.GET.get(name, "") for name in ("match", "result", "ended", "moves_from", "moves_to",
+                                                               "opening")}})

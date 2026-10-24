@@ -1,0 +1,105 @@
+{% extends "runs/base.html" %}
+{% load runs_extras matches_extras %}
+{% block title %}Dashboard · nyayo{% endblock %}
+{% block head %}{% if running %}<meta http-equiv="refresh" content="30">{% include "matches/_chessground.html" %}{% endif %}
+<style>
+  .calendar { display: block; width: 100%; height: auto; }
+  .calendar text { fill: var(--muted); font-size: 9px; }
+  .cal-legend { display: flex; gap: 3px; align-items: center; justify-content: flex-end; font-size: .72rem; margin-top: .3rem; }
+  .cal-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; }
+  .cal-legend span { margin: 0 .3rem; }
+  .donut-wrap { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 1rem; align-items: center; }
+  .donut { display: block; width: 100%; height: auto; }
+  .donut text { fill: var(--bright); font-size: 5px; font-weight: 700; }
+  .donut text.small { fill: var(--muted); font-size: 3px; font-weight: 400; }
+  .parts { list-style: none; margin: 0; padding: 0; font-size: .82rem; }
+  .parts li { display: flex; gap: .5rem; align-items: baseline; padding: .1rem 0; }
+  .parts i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .parts .n { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .freq { display: flex; height: 8px; min-width: 70px; border-radius: 1px; overflow: hidden; background: #3a4147; }
+  .freq i { display: block; height: 100%; }
+  .stack-boxes { display: grid; gap: 1rem; }
+  .stack-boxes > .card { margin: 0; }
+</style>
+{% endblock %}
+{% block content %}
+{% with t=tiles %}
+<div class="tiles">
+  <div class="tile info"><div class="inner"><h4>Games kept</h4><div class="big">{{ t.kept|thousands }}</div>
+    <div class="sub">{{ t.batches|thousands }} batch{{ t.batches|pluralize:"es" }} · {{ t.stored_mb }} MB stored</div></div>
+    <a class="foot" href="{% url 'games' %}">Browse the games ➔</a></div>
+  <div class="tile danger"><div class="inner"><h4>Matches running</h4><div class="big">{{ t.running }}</div>
+    <div class="sub">{% for kind, n in t.kinds %}{{ n }} {{ kind }}{% if n != 1 %}s{% endif %} · {% endfor %}{{ t.in_play }} game{{ t.in_play|pluralize }} in play</div></div>
+    <a class="foot" href="{% url 'matches' %}">All matches ➔</a></div>
+  <div class="tile warning"><div class="inner"><h4>Played, last 24 h</h4><div class="big">{{ t.day|thousands }}</div>
+    <div class="sub">{{ t.per_hour|thousands }} an hour, of the games kept</div></div>
+    <a class="foot" href="{% url 'games' %}">List them ➔</a></div>
+  <div class="tile {% if t.refused %}danger{% elif t.index_share < 100 or t.waiting %}grey{% else %}success{% endif %}"><div class="inner"><h4>Index</h4><div class="big">{{ t.index_share }}%</div>
+    <div class="sub">{{ t.indexed|thousands }} cards{% if t.waiting %} · {{ t.waiting }} upload{{ t.waiting|pluralize }} waiting{% endif %}{% if t.refused %} · {{ t.refused }} refused{% endif %}</div></div>
+    <a class="foot" href="{% url 'admin:matches_upload_changelist' %}">Uploads ➔</a></div>
+</div>
+{% endwith %}
+
+<div class="card">
+  <h3 class="box-title">Games kept, day by day <span class="right muted">{{ calendar.total|thousands }} in the last year, by the day they were played (UTC)</span></h3>
+  <svg class="calendar" viewBox="0 0 {{ calendar.width }} {{ calendar.height }}" role="img" aria-label="Games kept per day over the last year">
+    {% for m in calendar.months %}<text x="{{ m.x }}" y="10">{{ m.label }}</text>{% endfor %}
+    {% for w in calendar.weekdays %}<text x="0" y="{{ w.y }}">{{ w.label }}</text>{% endfor %}
+    {% for d in calendar.days %}<rect x="{{ d.x }}" y="{{ d.y }}" width="11" height="11" rx="2" fill="{{ d.fill }}"><title>{{ d.tip }}</title></rect>{% endfor %}
+  </svg>
+  <div class="cal-legend"><span class="muted">Less</span>{% for c in calendar.levels %}<i style="background: {{ c }}"></i>{% endfor %}<span class="muted">More</span></div>
+</div>
+
+<div class="columns wide-left">
+  <div>
+    {% for c in running %}{% include "matches/_running_card.html" %}{% empty %}
+    <div class="card"><h3 class="box-title">Running</h3><p class="muted">Nothing is being played right now. <a href="{% url 'matches' %}">Every match</a></p></div>
+    {% endfor %}
+  </div>
+  <div class="stack-boxes">
+    {% include "matches/_donut.html" with title="How the kept games ended" ring=endings %}
+    {% include "matches/_donut.html" with title="For the engine under test" ring=outcomes %}
+  </div>
+</div>
+
+<div class="columns" style="margin-top: 1rem">
+  <div class="card">
+    <h3 class="box-title">Recent matches <span class="right"><a href="{% url 'matches' %}">all ➔</a></span></h3>
+    {% if recent %}
+    <div class="scroll"><table>
+      <thead><tr><th>Match</th><th>State</th><th class="num">Games</th><th class="num">Score</th><th class="num">Elo</th></tr></thead>
+      <tbody>
+      {% for m in recent %}
+        <tr>
+          <td class="nowrap" title="{{ m.name|default:m.pk }}"><a href="{% url 'match' m.pk %}">{{ m.name|default:m.pk|truncatechars:36 }}</a> <span class="tier">{{ m.kind }}</span></td>
+          <td>{% if m.silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ m.state }}">{{ m.state }}</span>{% endif %}</td>
+          <td class="num">{{ m.summary.overall.games }}{% if m.progress.total %}<span class="muted">/{{ m.progress.total }}</span>{% endif %}</td>
+          <td class="num {% if m.summary.overall.score > 0.5 %}better{% elif m.summary.overall.score < 0.5 %}worse{% endif %}">{{ m.summary.overall.score|percent }}</td>
+          <td class="num {% if m.elo > 0 %}better{% elif m.elo < 0 %}worse{% endif %}">{{ m.elo|elo }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p class="muted">No matches yet.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h3 class="box-title">Most played openings <span class="right muted">book positions</span></h3>
+    {% if openings %}
+    <div class="scroll"><table>
+      <thead><tr><th>Position</th><th class="num">Games</th><th class="num">Score for the engine</th><th>Won · drawn</th><th>How often</th></tr></thead>
+      <tbody>
+      {% for o in openings %}
+        <tr>
+          <td class="nowrap"><span class="mono">{{ o.key }}</span> <a href="{% url 'games' %}?opening={{ o.key }}">games</a></td>
+          <td class="num">{{ o.games|thousands }}</td>
+          <td class="num {% if o.score > 0.5 %}better{% elif o.score < 0.5 %}worse{% endif %}">{{ o.score|percent }}</td>
+          <td><div class="freq" title="won {{ o.won }}%, drawn {{ o.drawn }}%"><i style="width: {{ o.won }}%; background: #2ecc71"></i><i style="width: {{ o.drawn }}%; background: #6c757d"></i></div></td>
+          <td><div class="freq"><i style="width: {{ o.width }}%; background: var(--accent)"></i></div></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p class="muted">No game has been read for its opening yet.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

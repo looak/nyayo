@@ -22,7 +22,7 @@ class Pages(NyayoTestCase):
         return response.content.decode()
 
     def test_runs_list(self):
-        page = self.get("/")
+        page = self.get("/runs")
         self.assertLess(page.index(self.child["run"]["id"]), page.index(self.real["run"]["id"]))
         self.assertIn('herd-smoke-report <span class="mono">d695c09</span></a>', page)
         self.assertIn('<td><span class="tier smoke">smoke</span></td>', page)
@@ -30,11 +30,11 @@ class Pages(NyayoTestCase):
         self.assertIn('<span class="outcome pass">passed</span>', page)
         self.assertIn('657<span class="muted">/925</span>', page)
         self.assertIn('title="Smoke_STS: passed, 133/325, 1707/3250 pts, 12.8 s"', page)
-        self.assertNotIn(self.real["run"]["id"], self.get("/?tier=extended"))
-        self.assertIn(self.real["run"]["id"], self.get("/?tier=smoke"))
+        self.assertNotIn(self.real["run"]["id"], self.get("/runs?tier=extended"))
+        self.assertIn(self.real["run"]["id"], self.get("/runs?tier=smoke"))
         self.assertIn('<td class="num nowrap">41.0 s</td>', page)
-        self.assertNotIn(self.real["run"]["id"], self.get("/?state=wip"))
-        self.assertIn(self.real["run"]["id"], self.get("/?branch=herd-smoke-report&state=committed"))
+        self.assertNotIn(self.real["run"]["id"], self.get("/runs?state=wip"))
+        self.assertIn(self.real["run"]["id"], self.get("/runs?branch=herd-smoke-report&state=committed"))
 
     def test_run_page_shows_what_changed(self):
         page = self.get(f"/runs/{self.child['run']['id']}")
