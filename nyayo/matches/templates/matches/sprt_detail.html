@@ -1,13 +1,39 @@
 {% extends "runs/base.html" %}
 {% load runs_extras matches_extras %}
 {% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
-{% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% endblock %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
 {% block content %}
-<h1>{{ match.name|default:match.pk }}
-  <span class="tier">sprt</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}</h1>
-<p class="muted">{{ subject_line }} <span class="vs">against</span> {{ base_line }}{% if producer_url %} · <a href="{{ producer_url }}">{{ match.producer_name }}</a>{% endif %}</p>
+<div class="pagehead">
+  <h1>{{ match.name|default:match.pk }}</h1>
+  <span class="tier">sprt</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}
+  <span class="muted">{{ subject_line }} <span class="vs">against</span> {{ base_line }}{% if producer_url %} · <a href="{{ producer_url }}">{{ match.producer_name }}</a>{% endif %}</span>
+</div>
 
-<div class="card">
+{# the figures a glance needs, as Pi-hole's tiles #}
+<div class="tiles">
+  <div class="tile info"><div class="inner"><h4>Games</h4>
+    <div class="big">{{ timing.finished }}</div>
+    <div class="sub">{% if row %}W {{ row.wins }} · D {{ row.draws }} · L {{ row.losses }}{% endif %}{% if timing.per_hour is not None %} · {{ timing.per_hour|floatformat:0 }} an hour{% endif %}</div></div>
+    <a class="foot" href="#games">The games ➔</a></div>
+  <div class="tile {% if elo is None %}grey{% elif elo >= 0 %}success{% else %}danger{% endif %}"><div class="inner"><h4>Elo <span class="muted-light">({{ elo_by }}'s)</span></h4>
+    <div class="big">{{ elo_text }}</div>
+    <div class="sub">{% if error is not None %}± {{ error|floatformat:1 }}, 95%{% else %}no interval yet{% endif %}</div></div>
+    <a class="foot" href="#progress">How it moved ➔</a></div>
+  <div class="tile warning"><div class="inner"><h4>LLR</h4>
+    <div class="big">{% if sprt.llr is not None %}{{ sprt.llr|floatformat:2 }}{% else %}–{% endif %}</div>
+    <div class="sub">{% if sprt.result %}{{ sprt.result }}{% if sprt.result == "passed" %} at {{ sprt.upper|floatformat:2 }}{% elif sprt.result == "failed" %} at {{ sprt.lower|floatformat:2 }}{% endif %}{% elif projection.bound %}heading for {% if projection.bound == "upper" %}{{ sprt.upper|floatformat:2 }}, passing{% else %}{{ sprt.lower|floatformat:2 }}, failing{% endif %}{% elif sprt.lower is not None %}between {{ sprt.lower|floatformat:2 }} and {{ sprt.upper|floatformat:2 }}{% endif %}</div></div>
+    <a class="foot" href="#progress">Bounds ➔</a></div>
+  <div class="tile grey"><div class="inner">
+    {% if timing.running %}<h4>To go</h4>
+    <div class="big">{% if projection.seconds is not None %}~{{ projection.seconds|seconds }}{% else %}–{% endif %}</div>
+    <div class="sub">{% if projection.bound %}~{{ projection.games|floatformat:0 }} games{% if projection.at %}, done around {{ projection.at|date:"D H:i" }}{% endif %}{% else %}{{ projection.reason }}{% endif %}</div>
+    {% else %}<h4>{% if match.state == "finished" %}Ended{% else %}{{ match.state|capfirst }}{% endif %}</h4>
+    <div class="big">{{ match.finished_at|default:match.updated_at|date:"D H:i" }}</div>
+    <div class="sub">{% if timing.elapsed is not None %}after {{ timing.elapsed|seconds }}{% endif %}</div>{% endif %}</div>
+    <span class="foot">{% if match.started_at %}started {{ match.started_at|date:"Y-m-d H:i" }}{% else %}&nbsp;{% endif %}</span></div>
+</div>
+
+<div class="card top-{% if sprt.result %}{{ sprt.result }}{% elif silent %}silent{% else %}{{ match.state }}{% endif %}">
   <div class="card-head">
     <h3>SPRT</h3>
     <span class="muted">{{ tc_text }}{% if options_text %} · {{ options_text }}{% endif %}</span>
@@ -90,7 +116,14 @@
   {% if silent %}<p class="note">Silent: no report for over {{ silent_minutes }} minutes while the producer says running. Its next report clears this.</p>{% endif %}
 </div>
 
-<h2>Progress</h2>
+{% if boards %}
+<div class="card">
+  <h3 class="box-title">In play <span class="right muted">the boards as they stand, each a link to its game</span></h3>
+  {% include "matches/_minis.html" %}
+</div>
+{% endif %}
+
+<h2 id="progress">Progress</h2>
 {% if graphs %}
 {% include "matches/_sprt_progress.html" %}
 {% else %}
@@ -180,7 +213,7 @@
 {% endif %}
 
 {% if entries %}
-<h2>Games</h2>
+<h2 id="games">Games</h2>
 {% include "matches/_games_table.html" with entries=groups.playing title="Playing" count=totals.playing %}
 {% include "matches/_games_table.html" with entries=groups.unfinished title="Cut off" count=totals.unfinished %}
 {% include "matches/_games_table.html" with entries=groups.finished title="Finished" count=totals.finished %}

@@ -1,13 +1,14 @@
 {% extends "runs/base.html" %}
 {% load runs_extras matches_extras %}
 {% block title %}Matches · nyayo{% endblock %}
-{% block head %}{% if running %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
+{% block head %}{% if running %}<meta http-equiv="refresh" content="10">{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
 {% block content %}
 <h1>Matches</h1>
+{% if running %}<div class="columns">{% endif %}
 {% for c in running %}
-<a class="card running-card" href="{% url 'match' c.match.pk %}">
+<div class="card running-card top-running">
   <div class="card-head">
-    <h3 title="{{ c.match.name|default:c.match.pk }}">{{ c.match.name|default:c.match.pk }}</h3>
+    <h3 title="{{ c.match.name|default:c.match.pk }}"><a href="{% url 'match' c.match.pk %}">{{ c.match.name|default:c.match.pk }}</a></h3>
     <span class="tier">{{ c.match.kind }}</span>
     {% if c.tc %}<span class="muted">{{ c.tc }}</span>{% endif %}
     <span class="outcome running card-state">running</span>
@@ -62,8 +63,13 @@
     {% endif %}
     <div><dt>Last report</dt><dd>{{ c.match.updated_at|date:"H:i:s" }}</dd></div>
   </dl>
-</a>
+  {% if c.boards %}
+  <h4 class="minis-title">In play</h4>
+  {% include "matches/_minis.html" with boards=c.boards match=c.match %}
+  {% endif %}
+</div>
 {% endfor %}
+{% if running %}</div>{% endif %}
 <form class="filters" method="get">
   <label>Kind
     <select name="kind" onchange="this.form.submit()">

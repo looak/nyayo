@@ -26,7 +26,6 @@ from dataclasses import dataclass
 
 import chess
 import chess.pgn
-import chess.svg
 
 COMMENT = re.compile(r"^\s*(?:([+-]?)(M?)(\d+(?:\.\d+)?))?\s*/\s*(\d+)\s+(\d+(?:\.\d+)?)\s*s")
 NODES = re.compile(r"\bn\s*=\s*(\d+)")
@@ -204,12 +203,6 @@ def positions(parsed):
                 text = f"{abs(pawns):.1f}"
         out.append(entry(move.uci))
     return out
-
-
-def board_svg(parsed, ply, orientation=chess.WHITE, size=400):
-    board, last = position(parsed, ply)
-    check = board.king(board.turn) if board.is_check() else None
-    return chess.svg.board(board, orientation=orientation, lastmove=last, check=check, size=size)
 
 
 def pairs(moves):

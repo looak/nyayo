@@ -1,4 +1,4 @@
-"""Demo SPRTs for polishing the pages: made-up tests with a history, through the real ingest so the archive, the
+"""Demo SPRTs and gauntlets for polishing the pages: made-up tests with a history, through the real ingest so the archive, the
 snapshots and the pages are exactly what a producer's reports would give. `manage.py seed_demo` runs this and only
 in debug mode; the numbers are simulated, nothing here is a result.
 
@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from . import catalogue, games, reader, uploads, worker
 from .ingest import delete_archived, ingest
-from .models import Batch, Match, MatchSnapshot, Upload
+from .models import Batch, Game, Match, MatchSnapshot, Upload
 
 ELO0, ELO1, ALPHA, BETA = 0.0, 5.0, 0.05, 0.05
 LOWER, UPPER = math.log(BETA / (1 - ALPHA)), math.log((1 - BETA) / ALPHA)
@@ -33,6 +33,23 @@ SCENARIOS = [
     ("demo-sprt-running", "running", 4.0, 45, 1, None),
     ("demo-sprt-silent", "running", 3.0, 30, 47, None),
     ("demo-sprt-new", "running", 3.0, 2, 1, None),
+]
+
+# a gauntlet's field, as uwanja lists it: id, name, version, CCRL Blitz rating
+FIELD = [("barbarossa", "Barbarossa", "0.6.0", 2465), ("belette", "Belette", "1.0", 2512),
+         ("apotheosis", "Apotheosis", "3", 2388), ("blunder", "Blunder", "8.5.5", 2440)]
+ROUNDS = 12  # each a pair, one game per colour, against every opponent: 96 games
+GAUNTLET_CONCURRENCY = 6
+GAME_MINUTES = 3
+
+# id, state, the subject's true rating, games finished, games in play (cut off once stopped), minutes since the last
+# report
+GAUNTLETS = [
+    ("demo-gauntlet-running", "running", 2450, 40, 6, 1),
+    ("demo-gauntlet-finished", "finished", 2460, 96, 0, 300),
+    ("demo-gauntlet-stopped", "stopped", 2430, 58, 3, 200),
+    ("demo-gauntlet-silent", "running", 2420, 33, 6, 41),
+    ("demo-gauntlet-new", "running", 2450, 0, 6, 1),
 ]
 
 
@@ -159,22 +176,26 @@ def seed_one(match_id, state, elo, reports, silent_minutes, result, now):
 def opening(rng, plies):
     board = chess.Board()
     for _ in range(plies):
-        board.push(rng.choice(list(board.legal_moves)))
+        moves = list(board.legal_moves)
+        if not moves:
+            break
+        board.push(rng.choice(moves))
     return board
 
 
-def make_game(rng, number, result, length, colour, finished=True):
+def make_game(rng, number, result, length, colour, finished=True, players=("Elephant feature-x", "Elephant main"),
+              opponent="base", tc="8+0.08"):
     """A PGN of random legal moves with cutechess-style comments `{+0.35 12/18 104 1532876}`: worker-stripped, no
-    Termination. Random play, so it only shows how a game looks, not how the engine plays."""
+    Termination. Random play, so it only shows how a game looks, not how the engine plays. `players` is the subject's
+    name, then the opponent's."""
     board = opening(rng, 8)
     start = board.fen()
     game = chess.pgn.Game()
     game.setup(board)
-    white, black = ("Elephant feature-x", "Elephant main") if colour == "white" else ("Elephant main",
-                                                                                   "Elephant feature-x")
-    game.headers.update({"Event": "OpenBench demo", "Site": "demo", "Date": "2026.10.18", "Round": str(number),
+    white, black = players if colour == "white" else players[::-1]
+    game.headers.update({"Event": "demo", "Site": "demo", "Date": "2026.10.18", "Round": str(number),
                          "White": white, "Black": black, "Result": result if finished else "*",
-                         "TimeControl": "8+0.08", "Subject": colour, "Opponent": "base", "FEN": start,
+                         "TimeControl": tc, "Subject": colour, "Opponent": opponent, "FEN": start,
                          "SetUp": "1"})
     node, score = game, rng.uniform(-0.3, 0.3)
     for ply in range(length):
@@ -215,6 +236,95 @@ def seed_batch(match_id):
         catalogue.seal(batch)
 
 
+# --- gauntlets: one report with the whole schedule, then a PGN for every game started
+
+
+def gauntlet_schedule(rng, rating, finished, playing):
+    """Every game of the gauntlet in uwanja's order, a round of pairs against each opponent in turn; the first
+    `finished` played out, the next `playing` under way."""
+    entries = []
+    for round_ in range(1, ROUNDS + 1):
+        for opponent, _, _, strength in FIELD:
+            for colour in ("white", "black"):
+                entries.append({"number": len(entries) + 1, "round": round_, "opponent": opponent,
+                                "subject_colour": colour, "state": "scheduled", "result": None,
+                                "termination": None, "fault": None})
+    score = {opponent: score_of(rating - strength) for opponent, _, _, strength in FIELD}
+    for entry in entries[:finished]:
+        points = play_pair(rng, score[entry["opponent"]])[0]
+        won = "1-0" if entry["subject_colour"] == "white" else "0-1"
+        lost = "0-1" if won == "1-0" else "1-0"
+        entry.update(state="finished", result={1.0: won, 0.5: "1/2-1/2", 0.0: lost}[points],
+                     termination="adjudication" if points == 0.5 else rng.choice(["checkmate", "adjudication"]))
+    for entry in entries[finished:finished + playing]:
+        entry["state"] = "playing"
+    return entries
+
+
+def subject_points(entry):
+    won = "1-0" if entry["subject_colour"] == "white" else "0-1"
+    return 1.0 if entry["result"] == won else 0.5 if entry["result"] == "1/2-1/2" else 0.0
+
+
+def gauntlet_results(entries):
+    """Each opponent's counts from the finished games, with the pentanomial of the pairs played out."""
+    rows = []
+    for opponent, *_ in FIELD:
+        points = [subject_points(e) for e in entries if e["opponent"] == opponent and e["state"] == "finished"]
+        penta = [0, 0, 0, 0, 0]
+        for i in range(0, len(points) - 1, 2):
+            penta[round((points[i] + points[i + 1]) * 2)] += 1
+        rows.append({"opponent": opponent, "games": len(points), "wins": points.count(1.0),
+                     "draws": points.count(0.5), "losses": points.count(0.0), "penta": penta,
+                     "timelosses": {"subject": 0, "opponent": 1 if opponent == "belette" and len(points) > 20 else 0},
+                     "crashes": {"subject": 0, "opponent": 0}, "illegal": {"subject": 0, "opponent": 0}})
+    return rows
+
+
+def seed_gauntlet(match_id, state, rating, finished, playing, silent_minutes, now):
+    """Reports a gauntlet as uwanja would at its latest report, then stores the PGN of every game it started, each
+    timed as GAUNTLET_CONCURRENCY games at a time would have played it."""
+    rng = random.Random(match_id)
+    forget(match_id)
+    entries = gauntlet_schedule(rng, rating, finished, playing)
+    end = now - timedelta(minutes=silent_minutes)
+    waves = -(-finished // GAUNTLET_CONCURRENCY)
+    started = end - timedelta(minutes=GAME_MINUTES * (waves + 1))
+    document = {
+        "schema_version": 1,
+        "match": {
+            "id": match_id, "kind": "gauntlet", "state": state,
+            "name": "elephant-1.3.0 " + match_id.removeprefix("demo-gauntlet-"),
+            "producer": {"name": "uwanja", "version": "demo"}, "started_at": started.isoformat(),
+            "updated_at": end.isoformat(), "finished_at": end.isoformat() if state != "running" else None,
+            "host": {"name": "demo", "logical_cores": 32},
+            "settings": {"tc": "2+0.02", "book": "UHO_Lichess_4852_v1.epd", "concurrency": GAUNTLET_CONCURRENCY,
+                         "runner": {"name": "fastchess", "version": "1.4.0"}},
+        },
+        "subject": {"name": "Elephant", "version": "1.3.0", "commit": "a1b2c3d4e5f60718", "bench": 2301556,
+                    "options": {"Threads": 1, "Hash": 16}},
+        "opponents": [{"id": opponent, "name": name, "version": version, "options": {"Threads": 1},
+                       "rating": {"value": strength, "list": "CCRL Blitz", "as_of": "2026-10-01"}}
+                      for opponent, name, version, strength in FIELD],
+        "results": gauntlet_results(entries),
+        "sprt": None, "machines": [],
+        "progress": {"total": len(entries), "played": finished, "playing": playing if state == "running" else 0},
+        "games": entries,
+    }
+    ingest(json.dumps(document).encode(), None, match_id)
+    Match.objects.filter(pk=match_id).update(received_at=end)
+    names = {opponent: f"{name} {version}" for opponent, name, version, _ in FIELD}
+    for i, entry in enumerate(entries[:finished + playing]):
+        number, done = str(entry["number"]), entry["state"] == "finished"
+        length = rng.randint(50, 110) if done else rng.randint(10, 60)
+        text = make_game(rng, entry["number"], entry["result"] or "*", length, entry["subject_colour"], done,
+                         ("Elephant 1.3.0", names[entry["opponent"]]), entry["opponent"], "2+0.02")
+        games.store(match_id, number, text.encode())
+        begun = started + timedelta(minutes=GAME_MINUTES * (i // GAUNTLET_CONCURRENCY))
+        Game.objects.filter(match_id=match_id, game=number).update(
+            started_at=begun, finished_at=begun + timedelta(minutes=GAME_MINUTES) if done else None)
+
+
 def seed():
     """Makes (or remakes) every scenario. Returns their ids."""
     now = timezone.now()
@@ -223,4 +333,6 @@ def seed():
     seed_games("demo-sprt-running", "running")
     seed_games("demo-sprt-passed", "finished")
     seed_batch("demo-sprt-passed")
-    return [s[0] for s in SCENARIOS]
+    for match_id, state, rating, finished, playing, silent in GAUNTLETS:
+        seed_gauntlet(match_id, state, rating, finished, playing, silent, now)
+    return [s[0] for s in SCENARIOS] + [g[0] for g in GAUNTLETS]
