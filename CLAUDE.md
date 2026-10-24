@@ -87,11 +87,17 @@ in configuration, not code.
 
 ## Specs
 
-The specs for nyayo and its neighbours live in ramani (github.com/looak/ramani, private, sibling checkout at
-`../ramani`): `nyayo.md` for this repo, `test-pipeline.md` for the client that pushes runs, `plans/gauntlet-runner.md` and
-`plans/match-schema.md` for uwanja and the match contract, and the README's table of which repo owns which contract. Each spec has a Current section (as built, the code wins when they disagree) and a
-Direction section (planned work, open decisions). When a change here alters a contract (the results schema, the
-upload API, comparability rules) or settles an open decision, update `nyayo.md` in ramani in the same piece of work.
+What this repo does is specified here, in `docs/spec.md`: Purpose, Scope, Current and Interfaces. **Keep it true in
+the same pull request as the code**: a change that alters a command, an endpoint, a schema, a file format or anything
+the spec describes updates the spec in that pull request. When the code and the spec disagree, the code wins and the
+spec is fixed.
+
+Where this repo is going lives in ramani (github.com/looak/ramani, private, sibling checkout at `../ramani`): the
+README for the system and the contracts table, `nyayo.md` for this repo's Direction (planned work, open decisions),
+and `plans/` for work spanning repos. **Read ramani, never edit it**, nor any other sibling checkout. A
+pull request that does a plan's step says `Closes looak/<repo>#<sub-issue>`. When it settles one of ramani's open
+decisions, say so in the final report. Contracts this repo owns (`docs/match-schema.md` and `docs/results-schema.md`)
+are changed only here, by agreement with the owner.
 
 ## Environment
 
