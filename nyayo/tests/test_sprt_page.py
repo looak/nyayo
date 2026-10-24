@@ -152,7 +152,7 @@ class Columns(MatchTestCase):
 
     def test_progress_comes_first_then_the_paste_block_beside_the_pairs(self):
         page = self.page()
-        self.assertLess(page.index("<h2>Progress</h2>"), page.index('class="match-grid sprt-columns"'))
+        self.assertLess(page.index('<h2 id="progress">Progress</h2>'), page.index('class="match-grid sprt-columns"'))
         row = page[page.index('class="match-grid sprt-columns"'):]
         self.assertLess(row.index('id="copy-sprt"'), row.index("<h3>Score</h3>"))
         self.assertLess(row.index("<h3>Score</h3>"), row.index("<h3>Pairs</h3>"))

@@ -15,6 +15,8 @@ from nyayo.matches.templatetags.matches_extras import evalbar_share
 from .test_games import GameTestCase, pgn
 from .test_matches_ingest import ID, gauntlet, scheduled, v1
 
+CARD = 'class="card running-card top-running"'
+
 COMMENTED = (
     '[White "Elephant 1.0.0"]\n[Black "Barbarossa 0.6.0"]\n[Result "*"]\n\n'
     "1. e4 {+0.30/18 1.204s} e5 {-0.25/16 0.9s} 2. Nf3 {+M5/22 0.4s} Nc6 {book} *\n"
@@ -82,7 +84,6 @@ class Comments(SimpleTestCase):
         board, last = pgnview.position(parsed, 1)
         self.assertEqual(last.uci(), "e2e4")
         self.assertIsNotNone(board.piece_at(chess.E4))
-        self.assertTrue(pgnview.board_svg(parsed, 0).startswith("<svg"))
 
     def test_every_position_for_the_browser_board(self):
         every = pgnview.positions(pgnview.load(COMMENTED))
@@ -326,12 +327,17 @@ class LiveBoards(GameTestCase):
         self.put_match(scheduled())
         self.put_game(COMMENTED, game="2")
         response = self.client.get("/matches/gauntlet-test-1")
-        self.assertContains(response, "Playing now")
-        self.assertContains(response, 'class="live-board"')
-        self.assertContains(response, "<svg")
+        self.assertContains(response, ">In play <")
+        self.assertContains(response, 'class="mini live-board" href="/matches/gauntlet-test-1/games/2"')
+        # drawn in the browser by chessground, from the position as it stands; the subject plays black in game 2
+        self.assertContains(response, 'data-fen="r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"')
+        self.assertContains(response, 'data-last="b8 c6" data-orientation="black"')
+        self.assertContains(response, "matches/minis.js")
 
     def test_no_boards_when_nothing_is_playing(self):
-        self.assertNotContains(self.client.get("/matches/gauntlet-test-1"), "Playing now")
+        page = self.client.get("/matches/gauntlet-test-1").content.decode()
+        self.assertNotIn(">In play <", page)
+        self.assertNotIn("minis.js", page)
 
 
 class FastPolling(GameTestCase):
@@ -745,18 +751,24 @@ class RunningCards(GameTestCase):
     def test_a_running_gauntlet_gets_a_card_linking_to_the_match(self):
         self.fresh()
         page = self.page()
-        self.assertIn('class="card running-card" href="/matches/gauntlet-test-1"', page)
-        self.assertIn("elephant-1.0.0-ccrl-blitz", page)
+        self.assertIn(CARD + '>', page)
+        self.assertIn('<a href="/matches/gauntlet-test-1">elephant-1.0.0-ccrl-blitz</a>', page)
         self.assertIn(">10</span>", page)  # games
         self.assertIn("65.0%", page)
         self.assertIn('http-equiv="refresh" content="10"', page)
 
-    def test_it_does_not_link_to_a_game(self):
+    def test_it_shows_the_boards_in_play(self):
         self.fresh()
         self.put_game(pgn("1. e4 e5"))
-        card = self.page()
-        card = card[card.index("running-card"):card.index("</a>", card.index("running-card"))]
-        self.assertNotIn("/games/", card)
+        page = self.page()
+        self.assertIn('class="mini live-board" href="/matches/gauntlet-test-1/games/1"', page)
+        self.assertIn('data-last="e7 e5" data-orientation="white"', page)
+        self.assertIn("matches/minis.js", page)
+
+    def test_no_boards_no_board_script(self):
+        self.fresh()
+        page = self.page()
+        self.assertNotIn("mini live-board", page)
 
     def test_a_gauntlet_with_a_schedule_shows_how_far_along_it_is(self):
         self.put_match(scheduled())
@@ -770,8 +782,8 @@ class RunningCards(GameTestCase):
         self.put_match(v1())
         self.fresh()
         page = self.page()
-        card = page[page.index('class="card running-card" href="/matches/%s"' % ID):]
-        card = card[:card.index("</a>")]
+        card = page[page.index('<a href="/matches/%s">' % ID):]
+        card = card[:card.index("</dl>")]
         self.assertIn("LLR (-2.94, 2.94)", card)
         self.assertIn("+21.7", card)
         self.assertIn('class="fill pass"', card)  # the LLR is 0.55
@@ -785,16 +797,16 @@ class RunningCards(GameTestCase):
     def test_nothing_running_no_card_and_no_refresh(self):
         Match.objects.update(state="finished")
         page = self.page()
-        self.assertNotIn('class="card running-card"', page)
+        self.assertNotIn(CARD, page)
         self.assertNotIn('http-equiv="refresh"', page)
 
     def test_a_stopped_match_has_no_card(self):
         Match.objects.update(state="stopped", updated_at=django_timezone.now())
-        self.assertNotIn('class="card running-card"', self.page())
+        self.assertNotIn(CARD, self.page())
 
     def test_a_silent_match_has_no_card(self):
         Match.objects.update(updated_at=django_timezone.now() - timedelta(minutes=45))
-        self.assertNotIn('class="card running-card"', self.page())
+        self.assertNotIn(CARD, self.page())
 
     def test_a_few_at_most(self):
         for n in range(8):
@@ -802,7 +814,7 @@ class RunningCards(GameTestCase):
             document["match"]["id"] = f"openbench-openbench-{200 + n}"
             self.put_match(document, match_id=f"openbench-openbench-{200 + n}")
         self.fresh()
-        self.assertEqual(self.page().count('class="card running-card"'), 6)
+        self.assertEqual(self.page().count(CARD), 6)
 
     def test_the_filters_still_work_with_a_card_up(self):
         self.fresh()

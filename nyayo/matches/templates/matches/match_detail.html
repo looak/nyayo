@@ -1,15 +1,45 @@
 {% extends "runs/base.html" %}
 {% load runs_extras matches_extras %}
 {% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
-{% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% endblock %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
 {% block content %}
-<h1>{{ match.name|default:match.pk }}
-  <span class="tier">{{ match.kind }}</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}</h1>
+<div class="pagehead">
+  <h1>{{ match.name|default:match.pk }}</h1>
+  <span class="tier">{{ match.kind }}</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}
+  <span class="muted">{% if settings.runner %}{{ settings.runner.name }} {{ settings.runner.version }}{% else %}{{ match.producer_name }}{% endif %}{% if host.name %} on {{ host.name }}{% endif %}{% if settings.concurrency %} · {{ settings.concurrency }} at a time{% endif %} · last report {{ match.updated_at|date:"H:i:s" }}</span>
+</div>
+
+{# the figures a glance needs, as Pi-hole's tiles #}
+<div class="tiles">
+  <div class="tile info"><div class="inner"><h4>Played</h4>
+    <div class="big">{{ timing.finished }}{% if timing.total %}<small> / {{ timing.total }}</small>{% endif %}</div>
+    <div class="sub">{% if timing.playing %}{{ timing.playing }} in play{% if timing.total %} · {% endif %}{% endif %}{% if timing.total %}{{ timing.remaining }} to go{% endif %}</div></div>
+    <a class="foot" href="#games">The games ➔</a></div>
+  {% with o=summary.overall %}
+  <div class="tile warning"><div class="inner">
+    {% if summary.performance is not None %}<h4>Performance</h4><div class="big">{{ summary.performance|floatformat:0 }}</div>
+    <div class="sub">Elo {{ o.elo|elo }} {{ o.error|error }} against the listed ratings</div>
+    {% else %}<h4>Elo</h4><div class="big">{{ o.elo|elo }}</div><div class="sub">{{ o.error|error }} against the field{% if summary.rows %}, not every opponent rated{% endif %}</div>{% endif %}</div>
+    <a class="foot" href="#results">By opponent ➔</a></div>
+  <div class="tile {% if not summary.performance_games %}grey{% elif o.score >= 0.5 %}success{% else %}danger{% endif %}"><div class="inner"><h4>Score</h4>
+    <div class="big">{{ o.score|percent }}</div>
+    <div class="sub">W {{ summary.wins }} · D {{ summary.draws }} · L {{ summary.losses }}{% if excluded %} · without {{ excluded|join:", " }}{% endif %}</div></div>
+    <a class="foot" href="#results">The table to copy ➔</a></div>
+  {% endwith %}
+  <div class="tile grey"><div class="inner">
+    {% if timing.running %}<h4>To go</h4>
+    <div class="big">{% if timing.eta_seconds is not None %}~{{ timing.eta_seconds|seconds }}{% else %}–{% endif %}</div>
+    <div class="sub">{% if timing.eta_at %}done around {{ timing.eta_at|date:"D H:i" }}{% else %}after the first games{% endif %}</div>
+    {% else %}<h4>{% if match.state == "finished" %}Finished{% else %}{{ match.state|capfirst }}{% endif %}</h4>
+    <div class="big">{{ match.finished_at|default:match.updated_at|date:"D H:i" }}</div>
+    <div class="sub">{% if timing.elapsed is not None %}after {{ timing.elapsed|seconds }}{% endif %}</div>{% endif %}</div>
+    <span class="foot">{% if match.started_at %}started {{ match.started_at|date:"Y-m-d H:i" }}{% else %}&nbsp;{% endif %}</span></div>
+</div>
 
 {# the match as a whole, in the style of a check on a run: a verdict, when and how long, a bar and its figures #}
-<div class="card">
+<div class="card top-{% if silent %}silent{% else %}{{ match.state }}{% endif %}">
   <div class="card-head">
-    <h3>Games</h3>
+    <h3>Schedule</h3>
     <span class="muted">{{ settings.tc }}{% if settings.concurrency %} · {{ settings.concurrency }} at a time{% endif %}</span>
     {% if silent %}<span class="outcome silent card-state">silent</span>{% else %}<span class="outcome {{ match.state }} card-state">{{ match.state }}</span>{% endif %}
     {% if timing.elapsed is not None %}<span class="timing muted">{% if timing.running %}running for{% else %}ran for{% endif %} {{ timing.elapsed|seconds }}</span>{% endif %}
@@ -49,22 +79,13 @@
 </div>
 
 {% if boards %}
-<h2>Playing now</h2>
-<div class="boards">
-  {% for b in boards %}
-  <a class="live-board" href="{% url 'game' match.pk b.entry.number %}">
-    <div class="live-board-svg">{{ b.svg|safe }}</div>
-    <div class="live-board-caption"><strong>Game {{ b.entry.number }}</strong>
-      <span class="muted">{{ b.entry.opponent }}, move {{ b.last.number|default:"–" }}</span><br>
-      {{ b.white }} <span class="muted">v</span> {{ b.black }}
-      {% if b.last and b.last.score %}<br><span class="mono">{{ b.last.san }} {{ b.last.score }}</span>{% endif %}
-    </div>
-  </a>
-  {% endfor %}
+<div class="card">
+  <h3 class="box-title">In play <span class="right muted">the boards as they stand, each a link to its game</span></h3>
+  {% include "matches/_minis.html" %}
 </div>
 {% endif %}
 
-<h2>Results</h2>
+<h2 id="results">Results</h2>
 <form method="get">
 {# the whole match first, whichever way the opponents are shown #}
 {% if summary.rows %}
@@ -128,7 +149,7 @@
 </div>
 
 {% if entries %}
-<h2>Games</h2>
+<h2 id="games">Games</h2>
 {% include "matches/_games_table.html" with entries=groups.playing title="Playing" count=totals.playing %}
 {% include "matches/_games_table.html" with entries=groups.unfinished title="Cut off" count=totals.unfinished %}
 {% if groups.scheduled or totals.scheduled %}

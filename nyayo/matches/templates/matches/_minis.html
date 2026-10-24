@@ -1,0 +1,10 @@
+{# the boards of the games being played, small, each a link to its game; drawn by matches/minis.js #}
+<div class="minis">
+  {% for b in boards %}
+  <a class="mini live-board" href="{% url 'game' match.pk b.entry.number %}" title="{{ b.white }} v {{ b.black }}">
+    <div class="mini-board" data-fen="{{ b.fen }}" data-last="{{ b.last_move }}" data-orientation="{{ b.orientation }}"></div>
+    <div class="mini-cap"><span class="clip-text">{{ b.entry.number }} · {{ b.entry.opponent_name }}</span>
+      <span class="mono">{% if b.last and b.last.score %}{{ b.last.score }}{% else %}{{ b.last.number|default:"–" }}{% endif %}</span></div>
+  </a>
+  {% endfor %}
+</div>
