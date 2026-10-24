@@ -244,6 +244,13 @@ it will be done; a silent match is left out), and colours the list's score and E
 
 ### Pages
 
+Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar and a top bar. The sidebar has a status block
+(whether the worker holds its lock, the game reader, uploads waiting or refused, whether the batches' directory is
+there and how much it holds) and the links, grouped as Testing (Matches with the number running, Runs, Compare),
+Catalogue (Games with the number kept, Uploads in the admin) and System (Admin); the page's own link is marked. The
+top bar says where the page is and names the host. The status is worked out only when a page's frame is drawn, never
+for the game page's polled fragment. The site has one colour scheme, dark.
+
 | URL | Shows |
 |:--|:--|
 | `/` | runs, newest first, filtered by branch, state and tier; each with its worst verdict, solved totals, a marker per check, duration |

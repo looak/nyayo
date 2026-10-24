@@ -241,6 +241,16 @@ def only_worker():
         file.close()
 
 
+def is_running():
+    """Whether a worker holds the lock now: taking it for a moment and letting it go again says so, and costs nothing
+    when one does."""
+    try:
+        with only_worker():
+            return False
+    except (RuntimeError, OSError):
+        return True
+
+
 def run(once=False, interval=1.0, reader=None):
     """Works until stopped, or with once until there is nothing left to do. Returns how many things it did."""
     reader = reader or readers.default()
