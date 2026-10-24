@@ -125,7 +125,7 @@
       </div>
       {% if faults %}<div class="faults muted">{% for f in faults %}<span>{{ f.label }} <span class="mono">{{ f.subject }} / {{ f.opponent }}</span></span>{% endfor %}<span>(engine under test / base)</span></div>{% endif %}
       {% endif %}
-      {% if stored_games %}<p class="muted stored">{{ stored_games }} games stored as data · <a href="{% url 'api_games' %}?match={{ match.pk|urlencode }}">export</a></p>{% endif %}
+      {% if stored_games or uploads %}<p class="muted stored">{{ stored_games }} games stored as data{% if uploads.pending %} · {{ uploads.pending }} upload{{ uploads.pending|pluralize }} waiting{% endif %}{% if uploads.refused %} · {{ uploads.refused }} upload{{ uploads.refused|pluralize }} refused{% endif %}{% if stored_games %} · <a href="{% url 'api_games' %}?match={{ match.pk|urlencode }}">export</a>{% endif %}</p>{% endif %}
     </div>
   </div>
 

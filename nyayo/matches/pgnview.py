@@ -9,6 +9,11 @@ The comments are fastchess's, as its -pgnout options write them:
     {+M1/1 0.000s, n=19, nps=0, pv="h2h8", White mates}             the reason for the end comes last
     {/0 0.116s}   a move with no score        {book}   a book move
 
+OpenBench's games are cutechess-ob's, whose comment is the score, depth/seldepth, milliseconds and nodes, and the
+same mate notation:
+
+    {+1.31 14/40 159 377044}        {-M4 96/5 4 36036}        {book}
+
 The score is the mover's, in pawns; 0.00 has no sign. A value the engine didn't report is written as 0, so n=0 and
 nps=0 are read as not reported. The PV is UCI moves in double quotes, shown here as SAN. tl= is the time left after the
 move and, when present, the clocks use it instead of reconstructing them.
@@ -28,6 +33,7 @@ NODES = re.compile(r"\bn\s*=\s*(\d+)")
 NPS = re.compile(r"\bnps\s*=\s*(\d+)")
 SELDEPTH = re.compile(r"\bsd\s*=\s*(\d+)")
 TIME_LEFT = re.compile(r"\btl\s*=\s*(-?\d+(?:\.\d+)?)\s*s")
+CUTECHESS = re.compile(r"^\s*([+-]?)(M?)(\d+(?:\.\d+)?)\s+(\d+)/(\d+)\s+(\d+)\s+(\d+)\s*$")
 PV = re.compile(r'\bpv\s*=\s*(?:"([^"]*)"|([^,}]+))')
 TIME_CONTROL = re.compile(r"^\s*(?:\d+/)?(\d+(?:\.\d+)?)(?:\+(\d+(?:\.\d+)?))?\s*$")
 
@@ -88,6 +94,16 @@ def parse_comment(text):
     return f"{sign}{number}", value if sign == "+" else -value, depth, seconds
 
 
+def parse_cutechess(text):
+    """(score text, pawns from the mover's side, depth, seconds, nodes) from cutechess-ob's comment, or None."""
+    found = CUTECHESS.match(text or "")
+    if not found:
+        return None
+    sign, mate, number, depth, _, millis, nodes = found.groups()
+    score, own, _, _ = parse_comment(f"{sign}{mate}{number}/{depth} 0s")
+    return score, own, int(depth) or None, int(millis) / 1000, int(nodes) or None
+
+
 def parse_extras(text):
     """(nodes, nps, pv as UCI moves, time left in seconds) from the rest of a comment; None, None, [] and None where
     it doesn't say, and for the zeros fastchess writes for what the engine didn't report."""
@@ -134,6 +150,9 @@ def load(raw):
         colour = "white" if board.turn == chess.WHITE else "black"
         score, own, depth, seconds = parse_comment(node.comment)
         nodes, nps, pv, left = parse_extras(node.comment)
+        cutechess = parse_cutechess(node.comment) if seconds is None else None
+        if cutechess:
+            score, own, depth, seconds, nodes = cutechess
         moves.append(Move(
             ply=len(moves) + 1, number=board.fullmove_number, san=board.san(move), uci=move.uci(), colour=colour,
             score=score, pawns=None if own is None else (own if colour == "white" else -own), own_pawns=own,

@@ -12,9 +12,9 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.utils import timezone
 
-from nyayo.matches.models import GameBatch
+from nyayo.matches.models import Batch
 
-from .test_batches import TWO, BatchCase, batch_text, game
+from .test_uploads import TWO, BatchCase, batch_text, game
 from .test_matches_ingest import GAUNTLET
 
 
@@ -50,7 +50,7 @@ class ExportCase(BatchCase):
 
 class Everything(ExportCase):
     def test_batches_and_sealed_single_games_come_together(self):
-        self.put_batch(bz2.compress(TWO), batch="a")
+        self.keep(bz2.compress(TWO), batch="a")
         self.put_game(game("1-0", white="Elephant 1.0.0").encode(), game="7")
         self.assertEqual(read(self.export()).count(("Elephant 1.0.0", "1-0")), 2)
         self.assertEqual(len(read(self.export())), 3)
@@ -64,7 +64,7 @@ class Everything(ExportCase):
         self.assertEqual(bz2.decompress(b"".join(response.streaming_content)), b"")
 
     def test_it_is_open_like_the_pages(self):
-        self.put_batch(bz2.compress(TWO))
+        self.keep(bz2.compress(TWO))
         self.assertEqual(self.client.get("/api/games").status_code, 200)
 
     def test_it_is_a_download(self):
@@ -72,19 +72,28 @@ class Everything(ExportCase):
         self.assertEqual(response["Content-Type"], "application/x-bzip2")
         self.assertIn("attachment", response["Content-Disposition"])
 
-    def test_the_stored_bytes_are_streamed_as_they_are(self):
-        body = bz2.compress(TWO)
-        self.put_batch(body)
-        self.assertTrue(self.export("?match=gauntlet-test-1").startswith(body))
+    def test_the_games_are_streamed_as_they_came(self):
+        self.keep(bz2.compress(TWO))
+        exported = bz2.decompress(self.export("?match=gauntlet-test-1"))
+        self.assertEqual(exported.split(b"\n\n[")[0], TWO.split(b"\n\n[")[0])
+        self.assertEqual(exported.count(b"[Event "), 2)
+
+    def test_a_sealed_batch_is_in_it_too(self):
+        from django.test import override_settings
+
+        with override_settings(NYAYO_BATCH_GAMES=1):
+            self.keep(bz2.compress(TWO))
+        self.assertEqual([b.state for b in Batch.objects.order_by("number")], ["sealed", "sealed"])
+        self.assertEqual(len(read(self.export())), 2)
 
 
 class Filters(ExportCase):
     def setUp(self):
         super().setUp()
         self.second_match()
-        self.put_batch(bz2.compress(batch_text(game("1-0", white="G1"))), batch="g")
-        self.put_batch(bz2.compress(batch_text(game("0-1", white="S1"), game("1-0", white="S2"))), batch="s",
-                       match_id="sprt-1")
+        self.keep(bz2.compress(batch_text(game("1-0", white="G1"))), batch="g")
+        self.keep(bz2.compress(batch_text(game("0-1", white="S1", Opponent="base"),
+                                          game("1-0", white="S2", Opponent="base"))), batch="s", match_id="sprt-1")
 
     def names(self, query):
         return sorted(white for white, _ in read(self.export(query)))
@@ -117,7 +126,7 @@ class Filters(ExportCase):
 
     def test_by_date_inclusive(self):
         today = timezone.now().date()
-        GameBatch.objects.filter(batch="g").update(received_at=timezone.now() - timedelta(days=10))
+        Batch.objects.filter(match_id="gauntlet-test-1").update(created_at=timezone.now() - timedelta(days=10))
         self.assertEqual(self.names(f"?since={today}"), ["S1", "S2"])
         self.assertEqual(self.names(f"?until={today - timedelta(days=5)}"), ["G1"])
         self.assertEqual(self.names(f"?since={today - timedelta(days=10)}&until={today}"), ["G1", "S1", "S2"])
@@ -131,7 +140,7 @@ class Filters(ExportCase):
 
 class Command(ExportCase):
     def test_export_games_writes_the_same_stream(self):
-        self.put_batch(bz2.compress(TWO))
+        self.keep(bz2.compress(TWO))
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "games.pgn.bz2"
             call_command("export_games", "-o", str(target), "--kind", "gauntlet", stdout=StringIO())

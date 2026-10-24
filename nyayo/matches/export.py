@@ -1,16 +1,17 @@
 """Every stored game matching a filter, as one bz2 stream (docs/match-schema.md, Export).
 
-The stored batches are concatenated as they are (a multi-stream bz2 file is valid, Python's `bz2` and `bzip2 -d` read it
-whole) and sealed single games, a gauntlet's, are compressed and added, so the export is every game nyayo has for the
-filter. Matches are filtered on what is indexed already; there is no index of positions.
+Each of nyayo's batches, sealed or open, is compressed as a bz2 stream of its own and the streams concatenated (a
+multi-stream bz2 file is valid, Python's `bz2` and `bzip2 -d` read it whole), then the finished single games of
+gauntlets not in a batch yet, so the export is every game nyayo has for the filter, each once. Matches are filtered
+on what is indexed already; there is no index of positions.
 """
 
 import bz2
 from datetime import date, datetime, time, timedelta, timezone
 
-from .batches import batch_path
+from . import catalogue
 from .games import read_pgn
-from .models import KINDS, Game, GameBatch, Match
+from .models import KINDS, Batch, Game, Match
 
 # after each batch: a batch needn't end with a blank line, and the next one's first tag would run into its last move
 SEPARATOR = bz2.compress(b"\n\n")
@@ -71,21 +72,21 @@ def chunks(filters):
     """The export as bytes, piece by piece. Always a valid bz2 stream, an empty one when nothing matches."""
     ids = matches(filters).values("pk")
     low, high = window(filters)
-    batches = GameBatch.objects.filter(match_id__in=ids)
-    singles = Game.objects.filter(match_id__in=ids).exclude(result="*")
+    batches = Batch.objects.filter(match_id__in=ids, games__gt=0)
+    # a finished game already in a batch is exported from there, once
+    singles = Game.objects.filter(match_id__in=ids, kept_in=None).exclude(result="*")
     if low:
-        batches, singles = batches.filter(received_at__gte=low), singles.filter(received_at__gte=low)
+        batches, singles = batches.filter(created_at__gte=low), singles.filter(received_at__gte=low)
     if high:
-        batches, singles = batches.filter(received_at__lt=high), singles.filter(received_at__lt=high)
+        batches, singles = batches.filter(created_at__lt=high), singles.filter(received_at__lt=high)
     sent = False
-    for row in batches.order_by("match_id", "batch"):
+    for row in batches.order_by("match_id", "number"):
         try:
-            data = batch_path(row.match_id, row.batch).read_bytes()
+            data = catalogue.batch_bytes(row)
         except OSError:
             continue
         sent = True
-        yield data
-        yield SEPARATOR
+        yield bz2.compress(data)
     for row in singles.order_by("match_id", "game"):
         pgn = read_pgn(row.match_id, row.game)
         if pgn:

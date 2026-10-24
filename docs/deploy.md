@@ -69,7 +69,16 @@ It fills in the units in `deploy/` for this checkout, user and conda env (found 
 `NYAYO_CONDA_ENV` if the env isn't called `nyayo`), installs them with `sudo`, starts them and shows their status:
 
 - `nyayo.service`, the site on port 8001, four workers of four threads each (`gthread`): live game pages poll ten times a second and a gauntlet
-  runner PUTs every move, so a couple of slow pages must not queue them;
+  runner PUTs every move, so a couple of slow pages must not queue them. Game requests (a game's moves, a batch of
+  games) may take at most `NYAYO_GAME_THREADS` (2) of each worker's threads; the others are kept for match reports and
+  pages, so a flood of games never holds up a test's status (see *Game threads*);
+- `nyayo-worker.service`, nyayo's worker (`manage.py worker`): it reads uploads of finished games (OpenBench sends
+  one per workload) into the matches' batches in the background, so the upload itself is answered at once. It is bound
+  to `nyayo.service`, starting, stopping and restarting with it, `Restart=always`, at low CPU and disk priority, and
+  looks for work every second; nobody runs it by hand. `python manage.py worker --once` does what is waiting and
+  exits, and refuses to start while the service's worker runs (one worker at a time). Follow it with
+  `journalctl -u nyayo-worker -f`; a refused upload's reason is there and in the admin (Matches, Uploads), where it can
+  be read again;
 - `nyayo-expire.timer`, which runs `manage.py expire_runs` daily at 04:30 through `nyayo-expire.service`. It deletes
   wip runs never promoted within 14 days and committed runs not published within 30 (`NYAYO_WIP_DAYS`,
   `NYAYO_COMMITTED_DAYS` in `.env`). Published runs are kept. `python manage.py expire_runs --dry-run` shows what
@@ -80,7 +89,12 @@ It fills in the units in `deploy/` for this checkout, user and conda env (found 
 A running match with no report for `NYAYO_SILENT_AFTER` minutes (30 by default, in `.env`) is shown as *silent* on
 `/matches` and its page; nothing is stored, and its next report clears it.
 
-Running the script again reinstalls the units, which is how a change to a unit file reaches the server. Follow the
+A match whose producer reports by changes (uwanja, once it sends `report.seq`) is archived whole at most every
+`NYAYO_ARCHIVE_EVERY` seconds while it runs (60 by default) and when it ends, instead of on every report; the archive
+is still the whole truth the database can be rebuilt from.
+
+Running the script again reinstalls the units, which is how a change to a unit file reaches the server, and how
+`nyayo-worker.service` is installed the first time. Follow the
 log with `journalctl -u nyayo -f`.
 
 ### Updating
@@ -91,6 +105,91 @@ deploy/update.sh
 
 It pulls, reinstalls the package, migrates the database, collects static files and restarts the service. No need to
 activate the env first.
+
+## Game threads
+
+Producers send games far more often than anything else: uwanja PUTs a live game after every move, OpenBench a batch
+per workload. Each gunicorn worker lets at most `NYAYO_GAME_THREADS` of its threads handle them at once (2 of 4 by
+default, set in `.env`); a game request that finds them taken is answered `503` with `Retry-After: 1` before its body
+is read, and the producer sends it again. A match report (`PUT /api/matches/{id}`) and the pages never wait for a game
+slot, so with four workers there are always eight threads for them. The count is per worker, being per process; keep
+it below `--threads` in `deploy/nyayo.service`, and raise both together if games lag behind while the CPU is idle.
+
+The `503`s show in the access log, not as errors. Under a flood of games they are many; what matters is that
+`PUT /api/matches/...` keeps answering `200` quickly.
+
+Tried under gunicorn 26 with the service's settings (four workers of four threads, pinned to two cores) and 32
+clients sending 100 KB games at 100 KB/s, as over a slow link: without the cap a match report waited 0.6 s for a
+thread (median), with it 5 ms. With games sent at full speed the CPU is the limit rather than the threads, and the
+cap makes little difference (a median of 30 to 45 ms either way).
+
+## The game reader
+
+The worker reads every game it keeps through a game reader: python-chess unless `.env` names elephant's
+**phant-indexer**, a release binary pinned by its sha256. The worker checks the binary's hash and its `--version`
+before it starts and refuses to start on a mismatch (the unit then fails and says why in
+`journalctl -u nyayo-worker`), so a binary replaced under it is never run. Each batch and upload records the reader
+that read it (`phant-indexer 1.3.1`, `python-chess 1.11.2`).
+
+```bash
+mkdir -p ~/dev/nyayo-bin
+cp phant-indexer-1.3.1-linux-x86-64 ~/dev/nyayo-bin/ && chmod +x ~/dev/nyayo-bin/phant-indexer-1.3.1-linux-x86-64
+sha256sum ~/dev/nyayo-bin/phant-indexer-1.3.1-linux-x86-64      # compare with the release's
+```
+
+and in `.env`:
+
+```bash
+NYAYO_READER=/home/fischer/dev/nyayo-bin/phant-indexer-1.3.1-linux-x86-64
+NYAYO_READER_SHA256=<the release's sha256>
+```
+
+then `sudo systemctl restart nyayo-worker`. A new release is a new file and a new hash, never the old file replaced.
+
+Measured on 2026-10-21 in WSL (one thread of a Ryzen 9 9900X) on a restore of bobby's 2026-10-20 backup, every
+stored game read as one input per producer through nyayo's own interface (a pipe in, JSON lines out, parsed):
+
+| Games | python-chess 1.11.2 | phant-indexer 1.3.1 (elephant#29, `40623e8`) |
+|:--|--:|--:|
+| OpenBench, 42,116 games, 155 MB | 75.3 s, 559 games/s | 2.01 s, 20,934 games/s |
+| uwanja, 2,737 games, 59 MB (fastchess, PVs in the comments) | 6.8 s, 405 games/s | 0.26 s, 10,469 games/s |
+
+They agree on every game: its place, offset and length, whether it read, its result, its plies and its tags (the
+tags a PGN has; python-chess also fills in the seven-tag roster). bobby's CPU is slower than this one; the ratio,
+about 37 to 1, is what carries over.
+
+## The index
+
+Every game kept as data has a card in `index.sqlite3` (see *Storage* in `match-schema.md`). The worker writes a
+card as it appends a game. After a new release of the reader, or a change to what a card holds, run
+
+```bash
+python manage.py reindex --dry-run     # how many batches are out of date
+python manage.py reindex               # at low priority, one batch at a time, safe to stop and start again
+```
+
+It visits only the batches whose cards were filled by an older reader or extractor version. `--rebuild` writes every
+card again and is how a lost index is made again from the batches. `--only eval` runs one extractor.
+
+## Migrating the stored games into batches
+
+Once, after the worker and the reader are installed (see *The game reader*) and `NYAYO_BATCHES_DIR` is on the share:
+
+```bash
+python manage.py backup                      # first, by hand
+python manage.py keep_games --dry-run        # reads every finished single game, prints what it would keep
+python manage.py keep_games                  # does it, and checks itself
+```
+
+Each finished single game is read, appended as it came to its match's batches with its id kept (batches are sealed
+at 64 games, a match that has ended has its last one sealed short), and indexed with how it ended. A game that
+carries no ending is deduced against its match's adjudication settings and marked inferred. Nothing in `games/` or
+`archive/` is changed or deleted. It then checks, and fails naming the problem unless: each match's games in batches
+equal its finished games; the export before and after holds the same games; the reader and python-chess read the
+batches' games the same. Run again it finds nothing to do. Games still being played stay where they are.
+
+Only after it passes, `python manage.py purge_games --match ID` (or `--older-than DAYS`) removes the single files of
+games in sealed batches; it keeps back any that aren't, and counts them. It takes about four minutes for 45,000 games.
 
 ## Backup
 
@@ -106,11 +205,14 @@ Once, on bobby: make a private repository, clone it (`git clone git@github.com:<
 `.env`, and run `python manage.py backup` by hand to see it work. The dump holds the machines' token hashes and the
 admin users, hence private.
 
-`games/batches/` (the game database: batches of finished games, `PUT /api/matches/{id}/pgns/{batch}`) is not in the
-repo: it is gigabytes of bz2. Put it on the Synology's share and let the NAS's own backup cover it: mount the share on
+`games/batches/` (the game database: nyayo's 64-game batches of finished games, zstd) is not in the repo: it will be
+gigabytes. Put it on the Synology's share and let the NAS's own backup cover it: mount the share on
 bobby and set `NYAYO_BATCHES_DIR` to it in `.env` (it defaults to `games/batches` in the data directory). Batches are
 never purged with the live games; `manage.py purge_batches --match ID` removes a match's by hand, and a match that has
-batches can't be deleted in the admin until then.
+batches can't be deleted in the admin until then. Two more things are left out on purpose: `uploads/` (an upload
+waiting for the worker, OpenBench's to send again; it keeps the bytes in its own tars) and the index of the games,
+`index.sqlite3` (`NYAYO_INDEX_DB`), which is derived from the batches. Keep the index on bobby's own disk, never on
+the share: SQLite's locking isn't safe over SMB or NFS.
 
 To restore on a new machine: install nyayo, set `NYAYO_DATA_DIR` to an empty directory, clone the backup repository,
 stop nyayo, then `python manage.py restore_backup <path to the clone>`. It refuses a data directory that already has

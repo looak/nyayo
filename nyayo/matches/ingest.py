@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from nyayo.runs.ingest import IngestError, atomic_write, first_difference, invalid, timestamp
 
+from . import schedule
 from .models import GAME_ID_MAX, ID_PATTERN, KINDS, MATCH_ID_MAX, STATES, Engine, Match, MatchResult, MatchSnapshot
 
 SCHEMA_VERSION = 1
@@ -28,15 +29,25 @@ COUNTS = ("games", "wins", "draws", "losses")
 SIDES = ("timelosses", "crashes", "illegal")
 GAME_STATES = ("scheduled", "playing", "finished")
 GAME_RESULTS = ("1-0", "0-1", "1/2-1/2")
-# of a scheduled game, the runner may still correct anything (fastchess has the last word on colours); once it has
-# started these are fixed, the rest of the entry is what happens to it
-STARTED_FIXED = ("round", "opponent", "subject_colour")
+STARTED_FIXED = schedule.STARTED_FIXED
 
 
 @dataclass
 class Ingested:
     match: Match
     created: bool
+
+
+class WrongBase(IngestError):
+    """A report by changes whose base isn't the seq nyayo holds: 409, nothing applied. The answer says nyayo's seq."""
+
+    def __init__(self, reason):
+        super().__init__(409, reason)
+
+
+def archive_every():
+    """Seconds between archive writes of a match reported by changes."""
+    return settings.NYAYO_ARCHIVE_EVERY
 
 
 def archive_dir():
@@ -54,20 +65,78 @@ def ingest(raw, machine=None, match_id=None):
     document = parse(raw)
     validate(document, match_id)
     m = document["match"]
+    report = document.get("report")
+    base = report["base"] if report else None
 
-    existing = Match.objects.filter(pk=m["id"]).first()
-    if existing is not None:
+    existing = find_match(m["id"])
+    if existing is None and base is None:
+        created = create_new(raw, document, machine)
+        if created is not None:
+            return created
+        # another producer created it first, while this one was waiting: this document is an update of what it wrote
+        existing = find_match(m["id"])
+    check_against(existing, document, base)
+
+    if base is None:
+        write_archive(m["id"], raw, machine)
+    match = store(existing, document, report, base)
+    if base is not None:
+        archive_merged(match, document, machine)
+    return Ingested(match, False)
+
+
+def create_new(raw, document, machine):
+    """Creates a match nyayo has no record of, or returns None when it finds there is one by now.
+
+    Two producers sending a new match's first document at the same moment both find no match. The lookup is made
+    again here under the database's write lock (the connection's transactions are IMMEDIATE), so the second one waits,
+    then finds the match the first created and goes on as an update, checked against what the first wrote and its
+    archive. Nothing is written, archive included, until the lock is held and the match is known to be new."""
+    m = document["match"]
+    with transaction.atomic():
+        if find_match(m["id"]) is not None:
+            return None
+        write_archive(m["id"], raw, machine)
+        match = create_match(document, machine)
+        snapshot(match, document)
+    return Ingested(match, True)
+
+
+def find_match(match_id):
+    return Match.objects.filter(pk=match_id).first()
+
+
+def check_against(existing, document, base):
+    """The rules for a document against the match it is an update of (nothing, for a new match)."""
+    if base is not None:
+        # a report by changes goes on top of what nyayo holds, or not at all
+        if existing is None or existing.report_seq is None:
+            raise WrongBase(f"report.base is {base} but nyayo holds no seq for {document['match']['id']}, send the "
+                            f"whole document")
+        previous = read_archived(existing.pk)
+        if previous is not None:
+            check_update(previous, document, changes=True)
+    elif existing is not None:
         previous = read_archived(existing.pk)
         if previous is not None:
             check_update(previous, document)
         else:
             check_update_against(existing, document)
 
-    write_archive(m["id"], raw, machine)
+
+def store(existing, document, report, base):
+    """Updates existing, in one transaction."""
     with transaction.atomic():
-        match = create_match(document, machine) if existing is None else update_match(existing, document)
+        if base is not None:
+            # compare and set in one statement: another report in between makes this one the wrong one
+            if not Match.objects.filter(pk=existing.pk, report_seq=base).update(report_seq=report["seq"]):
+                current = Match.objects.values_list("report_seq", flat=True).get(pk=existing.pk)
+                raise WrongBase(f"report.base is {base} but nyayo's seq for {existing.pk} is {current}, send the "
+                                f"whole document")
+            existing.report_seq = report["seq"]
+        match = update_match(existing, document, changes=base is not None)
         snapshot(match, document)
-    return Ingested(match, existing is None)
+    return match
 
 
 # --- parsing & validation ---
@@ -153,6 +222,23 @@ def validate(document, match_id=None):
     if not isinstance(document.get("machines", []), list):
         raise invalid("machines must be a list")
     validate_schedule(document, known)
+    validate_report(document)
+
+
+def validate_report(document):
+    report = document.get("report")
+    if report is None:
+        return
+    if not isinstance(report, dict):
+        raise invalid("report must be an object")
+    seq, base = report.get("seq"), report.get("base")
+    if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1:
+        raise invalid("report.seq must be a whole number, 1 or more")
+    if base is not None and (not isinstance(base, int) or isinstance(base, bool) or base < 1 or base >= seq):
+        raise invalid("report.base must be null or the whole number of an earlier report, below report.seq")
+    if base is not None and document.get("games") is None:
+        raise invalid("a report with a base carries the schedule entries that changed in games")
+    report["seq"], report["base"] = seq, base
 
 
 def validate_stats(stats):
@@ -241,7 +327,7 @@ def validate_result(row, where, opponents, seen):
 def fixed_part(document):
     """The document without what a producer may change as the match goes on."""
     fixed = copy.deepcopy(document)
-    for name in ("results", "machines", "pgn", "progress", "games", "stats"):
+    for name in ("results", "machines", "pgn", "progress", "games", "stats", "report"):
         fixed.pop(name, None)
     m = fixed.get("match") or {}
     for name in ("state", "updated_at", "finished_at"):
@@ -252,12 +338,13 @@ def fixed_part(document):
     return fixed
 
 
-def check_update(previous, document):
+def check_update(previous, document, changes=False):
     changed = first_difference(fixed_part(previous), fixed_part(document), "")
     if changed:
         raise IngestError(409, f"{changed.lstrip('.')} changed, only the state, counts and the producer's LLR and "
                                f"result may change on a recorded match")
-    check_schedule(previous.get("games"), document.get("games"))
+    if not changes:  # a report by changes is checked entry by entry against the rows, as it is applied
+        check_schedule(previous.get("games"), document.get("games"))
     old = {row["opponent"]: row for row in previous.get("results") or [] if isinstance(row, dict)}
     new = {row["opponent"]: row for row in document["results"]}
     for opponent, before in old.items():
@@ -280,17 +367,13 @@ def check_schedule(before, after):
         current = now.get(number)
         if current is None:
             raise IngestError(409, f"games[{number}] is gone, a started game stays in the schedule")
-        for name in STARTED_FIXED:
-            if current[name] != game.get(name):
-                raise IngestError(409, f"games[{number}].{name} changed, a started game's {name} is fixed")
-        if game.get("state") == "finished" and (current["state"], current.get("result")) != ("finished",
-                                                                                           game.get("result")):
-            raise IngestError(409, f"games[{number}] finished with {game.get('result')} and can't change")
+        schedule.check_entry(game, current)
 
 
 def check_update_against(existing, document):
     """Without the archived version, at least hold that counts only grow."""
-    check_schedule(existing.schedule, document.get("games"))
+    if (document.get("report") or {}).get("base") is None:
+        check_schedule(existing.schedule, document.get("games"))
     new = {row["opponent"]: row for row in document["results"]}
     for result in existing.results.all():
         if result.opponent not in new:
@@ -340,6 +423,23 @@ def write_archive(match_id, raw, machine):
     atomic_write(folder / f"{match_id}.meta.json", json.dumps(meta).encode("utf-8"))
 
 
+def archive_merged(match, document, machine):
+    """The archive of a match reported by changes: the document as it now stands, with the whole schedule from the
+    rows, written when the match isn't running any more and otherwise at most every NYAYO_ARCHIVE_EVERY seconds, so a
+    lost database can be rebuilt from it but a report costs what changed, not what the schedule weighs."""
+    path = archive_path(match.pk)
+    if match.state == "running" and archive_every() > 0:
+        try:
+            if timezone.now().timestamp() - path.stat().st_mtime < archive_every():
+                return
+        except OSError:
+            pass
+    merged = copy.deepcopy(document)
+    merged["games"] = match.schedule
+    merged["report"] = {"seq": match.report_seq, "base": None}
+    write_archive(match.pk, json.dumps(merged).encode("utf-8"), machine)
+
+
 def delete_archived(match_id):
     for path in (archive_path(match_id), archive_dir() / f"{match_id}.meta.json"):
         path.unlink(missing_ok=True)
@@ -375,10 +475,12 @@ def create_match(document, machine):
         finished_at=timestamp(m, "finished_at"), host_name=host.get("name") or "", host=host,
         settings=m.get("settings") or {}, subject=engine_for(document["subject"]),
         subject_info=participant_info(document["subject"], "branch", "repo", "bench", "options"),
-        sprt=document.get("sprt"), stats=document.get("stats"), machines=document.get("machines") or [], schedule=document.get("games") or [],
+        sprt=document.get("sprt"), stats=document.get("stats"), machines=document.get("machines") or [],
         progress=document.get("progress"), received_at=now,
-        updated_at=timestamp(m, "updated_at"),
+        updated_at=timestamp(m, "updated_at"), report_seq=(document.get("report") or {}).get("seq"),
     )
+    schedule.replace(match, document.get("games"))
+    match.save(update_fields=["schedule_digest"])
     rows = {row["opponent"]: row for row in document["results"]}
     for ordinal, opponent in enumerate(document["opponents"]):
         result = MatchResult(
@@ -389,7 +491,7 @@ def create_match(document, machine):
     return match
 
 
-def update_match(match, document):
+def update_match(match, document, changes=False):
     m = document["match"]
     match.stats = document.get("stats")
     match.state = m["state"]
@@ -397,10 +499,15 @@ def update_match(match, document):
     match.updated_at = timestamp(m, "updated_at")
     match.sprt = document.get("sprt")
     match.machines = document.get("machines") or []
-    match.schedule = document.get("games") or []
     match.progress = document.get("progress")
-    match.save(update_fields=["state", "finished_at", "updated_at", "sprt", "stats", "machines", "schedule",
-                              "progress"])
+    report = document.get("report")
+    match.report_seq = report["seq"] if report else None
+    if changes:
+        schedule.apply_changes(match, document.get("games") or [])
+    else:
+        schedule.replace(match, document.get("games"))
+    match.save(update_fields=["state", "finished_at", "updated_at", "sprt", "stats", "machines", "progress",
+                              "report_seq", "schedule_digest"])
     rows = {row["opponent"]: row for row in document["results"]}
     for result in match.results.all():
         row = rows.get(result.opponent)

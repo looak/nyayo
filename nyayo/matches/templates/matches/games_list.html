@@ -1,0 +1,39 @@
+{% extends "runs/base.html" %}
+{% load runs_extras matches_extras %}
+{% block title %}Games · nyayo{% endblock %}
+{% block head %}<style>main { max-width: 1760px; } td.subject { font-weight: 600; }</style>{% endblock %}
+{% block content %}
+<h1>Games</h1>
+<p class="muted">
+  {{ total }} game{{ total|pluralize }}{% if filters %} matching{% endif %}, newest first.
+  {% if filters.match %}Match {% if filters.match.known %}<a href="{% url 'match' filters.match.id %}">{{ filters.match.name }}</a>{% else %}{{ filters.match.name }}{% endif %}.{% endif %}
+  {% if filters.opening %}Opening position <span class="mono">{{ filters.opening }}</span>.{% endif %}
+  {% if filters %}<a href="{% url 'games' %}">Show all</a>{% endif %}
+</p>
+{% if games_page.object_list %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Played</th><th>Game</th><th>White</th><th>Black</th><th class="num">Moves</th><th>Result</th>
+    <th>Ended by</th><th>Opening</th><th>Source</th></tr></thead>
+  <tbody>
+  {% for g in games_page.object_list %}
+    <tr>
+      <td class="nowrap" title="{% if g.played %}{{ g.played|date:'Y-m-d H:i' }} UTC{% if not g.exact_time %} (the day, or when nyayo got it){% endif %}{% endif %}">{% if g.played %}{{ g.played|date:"Y-m-d" }}{% if g.exact_time %} <span class="muted">{{ g.played|date:"H:i" }}</span>{% endif %}{% endif %}</td>
+      <td><a href="{% url 'game' g.match.pk g.game %}">{{ g.game }}</a></td>
+      <td{% if g.colour == "white" %} class="subject"{% endif %}>{{ g.white|default:"?" }}</td>
+      <td{% if g.colour == "black" %} class="subject"{% endif %}>{{ g.black|default:"?" }}</td>
+      <td class="num" title="{{ g.plies }} plies">{{ g.moves }}</td>
+      <td>{% if g.outcome %}<span class="outcome-{{ g.outcome }}">{{ g.outcome }}</span> {% endif %}<span class="muted">{{ g.result }}</span></td>
+      <td>{{ g.ended }}{% if g.inferred %} <span class="muted" title="Deduced from the engines' scores and the match's adjudication settings, the game doesn't say">(deduced)</span>{% endif %}</td>
+      <td class="nowrap">{% if g.opening %}<span class="mono muted" title="Book position {{ g.opening }}">{{ g.opening|slice:":8" }}</span> <a href="{% url 'games' %}?opening={{ g.opening }}">same opening</a>{% endif %}</td>
+      <td><a href="{% url 'match' g.match.pk %}" title="{{ g.match.name|default:g.match.pk }}">{{ g.match.name|default:g.match.pk|truncatechars:34 }}</a> <span class="muted">{{ g.match.kind }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% pager games_page %}
+{% else %}
+<p class="muted">No games{% if filters %} match{% else %} kept yet{% endif %}.</p>
+{% endif %}
+{% endblock %}

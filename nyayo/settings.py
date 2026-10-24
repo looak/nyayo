@@ -51,6 +51,10 @@ NYAYO_GAMES_DIR = DATA_DIR / "games"
 # one row query, so this can be fast; raise it if nyayo's workers are busy with many viewers.
 NYAYO_GAME_POLL_MS = int(os.environ.get("NYAYO_GAME_POLL_MS", 100))
 
+# How many of a gunicorn worker's threads may handle game requests (a game's moves, a batch of games) at once; the
+# rest are kept for match reports and pages (nyayo/gamethreads.py). Below the --threads in deploy/nyayo.service.
+NYAYO_GAME_THREADS = int(os.environ.get("NYAYO_GAME_THREADS", 2))
+
 # Runs that never became history expire (manage.py expire_runs): wip runs this many days after being recorded,
 # committed runs this many days after being committed if they weren't published by then.
 NYAYO_WIP_DAYS = int(os.environ.get("NYAYO_WIP_DAYS", 14))
@@ -65,7 +69,29 @@ NYAYO_BACKUP_REPO = os.environ.get("NYAYO_BACKUP_REPO", "")
 # and 256 MB once decompressed.
 NYAYO_BATCHES_DIR = Path(os.environ.get("NYAYO_BATCHES_DIR") or NYAYO_GAMES_DIR / "batches").resolve()
 NYAYO_MAX_BATCH_UPLOAD_BYTES = 64 * 1024 * 1024
+# Games in one of nyayo's batches; every batch records its own count, so changing this needs nothing else.
+NYAYO_BATCH_GAMES = int(os.environ.get("NYAYO_BATCH_GAMES", 64))
+# A match's last batch is sealed short once the match has ended and nyayo has heard nothing of it for this long.
+NYAYO_SEAL_AFTER = int(os.environ.get("NYAYO_SEAL_AFTER", 300))
+
+# The game reader, elephant's phant-indexer: the path of its release binary and that release's sha256, which the
+# worker checks before it starts (it refuses to start on a mismatch). Unset, games are read with python-chess.
+NYAYO_READER = os.environ.get("NYAYO_READER", "")
+NYAYO_READER_SHA256 = os.environ.get("NYAYO_READER_SHA256", "")
+
+# Uploads of finished games wait here, as sent, until the worker has put their games in batches (then they're
+# deleted). Not in the backup: a pending upload is the producer's to send again.
+NYAYO_UPLOADS_DIR = DATA_DIR / "uploads"
+
+# The index of every game kept as data, a card per game: its own SQLite database, derived from the batches and
+# rebuilt from them, so it is on local disk (never on a network share, where SQLite's locking isn't safe) and not
+# in the backup.
+NYAYO_INDEX_DB = Path(os.environ.get("NYAYO_INDEX_DB") or DATA_DIR / "index.sqlite3").resolve()
 NYAYO_MAX_BATCH_BYTES = 256 * 1024 * 1024
+
+# A match whose producer reports by changes is archived whole this often while it runs (and when it ends), not on every
+# report; 0 archives every report.
+NYAYO_ARCHIVE_EVERY = int(os.environ.get("NYAYO_ARCHIVE_EVERY", 60))
 
 # A running match with no report for this many minutes is shown as silent (derived when a page is drawn, never stored).
 NYAYO_SILENT_AFTER = int(os.environ.get("NYAYO_SILENT_AFTER", 30))
@@ -88,6 +114,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "nyayo.gamethreads.GameThreadsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",

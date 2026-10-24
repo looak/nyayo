@@ -1,9 +1,10 @@
 from django.urls import path
 
-from . import pages, views
+from . import gameslist, pages, views
 
 urlpatterns = [
     path("matches", pages.matches_list, name="matches"),
+    path("games", gameslist.games_list, name="games"),
     path("matches/<str:match_id>", pages.match_detail, name="match"),
     path("matches/<str:match_id>/games/<str:game>", pages.game_page, name="game"),
     path("matches/<str:match_id>/games/<str:game>/live", pages.game_fragment, name="game_fragment"),

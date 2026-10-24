@@ -53,9 +53,12 @@ class Match(models.Model):
     # the producer's own Elo and error { elo, error, model }, which may change as the match goes on
     stats = models.JSONField(null=True, blank=True)
     machines = models.JSONField(default=list)
-    # a gauntlet's whole schedule from its first report on, and { total, played, playing }; see ingest.validate_games
-    schedule = models.JSONField(default=list)
+    # { total, played, playing }; the schedule itself is rows (ScheduleEntry)
     progress = models.JSONField(null=True, blank=True)
+    # the seq of the last report that carried one, which a report by changes must name as its base, and the digest of
+    # the schedule as it now stands; both null/empty for a match whose producer sends whole documents
+    report_seq = models.PositiveBigIntegerField(null=True, blank=True)
+    schedule_digest = models.CharField(max_length=64, blank=True)
     received_at = models.DateTimeField(default=timezone.now)
     # when the producer last said anything, from the document; received_at is when nyayo heard it
     updated_at = models.DateTimeField(default=timezone.now, db_index=True)
@@ -66,6 +69,42 @@ class Match(models.Model):
 
     def __str__(self):
         return self.name or self.pk
+
+    @property
+    def schedule(self):
+        """The schedule as the eight-field dicts of the match document, by game number. Cached on the instance;
+        schedule.apply_* clear it."""
+        if getattr(self, "_schedule", None) is None:
+            self._schedule = [entry.as_dict() for entry in self.scheduled.order_by("number")]
+        return self._schedule
+
+
+class ScheduleEntry(models.Model):
+    """One game of a gauntlet's schedule, the eight fields of an entry of the match document, with the hash the
+    schedule's digest is made of. Kept apart from Game, the index of a PGN file that purge_games removes."""
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="scheduled")
+    number = models.PositiveIntegerField()
+    round = models.IntegerField(null=True, blank=True)
+    opponent = models.CharField(max_length=GAME_ID_MAX)
+    subject_colour = models.CharField(max_length=5)
+    state = models.CharField(max_length=10)
+    result = models.CharField(max_length=10, null=True, blank=True)
+    termination = models.CharField(max_length=200, null=True, blank=True)
+    fault = models.JSONField(null=True, blank=True)
+    hash = models.CharField(max_length=64)
+
+    class Meta:
+        ordering = ["match", "number"]
+        verbose_name_plural = "schedule entries"
+        constraints = [models.UniqueConstraint(fields=["match", "number"], name="one_entry_per_game_number")]
+
+    def __str__(self):
+        return f"{self.match_id}/{self.number}"
+
+    def as_dict(self):
+        return {name: getattr(self, name) for name in ("number", "round", "opponent", "subject_colour", "state",
+                                                       "result", "termination", "fault")}
 
 
 class MatchResult(models.Model):
@@ -122,28 +161,74 @@ class MatchSnapshot(models.Model):
         ordering = ["match", "received_at"]
 
 
-class GameBatch(models.Model):
-    """The index of a batch of finished games (games/batches/<match id>/<batch>.pgn.bz2), sealed on arrival. One row
-    per batch and none per game: picking a training set filters on the match, which is indexed already. PROTECT: a
-    match with batches isn't deleted from under them; `manage.py purge_batches --match ID` comes first."""
+UPLOAD_STATES = ["pending", "done", "refused"]
+BATCH_STATES = ["open", "sealed"]
 
-    match = models.ForeignKey(Match, on_delete=models.PROTECT, related_name="batches")
-    batch = models.CharField(max_length=GAME_ID_MAX, validators=[id_validator])
-    games = models.PositiveIntegerField()
+
+class Upload(models.Model):
+    """A producer's upload of finished games (PUT .../pgns/{name}), an OpenBench workload's .pgn.bz2 as sent. Taken
+    without reading it: the file waits in uploads/<match id>/ as `pending` until the worker has checked every game
+    and appended them to the match's batches (`done`), or refused it whole with the reason (`refused`). The file is
+    deleted once done; the row stays, so a resend is recognised by its sha256. PROTECT: a match with games kept as data
+    isn't deleted from under them; `manage.py purge_batches --match ID` comes first."""
+
+    match = models.ForeignKey(Match, on_delete=models.PROTECT, related_name="uploads")
+    name = models.CharField(max_length=GAME_ID_MAX, validators=[id_validator])
+    # of the body as sent, and how it was sent
     bytes = models.PositiveBigIntegerField()
-    # of the bytes as stored
     sha256 = models.CharField(max_length=64)
+    content_type = models.CharField(max_length=40, default="application/x-bzip2")
+    encoding = models.CharField(max_length=20, blank=True)
     machine = models.ForeignKey("runs.Machine", null=True, blank=True, on_delete=models.SET_NULL,
-                                related_name="batches")
+                                related_name="uploads")
     received_at = models.DateTimeField(default=timezone.now)
+    state = models.CharField(max_length=10, choices=[(s, s) for s in UPLOAD_STATES], default="pending",
+                             db_index=True)
+    reason = models.TextField(blank=True)
+    # games read from it, and how many of them are in batches so far: a worker stopped half way carries on from there
+    games = models.PositiveIntegerField(default=0)
+    appended = models.PositiveIntegerField(default=0)
+    # the reader that checked it, and the numbers of the batches its games went to
+    reader = models.CharField(max_length=40, blank=True)
+    batches = models.JSONField(default=list)
+    done_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        verbose_name_plural = "game batches"
-        ordering = ["match", "batch"]
-        constraints = [models.UniqueConstraint(fields=["match", "batch"], name="one_row_per_batch")]
+        ordering = ["match", "name"]
+        constraints = [models.UniqueConstraint(fields=["match", "name"], name="one_row_per_upload")]
 
     def __str__(self):
-        return f"{self.match_id}/{self.batch}"
+        return f"{self.match_id}/{self.name}"
+
+
+class Batch(models.Model):
+    """nyayo's own batch of a match's finished games, every game it keeps as data: 64 of them, or fewer for a match's
+    last. While open it is a plain PGN file the worker appends to, batches/<match id>/<number>.pgn; sealed, it is
+    compressed to <number>.pgn.zst and never changes. A game's place in it is on its card in the index database."""
+
+    match = models.ForeignKey(Match, on_delete=models.PROTECT, related_name="batches")
+    number = models.PositiveIntegerField()
+    state = models.CharField(max_length=10, choices=[(s, s) for s in BATCH_STATES], default="open", db_index=True)
+    games = models.PositiveIntegerField(default=0)
+    # the plain PGN's length, which is the open file's committed length, and once sealed the stored file's size and hash
+    bytes = models.PositiveBigIntegerField(default=0)
+    stored_bytes = models.PositiveBigIntegerField(default=0)
+    sha256 = models.CharField(max_length=64, blank=True)
+    # the reader that read its games, "python-chess 1.11.2" or "phant-indexer 1.3.1"
+    reader = models.CharField(max_length=40, blank=True)
+    # where its games came from, in order: {"upload": name, "first": n, "count": k} for a run of an upload's games
+    # (their ids are <name>.<n> on), {"game": id} for a single game; what the cards are written again from
+    sources = models.JSONField(default=list)
+    created_at = models.DateTimeField(default=timezone.now)
+    sealed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name_plural = "batches"
+        ordering = ["match", "number"]
+        constraints = [models.UniqueConstraint(fields=["match", "number"], name="one_row_per_batch_number")]
+
+    def __str__(self):
+        return f"{self.match_id}/{self.number}"
 
 
 class Game(models.Model):
@@ -163,6 +248,11 @@ class Game(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     received_at = models.DateTimeField(default=timezone.now)
+    # A finished game waits for the worker to put it in its match's batches (worker.py), then says which batch it is
+    # in; its file stays until that batch is sealed, and purge_games leaves it until then. Games finished before
+    # nyayo kept batches wait for `manage.py keep_games`, not for the worker.
+    waiting = models.BooleanField(default=False, db_index=True)
+    kept_in = models.ForeignKey(Batch, null=True, blank=True, on_delete=models.SET_NULL, related_name="single_games")
 
     class Meta:
         ordering = ["match", "game"]
