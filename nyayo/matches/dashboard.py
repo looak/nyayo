@@ -6,12 +6,17 @@ themselves: a few scans of one table, each well under a second for a hundred tho
 
 import math
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
+from django.conf import settings
 from django.db.models import Count, Sum
+from django.db.models.functions import Coalesce
 from django.shortcuts import render
 from django.utils import timezone as django_timezone
 
-from . import cards, catalogue, stats
+from nyayo.runs.models import Run
+
+from . import cards, catalogue, sprtview, stats
 from .gameslist import ENDINGS, LOST, RULES, STARTPOS, WON, hex_key, signed
 from .models import Batch, Game, Match, Upload
 from .pages import is_silent, match_queryset, running_cards, silent_cutoff
@@ -124,25 +129,78 @@ def recent_matches(cutoff):
     return matches
 
 
-def figures(now):
-    """The four tiles: games kept, matches running, games played in the last day, and the index."""
-    kept = Batch.objects.aggregate(games=Sum("games"), stored=Sum("stored_bytes"), batches=Count("pk"))
-    db = catalogue.index()
-    indexed = db.execute("SELECT count(*) FROM card").fetchone()[0]
-    day = db.execute("SELECT count(*) FROM card WHERE played_at >= ?",
-                     (int((now - timedelta(days=1)).timestamp()),)).fetchone()[0]
+def file_bytes(path):
+    """A SQLite file's size with its write-ahead log, 0 when it isn't there."""
+    path = Path(path)
+    return sum(p.stat().st_size for p in (path, path.with_name(path.name + "-wal")) if p.exists())
+
+
+def size_text(count):
+    return f"{count / 1e9:.1f} GB" if count >= 1e9 else f"{count / 1e6:.0f} MB"
+
+
+def database():
+    """The first tile: what nyayo's game database takes on disk (its database, the index and the batches), how many
+    games it keeps and how many of them the index has carded."""
+    kept = Batch.objects.aggregate(games=Sum("games"), stored=Sum("stored_bytes"))
+    games, batches = kept["games"] or 0, kept["stored"] or 0
+    index_bytes = file_bytes(settings.NYAYO_INDEX_DB)
+    database_bytes = file_bytes(settings.DATABASES["default"]["NAME"])
+    indexed = catalogue.index().execute("SELECT count(*) FROM card").fetchone()[0]
+    return {"size": size_text(database_bytes + index_bytes + batches), "games": games,
+            "parts": [("database", size_text(database_bytes)), ("index", size_text(index_bytes)),
+                      ("batches", size_text(batches))],
+            "indexed": 100 if not games else min(100, math.floor(100 * indexed / games)),
+            "waiting": Upload.objects.filter(state="pending").count(),
+            "refused": Upload.objects.filter(state="refused").count()}
+
+
+def playing():
+    """The second tile: the matches being played, or with none, the one played last."""
     running = Match.objects.filter(state="running")
     kinds = dict(running.values_list("kind").annotate(n=Count("pk")).order_by())
-    games = kept["games"] or 0
-    return {
-        "kept": games, "batches": kept["batches"], "stored_mb": round((kept["stored"] or 0) / 1e6),
-        "running": sum(kinds.values()), "kinds": sorted(kinds.items()),
-        "in_play": Game.objects.filter(result="*", match__state="running").count(),
-        "day": day, "per_hour": round(day / 24),
-        "indexed": indexed, "index_share": 100 if not games else min(100, math.floor(100 * indexed / games)),
-        "waiting": Upload.objects.filter(state="pending").count(),
-        "refused": Upload.objects.filter(state="refused").count(),
-    }
+    last = None
+    if not kinds:
+        last = Match.objects.exclude(state="running").order_by(
+            Coalesce("finished_at", "updated_at").desc()).first()
+    return {"running": sum(kinds.values()), "kinds": sorted(kinds.items()),
+            "in_play": Game.objects.filter(result="*", match__state="running").count(),
+            "last": last, "last_at": (last.finished_at or last.updated_at) if last else None}
+
+
+def latest_sprt():
+    """The third tile: the SPRT that came to a verdict last, else the latest one at all, with its Elo and the faults
+    of the engine under test in it (crashes, time losses, illegal moves)."""
+    sprts = Match.objects.filter(kind="sprt").exclude(sprt=None).select_related("subject")
+    match = (sprts.filter(sprt__result__in=["passed", "failed"]).order_by(
+        Coalesce("finished_at", "updated_at").desc()).first() or sprts.order_by("-updated_at").first())
+    if match is None:
+        return None
+    row = match.results.first()
+    elo, error, _ = sprtview.elo_figures(match, row)
+    faults = []
+    for one, many, field in (("crash", "crashes", "crashes"), ("time loss", "time losses", "timelosses"),
+                             ("illegal move", "illegal moves", "illegal")):
+        n = (getattr(row, field, None) or {}).get("subject") or 0
+        if n:
+            faults.append(f"{n} {one if n == 1 else many}")
+    return {"match": match, "result": (match.sprt or {}).get("result"), "elo": elo, "error": error,
+            "llr": (match.sprt or {}).get("llr"), "faults": faults}
+
+
+def github(now):
+    """The fourth tile: the engine's activity on GitHub as nyayo sees it, the commits pushed in the last week (the
+    published runs), on how many branches, and when the latest push was."""
+    week = Run.objects.filter(state="published", published_at__gte=now - timedelta(days=7))
+    found = week.aggregate(commits=Count("commit", distinct=True), branches=Count("branch", distinct=True),
+                           runs=Count("pk"))
+    latest = Run.objects.filter(state="published").exclude(published_at=None).order_by("-published_at").first()
+    return {**found, "latest": latest}
+
+
+def figures(now):
+    """The four tiles, in order: the game database, what is being played, the latest SPRT and GitHub activity."""
+    return {"database": database(), "playing": playing(), "sprt": latest_sprt(), "github": github(now)}
 
 
 def dashboard(request):

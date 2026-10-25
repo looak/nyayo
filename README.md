@@ -66,7 +66,8 @@ result for the engine under test, how the game ended, its length in moves and it
 cards, so it shows a game once the worker has put it away.
 
 The **Dashboard** (`/`, the home page) shows what nyayo holds at a glance: tiles for the
-games kept, the matches running, the games played in the last day and the index, a GitHub-style calendar of the games
+game database (size, games, how much is indexed), what is being played or was played last, the latest SPRT's
+verdict with any faults of the engine under test, and the commits pushed in the last week, a GitHub-style calendar of the games
 kept by day, how the kept games ended and how they went for the engine under test, the running matches with their
 boards, the latest matches, and the most played book positions.
 

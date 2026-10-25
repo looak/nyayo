@@ -1,13 +1,17 @@
 """The dashboard (/, the home page): tiles, a calendar of games kept, two donuts, matches and openings."""
 
 import bz2
+import uuid
 from datetime import timedelta
 
 from django.utils import timezone
 
 from nyayo.matches import dashboard
+from nyayo.matches.models import Match
+from nyayo.runs.models import Run
 
 from .test_index import MATE, RESIGNED
+from .test_matches_ingest import v1
 from .test_uploads import BatchCase, batch_text, game
 
 BOOK = "rnbqkb1r/pp2pppp/3p1n2/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 0 5"
@@ -21,10 +25,14 @@ class Dashboard(BatchCase):
 
     def test_with_nothing_kept(self):
         page = self.page()
-        self.assertIn(">Games kept<", page)
+        self.assertIn(">Game database<", page)
         self.assertIn("No games kept yet.", page)
         self.assertIn("No game has been read for its opening yet.", page)
         self.assertIn('href="/" class="active"', page)
+        self.assertIn("0 games · 100% indexed", page)
+        self.assertIn("no SPRT yet", page)
+        self.assertIn("0 commits", page)
+        self.assertIn("no pushed run yet", page)
 
     def test_the_games_kept(self):
         today = timezone.now().strftime("%Y.%m.%d")
@@ -34,10 +42,14 @@ class Dashboard(BatchCase):
             game("1/2-1/2", moves="1. Nb3 e6", FEN=BOOK, SetUp="1", Date=today),
             game("1-0", moves="1. Nb3 e6", FEN=BOOK, SetUp="1", Date=today))))
         page = self.page()
-        # the tiles
-        self.assertIn('<div class="big">4</div>', page)
-        self.assertIn("4 cards", page)
-        self.assertIn(">100%<", page)
+        # the tiles: the game database, and with nothing running, the match played last
+        self.assertIn("4 games · 100% indexed", page)
+        self.assertIn("batches ", page)
+        self.assertIn(">Playing now<", page)
+        Match.objects.update(state="finished")
+        page = self.page()
+        self.assertIn(">Last played<", page)
+        self.assertIn('href="/matches/gauntlet-test-1">That match', page)
         # a day with four games, the darkest green
         self.assertIn(f'fill="{dashboard.LEVELS[4]}"><title>4 games on', page)
         self.assertIn("4 in the last year", page)
@@ -54,6 +66,39 @@ class Dashboard(BatchCase):
         self.assertIn(f'href="/games?opening={openings[0]["key"]}"', page)
         # the match they came from
         self.assertIn('href="/matches/gauntlet-test-1"', page)
+
+    def test_the_latest_sprt_with_its_faults(self):
+        self.put_match(v1())  # running, the engine under test crashed once
+        page = self.page()
+        self.assertIn("Latest SPRT · running", page)
+        self.assertIn("+21.7", page)
+        self.assertIn("<b>1 crash</b> by the engine under test", page)
+        self.assertIn('class="tile danger"', page[page.index("Game database"):page.index("Latest SPRT")])
+        # a verdict wins over a newer test still running
+        older = v1(match__id="older", match__state="finished", match__finished_at="2026-10-16T13:00:00Z",
+                   sprt__result="passed")
+        older["results"][0]["crashes"] = {"subject": 0, "opponent": 0}
+        self.put_match(older)
+        tile = dashboard.latest_sprt()
+        self.assertEqual((tile["match"].pk, tile["result"], tile["faults"]), ("older", "passed", []))
+
+    def test_github_activity_is_the_runs_pushed_this_week(self):
+        now = timezone.now()
+
+        def run(commit, branch, days):
+            Run.objects.create(id=uuid.uuid4(), kind="smoke", source="ci", state="published", commit=commit,
+                               branch=branch, tree=commit, recorded_at=now, published_at=now - timedelta(days=days))
+
+        run("a" * 40, "main", 1)
+        run("a" * 40, "main", 1)  # the same commit, another run
+        run("b" * 40, "feature", 2)
+        run("c" * 40, "main", 9)  # last week
+        tile = dashboard.github(now)
+        self.assertEqual((tile["commits"], tile["branches"], tile["runs"]), (2, 2, 3))
+        page = self.page()
+        self.assertIn("2 commits", page)
+        self.assertIn("on 2 branches · 3 runs", page)
+        self.assertIn("ago, main", page)
 
     def test_the_calendar_is_a_year_of_weeks_from_monday(self):
         now = timezone.now()

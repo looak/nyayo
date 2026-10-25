@@ -23,22 +23,40 @@
 </style>
 {% endblock %}
 {% block content %}
-{% with t=tiles %}
+{# Pi-hole's four tiles: the game database, what is being played, the latest SPRT, and GitHub activity #}
 <div class="tiles">
-  <div class="tile info"><div class="inner"><h4>Games kept</h4><div class="big">{{ t.kept|thousands }}</div>
-    <div class="sub">{{ t.batches|thousands }} batch{{ t.batches|pluralize:"es" }} · {{ t.stored_mb }} MB stored</div></div>
+  {% with d=tiles.database %}
+  <div class="tile info"><div class="inner"><h4>Game database</h4><div class="big">{{ d.size }}</div>
+    <div class="sub">{{ d.games|thousands }} game{{ d.games|pluralize }} · {{ d.indexed }}% indexed{% if d.waiting %} · {{ d.waiting }} upload{{ d.waiting|pluralize }} waiting{% endif %}{% if d.refused %} · <b>{{ d.refused }} refused</b>{% endif %}</div>
+    <div class="sub">{% for name, size in d.parts %}{{ name }} {{ size }}{% if not forloop.last %} · {% endif %}{% endfor %}</div></div>
     <a class="foot" href="{% url 'games' %}">Browse the games ➔</a></div>
-  <div class="tile danger"><div class="inner"><h4>Matches running</h4><div class="big">{{ t.running }}</div>
-    <div class="sub">{% for kind, n in t.kinds %}{{ n }} {{ kind }}{% if n != 1 %}s{% endif %} · {% endfor %}{{ t.in_play }} game{{ t.in_play|pluralize }} in play</div></div>
-    <a class="foot" href="{% url 'matches' %}">All matches ➔</a></div>
-  <div class="tile warning"><div class="inner"><h4>Played, last 24 h</h4><div class="big">{{ t.day|thousands }}</div>
-    <div class="sub">{{ t.per_hour|thousands }} an hour, of the games kept</div></div>
-    <a class="foot" href="{% url 'games' %}">List them ➔</a></div>
-  <div class="tile {% if t.refused %}danger{% elif t.index_share < 100 or t.waiting %}grey{% else %}success{% endif %}"><div class="inner"><h4>Index</h4><div class="big">{{ t.index_share }}%</div>
-    <div class="sub">{{ t.indexed|thousands }} cards{% if t.waiting %} · {{ t.waiting }} upload{{ t.waiting|pluralize }} waiting{% endif %}{% if t.refused %} · {{ t.refused }} refused{% endif %}</div></div>
-    <a class="foot" href="{% url 'admin:matches_upload_changelist' %}">Uploads ➔</a></div>
+  {% endwith %}
+  {% with p=tiles.playing %}
+  {% if p.running %}
+  <div class="tile success"><div class="inner"><h4>Playing now</h4><div class="big">{{ p.running }} match{{ p.running|pluralize:"es" }}</div>
+    <div class="sub">{% for kind, n in p.kinds %}{{ n }} {{ kind }}{% if n != 1 %}s{% endif %} · {% endfor %}{{ p.in_play }} game{{ p.in_play|pluralize }} in play</div></div>
+    <a class="foot" href="{% url 'matches' %}?state=running">The matches running ➔</a></div>
+  {% else %}
+  <div class="tile grey"><div class="inner"><h4>Last played</h4><div class="big">{% if p.last %}{{ p.last_at|timesince }} ago{% else %}–{% endif %}</div>
+    <div class="sub">{% if p.last %}{{ p.last.name|default:p.last.pk|truncatechars:40 }} · {{ p.last.kind }}, {{ p.last.state }}{% else %}nothing yet{% endif %}</div></div>
+    {% if p.last %}<a class="foot" href="{% url 'match' p.last.pk %}">That match ➔</a>{% else %}<a class="foot" href="{% url 'matches' %}">All matches ➔</a>{% endif %}</div>
+  {% endif %}
+  {% endwith %}
+  {% with s=tiles.sprt %}
+  <div class="tile {% if not s %}grey{% elif s.faults or s.result == "failed" %}danger{% elif s.result == "passed" %}success{% else %}warning{% endif %}"><div class="inner">
+    <h4>Latest SPRT{% if s %} · {{ s.result|default:s.match.state }}{% endif %}</h4>
+    <div class="big">{% if s %}{{ s.elo|elo }}{% else %}–{% endif %}</div>
+    <div class="sub">{% if s %}{{ s.match.name|default:s.match.pk|truncatechars:34 }}{% if s.error is not None %} · {{ s.error|error }}{% endif %}{% if s.llr is not None %} · LLR {{ s.llr|floatformat:2 }}{% endif %}{% else %}no SPRT yet{% endif %}</div>
+    {% if s %}<div class="sub">{% if s.faults %}<b>{{ s.faults|join:" · " }}</b> by the engine under test{% else %}no crashes, time losses or illegal moves{% endif %}</div>{% endif %}</div>
+    {% if s %}<a class="foot" href="{% url 'match' s.match.pk %}">The test ➔</a>{% else %}<a class="foot" href="{% url 'matches' %}?kind=sprt">SPRTs ➔</a>{% endif %}</div>
+  {% endwith %}
+  {% with g=tiles.github %}
+  <div class="tile purple"><div class="inner"><h4>GitHub, last 7 days</h4><div class="big">{{ g.commits }} commit{{ g.commits|pluralize }}</div>
+    <div class="sub">pushed, on {{ g.branches }} branch{{ g.branches|pluralize:"es" }} · {{ g.runs }} run{{ g.runs|pluralize }}</div>
+    <div class="sub">{% if g.latest %}last push {{ g.latest.published_at|timesince }} ago, {{ g.latest.branch|default:"?" }}{% else %}no pushed run yet{% endif %}</div></div>
+    <a class="foot" href="{% url 'runs' %}?state=published">Pushed runs ➔</a></div>
+  {% endwith %}
 </div>
-{% endwith %}
 
 <div class="card">
   <h3 class="box-title">Games kept, day by day <span class="right muted">{{ calendar.total|thousands }} in the last year, by the day they were played (UTC)</span></h3>
