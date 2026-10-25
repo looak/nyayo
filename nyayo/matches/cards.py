@@ -10,7 +10,9 @@ of each filled its cards, so `manage.py reindex` visits only batches an extracto
   (cutechess-ob's `-resign` and `-draw`), marked inferred; else unexplained.
 - **eval**: the eval at plies 20 and 40 and the largest swing, from the comments' scores, where every move has one.
 - **played**: when the game was played, as a Unix time: its own `GameEndTime` (or `GameStartTime`) when the PGN has
-  one, else its `Date` tag at midnight UTC, else when nyayo received it. Only the first is exact (a bit says so).
+  one; else, for a game with only a `Date` tag, when nyayo received it (its upload's arrival, about when the workload
+  ended) if that is near its date, else that date at midnight UTC; else when nyayo received it. Only the first is
+  exact (a bit says so).
 """
 
 import re
@@ -20,7 +22,7 @@ from .models import MatchResult
 
 ENDING_VERSION = "1"
 EVAL_VERSION = "1"
-PLAYED_VERSION = "1"
+PLAYED_VERSION = "2"
 
 ENDED = ("", "checkmate", "stalemate", "insufficient_material", "fifty_moves", "repetition")
 ENDINGS = ("unexplained", "rule", "resignation", "draw_adjudication", "adjudication", "time_forfeit", "illegal_move",
@@ -209,17 +211,24 @@ def parse_date(text):
         return None
 
 
+# how far from a game's Date (midnight UTC) its arrival may be and still date it: the worker's own day can start up to
+# 14 hours either side of UTC's, and a workload's upload comes after its games, so a day before to two after
+ARRIVAL_BEFORE, ARRIVAL_AFTER = 86400, 2 * 86400
+
+
 def played_fields(record, received=None):
     """{"played_at": Unix time, "played_flags": PLAYED_TIME when it is the game's own}. received is when nyayo got
-    the game, the last resort."""
+    the game: a game with only a date is placed at its arrival on that date (so a workload sorts among the games of
+    that day, not at midnight), and one with no date at all at its arrival."""
     tags = record.get("tags") or {}
     for name in ("GameEndTime", "GameStartTime"):
         found = parse_time(tags.get(name))
         if found is not None:
             return {"played_at": found, "played_flags": PLAYED_TIME}
     found = parse_date(tags.get("Date"))
-    if found is None and received is not None:
-        found = int(received.timestamp())
+    arrived = int(received.timestamp()) if received is not None else None
+    if arrived is not None and (found is None or found - ARRIVAL_BEFORE <= arrived < found + ARRIVAL_AFTER):
+        found = arrived
     return {"played_at": found, "played_flags": 0}
 
 

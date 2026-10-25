@@ -408,7 +408,7 @@
   </nav>
 </aside>
 <div class="page">
-  <div class="topbar"><span class="crumb">{% block crumb %}{% if here == "dashboard" %}Dashboard{% elif here == "matches" %}Testing › Matches{% elif here == "match" %}Testing › Matches › a match{% elif here == "game" %}Testing › Matches › a game{% elif here == "runs" %}Testing › Runs{% elif here == "run" %}Testing › Runs › a run{% elif here == "case" %}Testing › Runs › a position{% elif here == "compare" %}Testing › Compare{% elif here == "games" %}Catalogue › Games{% endif %}{% endblock %}</span><span class="host">host <code>{{ shell.host }}</code></span></div>
+  <div class="topbar"><span class="crumb">{% block crumb %}{% if here == "dashboard" %}Dashboard{% elif here == "matches" %}Testing › Matches{% elif here == "match" %}Testing › Matches › a match{% elif here == "game" %}Testing › Matches › a game{% elif here == "runs" %}Testing › Runs{% elif here == "run" %}Testing › Runs › a run{% elif here == "case" %}Testing › Runs › a position{% elif here == "compare" %}Testing › Compare{% elif here == "games" %}Catalogue › Games{% endif %}{% endblock %}</span><span class="host">host <code>{{ shell.host }}</code> · times in <code title="{{ time_zone }}">{% now "T" %}</code></span></div>
   <main>
   {% block content %}{% endblock %}
   </main>

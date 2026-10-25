@@ -60,7 +60,7 @@
 </div>
 
 <div class="card">
-  <h3 class="box-title">Games kept, day by day <span class="right muted">{{ calendar.total|thousands }} in the last year, by the day they were played (UTC)</span></h3>
+  <h3 class="box-title">Games kept, day by day <span class="right muted">{{ calendar.total|thousands }} in the last year, by the day they were played ({{ calendar.zone }})</span></h3>
   <svg class="calendar" viewBox="0 0 {{ calendar.width }} {{ calendar.height }}" role="img" aria-label="Games kept per day over the last year">
     {% for m in calendar.months %}<text x="{{ m.x }}" y="10">{{ m.label }}</text>{% endfor %}
     {% for w in calendar.weekdays %}<text x="0" y="{{ w.y }}">{{ w.label }}</text>{% endfor %}

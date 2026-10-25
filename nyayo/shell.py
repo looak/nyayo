@@ -33,4 +33,5 @@ def status():
 
 
 def shell(request):
-    return {"shell": SimpleLazyObject(status)}
+    # the zone the pages' times are in, by name (NYAYO_TIME_ZONE); the top bar shows its abbreviation
+    return {"shell": SimpleLazyObject(status), "time_zone": settings.TIME_ZONE}

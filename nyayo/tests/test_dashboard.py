@@ -7,7 +7,7 @@ from datetime import timedelta
 from django.test import override_settings
 from django.utils import timezone
 
-from nyayo.matches import dashboard
+from nyayo.matches import catalogue, dashboard
 from nyayo.matches.models import Match
 from nyayo.runs.models import Run
 
@@ -122,3 +122,18 @@ class Dashboard(BatchCase):
         self.assertEqual([p["label"] for p in ring["parts"]], ["a", "b"])
         self.assertEqual([p["share"] for p in ring["parts"]], ["25.0%", "75.0%"])
         self.assertEqual([p["offset"] for p in ring["parts"]], ["25.000", "0.000"])
+
+    def test_the_calendars_days_are_the_sites_zone(self):
+        self.keep(bz2.compress(batch_text(game("1-0", moves=MATE))))
+        now = timezone.now()
+        # an evening game in Vancouver: early next morning in UTC
+        evening = now.replace(hour=3, minute=0, second=0, microsecond=0) - timedelta(days=2)
+        catalogue.index().execute("UPDATE card SET played_at = ?", (int(evening.timestamp()),))
+        utc_day = [d for d in dashboard.calendar(now)["days"] if d["tip"].startswith("1 game")]
+        with override_settings(TIME_ZONE="America/Vancouver"):
+            calendar = dashboard.calendar(now)
+            local_day = [d for d in calendar["days"] if d["tip"].startswith("1 game")]
+            self.assertIn(calendar["zone"], ("PDT", "PST"))
+            self.assertIn("by the day they were played (P", self.page())
+        self.assertIn(f"on {evening:%a %d %b}", utc_day[0]["tip"])
+        self.assertIn(f"on {evening - timedelta(days=1):%a %d %b}", local_day[0]["tip"])

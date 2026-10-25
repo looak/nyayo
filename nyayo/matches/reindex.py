@@ -10,7 +10,7 @@ picks up where it was. Positions (a per-batch filter and positions list) will be
 import logging
 
 from . import cards, catalogue, games
-from .models import Batch, MatchResult
+from .models import Batch, Game, MatchResult, Upload
 
 log = logging.getLogger("nyayo.reindex")
 
@@ -35,6 +35,23 @@ def who(match, game_id, tags, opponents):
     return colour, opponents.get(opponent)
 
 
+def arrivals(batch):
+    """When nyayo received each of a batch's games, in order, as the worker dated them when it put them away: an
+    upload's games when the upload arrived, a single game when it finished (else arrived). The batch's own creation
+    for anything no longer there."""
+    uploads = dict(Upload.objects.filter(match_id=batch.match_id).values_list("name", "received_at"))
+    named = [source["game"] for source in batch.sources if "game" in source]
+    singles = {game: finished or received for game, finished, received in Game.objects.filter(
+        match_id=batch.match_id, game__in=named).values_list("game", "finished_at", "received_at")}
+    out = []
+    for source in batch.sources:
+        if "upload" in source:
+            out.extend([uploads.get(source["upload"]) or batch.created_at] * source["count"])
+        else:
+            out.append(singles.get(source["game"]) or batch.created_at)
+    return out
+
+
 def reindex_batch(batch, reader, extractors, rebuild=False, win=None, draw=None):
     """Writes one batch's cards again. Returns how many games."""
     data = catalogue.batch_bytes(batch)
@@ -47,21 +64,22 @@ def reindex_batch(batch, reader, extractors, rebuild=False, win=None, draw=None)
     context = cards.Context(match, win, draw)
     versions = cards.versions(reader)
     pieces = [(record, data[record["offset"]:record["offset"] + record["length"]]) for record in records]
+    received = arrivals(batch)
     if rebuild or catalogue.card_count(batch) != batch.games:
         opponents = dict(MatchResult.objects.filter(match=match).values_list("opponent", "pk"))
         rows = []
-        for game_id, (record, pgn) in zip(ids, pieces):
+        for game_id, (record, pgn), arrived in zip(ids, pieces, received):
             tags = record.get("tags") or {}
             colour, opponent = who(match, game_id, tags, opponents)
             rows.append((record["game"], game_id, record["offset"], record["length"], {
                 "colour": colour, "opponent": opponent, "result": tags.get("Result") or record.get("result"),
                 "termination": (tags.get("Termination") or "")[:100], "plies": record.get("plies") or 0,
-                **cards.all_fields(record, pgn, context, batch.created_at)}))
+                **cards.all_fields(record, pgn, context, arrived)}))
         catalogue.write_cards(batch, rows)
         catalogue.mark_filled(batch, versions)
     else:
-        rows = [(record["game"], cards.all_fields(record, pgn, context, batch.created_at))
-                for record, pgn in pieces]
+        rows = [(record["game"], cards.all_fields(record, pgn, context, arrived))
+                for (record, pgn), arrived in zip(pieces, received)]
         catalogue.update_cards(batch, rows, extractors)
         catalogue.mark_filled(batch, {name: versions[name] for name in extractors})
     return len(records)

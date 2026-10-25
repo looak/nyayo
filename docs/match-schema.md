@@ -451,7 +451,7 @@ writes every card whole, `--dry-run` counts), one batch at a time, so it can be 
 |:--|:--|
 | `reader` | how the final position ended it by the rules (`checkmate`, `stalemate`, `insufficient_material`, `fifty_moves`, `repetition`), the Polyglot hashes of the start position and of the one after 16 plies, promotions by piece, the ply each side castled, captures, en passant captures, checks, the fewest pieces, material (white's less black's) after plies 20 and 40 and at the end |
 | `ending` | how the game ended: by a `rule`; else the `Termination` tag (`adjudication`, `time_forfeit`, `illegal_move`, `crash`, other); else deduced; else `unexplained` |
-| `played` | when the game was played, as a Unix time: its own `GameEndTime` (else `GameStartTime`) when the PGN has one, else its `Date` tag at midnight UTC, else when nyayo received it; only the first is exact, and a bit in `flags` says so |
+| `played` | when the game was played, as a Unix time: its own `GameEndTime` (else `GameStartTime`) when the PGN has one; else, for a game with only a `Date` tag, when nyayo received it (its upload's arrival, or a single game's end) if that is from a day before to two days after the date, else the date at midnight UTC; else when nyayo received it. Only the first is exact, and a bit in `flags` says so |
 | `eval` | the eval from white's side in centipawns at plies 20 and 40 and the largest change between two plies, from the comments, for games where every move has one |
 
 yes/no facts (an en passant capture, an underpromotion, a promotion to a knight, mate on the board, an ending that
