@@ -31,7 +31,9 @@
   a:hover { text-decoration: underline; }
   /* the frame: Pi-hole's sidebar, a top bar, and the page */
   .app { display: grid; grid-template-columns: 230px minmax(0, 1fr); min-height: 100vh; }
-  aside.side { background: var(--side); border-right: 1px solid #111; }
+  /* the sidebar stays put while the page scrolls, and scrolls on its own when it is taller than the window */
+  aside.side { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; background: var(--side);
+               border-right: 1px solid #111; }
   .side .brand { height: 50px; display: flex; align-items: center; justify-content: center; color: var(--link);
                  font-size: 1.35rem; font-weight: 700; letter-spacing: .02em; border-bottom: 1px solid #111; }
   .side .brand:hover { text-decoration: none; }
@@ -63,6 +65,7 @@
   main { padding: 1rem; max-width: 1500px; }
   @media (max-width: 900px) {
     .app { grid-template-columns: minmax(0, 1fr); }
+    aside.side { position: static; height: auto; overflow: visible; }
     .side-status { display: none; }
     .side nav { display: flex; flex-wrap: wrap; } .side nav h5 { display: none; }
     .side nav a { border-left: 0; border-bottom: 3px solid transparent; padding: .5rem .7rem; }
@@ -253,6 +256,23 @@
   .columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; align-items: start; }
   .columns.wide-left { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
   .columns > * { min-width: 0; }
+  .columns > :only-child { grid-column: 1 / -1; }  /* one box alone spans the row, as wide as what follows it */
+  /* Pi-hole's query log: a filter bar that opens, and the filters' form under it */
+  details.filterbar { margin: 0 0 1rem; }
+  details.filterbar summary { display: flex; justify-content: space-between; align-items: center; padding: .6rem .9rem;
+                              border-radius: 3px; background: var(--info); color: #fff; font-size: 1rem; cursor: pointer;
+                              list-style: none; }
+  details.filterbar summary::-webkit-details-marker { display: none; }
+  details.filterbar summary::after { content: "＋"; }
+  details.filterbar[open] summary::after { content: "－"; }
+  details.filterbar[open] summary { border-radius: 3px 3px 0 0; }
+  form.query { display: flex; flex-wrap: wrap; gap: .8rem; align-items: flex-end; padding: .8rem; border-radius: 0 0 3px 3px;
+               background: var(--card); }
+  form.query label { display: flex; flex-direction: column; gap: .2rem; font-size: .75rem; color: var(--muted); }
+  form.query select, form.query input { padding: .3rem .4rem; border: 1px solid var(--line); border-radius: 3px;
+                                       background: var(--code-bg); color: var(--fg); font: inherit; }
+  form.query button { padding: .35rem .9rem; border: 0; border-radius: 3px; background: var(--accent); color: #fff;
+                      font: inherit; cursor: pointer; }
   @media (max-width: 1100px) {
     .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .columns, .columns.wide-left { grid-template-columns: minmax(0, 1fr); }

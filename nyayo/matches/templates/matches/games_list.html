@@ -4,23 +4,8 @@
 {% block head %}<style>
   main { max-width: 1760px; }
   td.subject { font-weight: 600; }
-  /* Pi-hole's query log: a filter bar that opens, the rows tinted by how the game went for the engine under test */
-  details.filterbar { margin: 0 0 1rem; }
-  details.filterbar summary { display: flex; justify-content: space-between; align-items: center; padding: .6rem .9rem;
-                              border-radius: 3px; background: var(--info); color: #fff; font-size: 1rem; cursor: pointer;
-                              list-style: none; }
-  details.filterbar summary::-webkit-details-marker { display: none; }
-  details.filterbar summary::after { content: "＋"; }
-  details.filterbar[open] summary::after { content: "－"; }
-  details.filterbar[open] summary { border-radius: 3px 3px 0 0; }
-  form.query { display: flex; flex-wrap: wrap; gap: .8rem; align-items: flex-end; padding: .8rem; border-radius: 0 0 3px 3px;
-               background: var(--card); }
-  form.query label { display: flex; flex-direction: column; gap: .2rem; font-size: .75rem; color: var(--muted); }
-  form.query select, form.query input { padding: .3rem .4rem; border: 1px solid var(--line); border-radius: 3px;
-                                       background: var(--code-bg); color: var(--fg); font: inherit; }
+  /* the rows tinted by how the game went for the engine under test */
   form.query select[name="match"] { max-width: 22rem; }
-  form.query button { padding: .35rem .9rem; border: 0; border-radius: 3px; background: var(--accent); color: #fff;
-                      font: inherit; cursor: pointer; }
   tr.t-win td { background: rgba(18, 137, 90, .13); }
   tr.t-loss td { background: rgba(198, 74, 58, .13); }
   .games-table td { white-space: nowrap; }

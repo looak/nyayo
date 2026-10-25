@@ -240,13 +240,14 @@ An SPRT has no schedule, so its games played are the results' count.
 
 `/matches` shows a card for each match being played right now, above the list (games, Elo, how it is going and when
 it will be done, and the boards of up to six games in play; a silent match is left out), and colours the list's score
-and Elo. Every list pages 64 to a page. `manage.py seed_demo` (debug mode only) makes six simulated SPRTs and five
+and Elo; its filters, like the games list's, are in a bar that opens, open while one is set. A lone running card
+spans the list's width. Every list pages 64 to a page. `manage.py seed_demo` (debug mode only) makes six simulated SPRTs and five
 simulated gauntlets (running, finished, stopped with games cut off, silent, just started), with their games, to polish
 the pages on.
 
 ### Pages
 
-Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar and a top bar. nyayo's icon, in the sidebar and as the favicon (SVG, a 32 px PNG and a 180 px apple-touch-icon), is the chess elephant from Wikimedia Commons (Chess_elt45.svg by NikNaks93), bundled under `nyayo/runs/static/img/` and used under the BSD 3-Clause License (`LICENSE-elephant.txt`). The sidebar has a status block
+Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar, which stays in place while the page scrolls, and a top bar. nyayo's icon, in the sidebar and as the favicon (SVG, a 32 px PNG and a 180 px apple-touch-icon), is the chess elephant from Wikimedia Commons (Chess_elt45.svg by NikNaks93), bundled under `nyayo/runs/static/img/` and used under the BSD 3-Clause License (`LICENSE-elephant.txt`). The sidebar has a status block
 (whether the worker holds its lock, the game reader, uploads waiting or refused, whether the batches' directory is
 there and how much it holds) and the links, grouped as Main (Dashboard), Testing (Matches with the number running, Runs, Compare),
 Catalogue (Games with the number kept, Uploads in the admin) and System (Admin); the page's own link is marked. The
