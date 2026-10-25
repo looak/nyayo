@@ -9,7 +9,9 @@
 {% include "matches/_running_card.html" %}
 {% endfor %}
 {% if running %}</div>{% endif %}
-<form class="filters" method="get">
+<details class="filterbar"{% if kind or state or engine %} open{% endif %}>
+  <summary>Filter matches</summary>
+  <form class="query" method="get">
   <label>Kind
     <select name="kind" onchange="this.form.submit()">
       <option value="">all kinds</option>
@@ -28,8 +30,12 @@
       {% for e in engines %}<option value="{{ e.pk }}"{% if e.pk|stringformat:"s" == engine %} selected{% endif %}>{{ e }}</option>{% endfor %}
     </select>
   </label>
-  <noscript><button>Filter</button></noscript>
-</form>
+  <button>Filter</button>
+  {% if kind or state or engine %}<a href="{% url 'matches' %}">Show all</a>{% endif %}
+  </form>
+</details>
+<div class="card">
+<h3 class="box-title">Matches <span class="right muted">{{ page.paginator.count }} match{{ page.paginator.count|pluralize:"es" }}{% if kind or state or engine %} matching{% endif %}, latest report first</span></h3>
 {% if page.object_list %}
 <div class="scroll">
 <table>
@@ -52,7 +58,10 @@
 </table>
 </div>
 {% pager page %}
+{% elif kind or state or engine %}
+<p class="muted">No matches match.</p>
 {% else %}
 <p class="muted">No matches yet. A gauntlet runner reports them with <code>PUT /api/matches/{id}</code>.</p>
 {% endif %}
+</div>
 {% endblock %}

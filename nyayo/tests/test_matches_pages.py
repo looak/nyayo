@@ -110,6 +110,15 @@ class Comments(SimpleTestCase):
 
 
 class Pages(GameTestCase):
+    def test_the_filters_are_a_bar_that_opens(self):
+        page = self.client.get("/matches").content.decode()
+        self.assertIn('<details class="filterbar">', page)
+        self.assertIn("<summary>Filter matches</summary>", page)
+        filtered = self.client.get("/matches?kind=gauntlet").content.decode()
+        self.assertIn('<details class="filterbar" open>', filtered)
+        self.assertIn("1 match matching", filtered)
+        self.assertIn("No matches match.", self.client.get("/matches?kind=sprt").content.decode())
+
     def test_matches_list(self):
         response = self.client.get("/matches")
         self.assertContains(response, "gauntlet-test-1")
