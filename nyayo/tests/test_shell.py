@@ -3,6 +3,7 @@
 import bz2
 from unittest import mock
 
+from django.contrib.staticfiles import finders
 from django.test import override_settings
 
 from nyayo import shell
@@ -63,3 +64,14 @@ class Frame(BatchCase):
         with mock.patch.object(shell, "status", side_effect=AssertionError("worked out")):
             response = self.client.get("/matches/gauntlet-test-1/games/1/live")
         self.assertEqual(response.status_code, 200)
+
+    def test_the_elephant_is_the_icon(self):
+        page = self.page()
+        self.assertIn('<link rel="icon" type="image/svg+xml" href="/static/img/elephant.svg">', page)
+        self.assertIn('<link rel="icon" type="image/png" sizes="32x32" href="/static/img/elephant-32.png">', page)
+        self.assertIn('<link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">', page)
+        self.assertIn('<img class="logo" src="/static/img/elephant.svg" alt="">', page)
+        # the files are there, with the licence they are used under
+        for name in ("elephant.svg", "elephant-32.png", "apple-touch-icon.png", "LICENSE-elephant.txt"):
+            self.assertIsNotNone(finders.find(f"img/{name}"), name)
+        self.assertIn("BSD 3-Clause", open(finders.find("img/LICENSE-elephant.txt"), encoding="utf-8").read())
