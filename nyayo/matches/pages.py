@@ -4,7 +4,6 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import chess
-import chess.svg
 from django.conf import settings
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -409,7 +408,7 @@ def game_context(match, game, ply=None):
     live = parsed.result == "*" and match.state == "running"
     bottom = "black" if colour == "black" else "white"
 
-    board, last = pgnview.position(parsed, ply)
+    board, _ = pgnview.position(parsed, ply)
     control = pgnview.parse_time_control(parsed.headers.get("TimeControl") or (match.settings or {}).get("tc"))
     left = pgnview.clocks(parsed.moves, control, ply)
     latest = pgnview.last_moves(parsed.moves, ply)
@@ -426,8 +425,8 @@ def game_context(match, game, ply=None):
         "match": match, "game": game, "entry": entry, "headers": parsed.headers, "result": parsed.result,
         "live": live, "cut_off": parsed.result == "*" and not live, "plies": plies, "ply": ply,
         "fen": board.fen(), "pgn_text": pgnview.plain_pgn(raw),
-        "board": chess.svg.board(board, orientation=chess.BLACK if bottom == "black" else chess.WHITE, lastmove=last,
-                                 check=board.king(board.turn) if board.is_check() else None, size=720),
+        # the board is drawn in the browser (chessground) from these, so stepping through the game needs no request
+        "orientation": bottom, "positions": (every := pgnview.positions(parsed)), "shown": every[ply],
         "rows": pgnview.pairs(parsed.moves), "graphs": pgnview.graphs(parsed.moves, ply, control), "at_end": ply == plies,
         "move": parsed.moves[ply - 1] if ply else None, "subject_colour": colour,
         "sides": [sides["white"], sides["black"]], "top": sides[top], "bottom": sides[bottom],
