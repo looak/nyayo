@@ -51,10 +51,11 @@
     {% if s %}<a class="foot" href="{% url 'match' s.match.pk %}">The test ➔</a>{% else %}<a class="foot" href="{% url 'matches' %}?kind=sprt">SPRTs ➔</a>{% endif %}</div>
   {% endwith %}
   {% with g=tiles.github %}
-  <div class="tile purple"><div class="inner"><h4>GitHub, last 7 days</h4><div class="big">{{ g.commits }} commit{{ g.commits|pluralize }}</div>
-    <div class="sub">pushed, on {{ g.branches }} branch{{ g.branches|pluralize:"es" }} · {{ g.runs }} run{{ g.runs|pluralize }}</div>
-    <div class="sub">{% if g.latest %}last push {{ g.latest.published_at|timesince }} ago, {{ g.latest.branch|default:"?" }}{% else %}no pushed run yet{% endif %}</div></div>
-    <a class="foot" href="{% url 'runs' %}?state=published">Pushed runs ➔</a></div>
+  <div class="tile purple"><div class="inner"><h4>GitHub, last 7 days{% if g.repo %} · {{ g.repo }}{% endif %}</h4>
+    <div class="big">{% if g.links.commits %}<a href="{{ g.links.commits }}">{{ g.commits }} commit{{ g.commits|pluralize }}</a>{% else %}{{ g.commits }} commit{{ g.commits|pluralize }}{% endif %}</div>
+    <div class="sub">pushed with a run here, on {{ g.branches }} branch{{ g.branches|pluralize:"es" }} · <a href="{% url 'runs' %}?state=published">{{ g.runs }} run{{ g.runs|pluralize }}</a></div>
+    <div class="sub">{% if g.latest %}last push {{ g.latest.published_at|timesince }} ago, {% if g.links.latest %}<a href="{{ g.links.latest }}">{{ g.latest.branch|default:"?" }} @ {{ g.latest.commit|slice:":7" }}</a>{% else %}{{ g.latest.branch|default:"?" }}{% endif %}{% else %}no pushed run yet{% endif %}</div></div>
+    {% if g.links.commits %}<a class="foot" href="{{ g.links.commits }}">On GitHub ➔</a>{% else %}<a class="foot" href="{% url 'runs' %}?state=published">Pushed runs ➔</a>{% endif %}</div>
   {% endwith %}
 </div>
 

@@ -4,6 +4,7 @@ import bz2
 import uuid
 from datetime import timedelta
 
+from django.test import override_settings
 from django.utils import timezone
 
 from nyayo.matches import dashboard
@@ -97,8 +98,16 @@ class Dashboard(BatchCase):
         self.assertEqual((tile["commits"], tile["branches"], tile["runs"]), (2, 2, 3))
         page = self.page()
         self.assertIn("2 commits", page)
-        self.assertIn("on 2 branches · 3 runs", page)
+        self.assertIn("on 2 branches · ", page)
+        self.assertIn(">3 runs</a>", page)
         self.assertIn("ago, main", page)
+        self.assertNotIn("github.com", page)
+        # with the repository configured, the commits link to it
+        with override_settings(NYAYO_GITHUB_REPO="looak/elephant"):
+            page = self.page()
+        self.assertIn('<a href="https://github.com/looak/elephant/commits">2 commits</a>', page)
+        self.assertIn(f'<a href="https://github.com/looak/elephant/commit/{"a" * 40}">main @ aaaaaaa</a>', page)
+        self.assertIn("On GitHub", page)
 
     def test_the_calendar_is_a_year_of_weeks_from_monday(self):
         now = timezone.now()

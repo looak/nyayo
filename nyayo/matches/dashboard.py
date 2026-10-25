@@ -189,13 +189,20 @@ def latest_sprt():
 
 
 def github(now):
-    """The fourth tile: the engine's activity on GitHub as nyayo sees it, the commits pushed in the last week (the
-    published runs), on how many branches, and when the latest push was."""
+    """The fourth tile: the engine's activity on GitHub as nyayo sees it, the commits pushed in the last week that
+    have a run here (the published runs), on how many branches, and when the latest push was; linked to the repository
+    when NYAYO_GITHUB_REPO names it."""
     week = Run.objects.filter(state="published", published_at__gte=now - timedelta(days=7))
     found = week.aggregate(commits=Count("commit", distinct=True), branches=Count("branch", distinct=True),
                            runs=Count("pk"))
     latest = Run.objects.filter(state="published").exclude(published_at=None).order_by("-published_at").first()
-    return {**found, "latest": latest}
+    repo = settings.NYAYO_GITHUB_REPO
+    links = {}
+    if repo:
+        links["commits"] = f"https://github.com/{repo}/commits"
+        if latest and latest.commit:
+            links["latest"] = f"https://github.com/{repo}/commit/{latest.commit}"
+    return {**found, "latest": latest, "repo": repo, "links": links}
 
 
 def figures(now):

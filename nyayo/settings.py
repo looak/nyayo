@@ -96,6 +96,9 @@ NYAYO_ARCHIVE_EVERY = int(os.environ.get("NYAYO_ARCHIVE_EVERY", 60))
 # A running match with no report for this many minutes is shown as silent (derived when a page is drawn, never stored).
 NYAYO_SILENT_AFTER = int(os.environ.get("NYAYO_SILENT_AFTER", 30))
 
+# The engine's repository on GitHub, owner/name: the dashboard links its commits there. Unset, nothing links out.
+NYAYO_GITHUB_REPO = os.environ.get("NYAYO_GITHUB_REPO", "").strip().strip("/")
+
 # A run's largest size once decompressed; uploads are gzipped and far smaller on the wire.
 NYAYO_MAX_RUN_BYTES = 64 * 1024 * 1024
 # a batch of games may be up to NYAYO_MAX_BATCH_UPLOAD_BYTES as sent
