@@ -4,7 +4,8 @@ A match document is archived first, unchanged, as archive/matches/<id>.json, the
 whole document as the match grows and says the state every time, so nothing here decides a state on its behalf.
 
 Under one id only the state, the timestamps of progress, the counts, the producer's LLR, result and stats, the machines
-that played and the pgn may change, and counts only grow. Anything else is a different match under the same id (409).
+that played, the pgn and the producer's link back may change, and counts only grow. Anything else is a different
+match under the same id (409).
 """
 
 import copy
@@ -332,6 +333,8 @@ def fixed_part(document):
     m = fixed.get("match") or {}
     for name in ("state", "updated_at", "finished_at"):
         m.pop(name, None)
+    if isinstance(m.get("producer"), dict):
+        m["producer"].pop("url", None)
     if isinstance(fixed.get("sprt"), dict):
         for name in ("llr", "result"):
             fixed["sprt"].pop(name, None)
@@ -494,6 +497,7 @@ def create_match(document, machine):
 def update_match(match, document, changes=False):
     m = document["match"]
     match.stats = document.get("stats")
+    match.producer = m["producer"]
     match.state = m["state"]
     match.finished_at = timestamp(m, "finished_at")
     match.updated_at = timestamp(m, "updated_at")
@@ -506,8 +510,8 @@ def update_match(match, document, changes=False):
         schedule.apply_changes(match, document.get("games") or [])
     else:
         schedule.replace(match, document.get("games"))
-    match.save(update_fields=["state", "finished_at", "updated_at", "sprt", "stats", "machines", "progress",
-                              "report_seq", "schedule_digest"])
+    match.save(update_fields=["producer", "state", "finished_at", "updated_at", "sprt", "stats", "machines",
+                              "progress", "report_seq", "schedule_digest"])
     rows = {row["opponent"]: row for row in document["results"]}
     for result in match.results.all():
         row = rows.get(result.opponent)
