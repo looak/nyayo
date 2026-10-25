@@ -5,9 +5,11 @@ from unittest import mock
 
 from django.contrib.staticfiles import finders
 from django.test import override_settings
+from django.utils import timezone
 
 from nyayo import shell
 from nyayo.matches import worker
+from nyayo.matches.models import Match
 
 from .test_games import pgn
 from .test_uploads import TWO, BatchCase
@@ -27,7 +29,9 @@ class Frame(BatchCase):
         self.assertIn("python-chess", page)
         self.assertIn("1 upload waiting", page)
         self.assertIn('title="games kept as data">2<', page)
-        self.assertIn("1 live", page)  # the gauntlet fixture is running
+        self.assertNotIn(" live</span>", page)  # the gauntlet fixture is running, but silent: last heard of long ago
+        Match.objects.update(updated_at=timezone.now())
+        self.assertIn("1 live", self.page())
 
     def test_a_running_worker_and_the_pinned_reader(self):
         with mock.patch.object(worker, "is_running", return_value=True), \

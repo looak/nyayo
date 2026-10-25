@@ -15,6 +15,7 @@ from django.utils.functional import SimpleLazyObject
 def status():
     from nyayo.matches import worker
     from nyayo.matches.models import Batch, Game, Match, Upload
+    from nyayo.matches.pages import silent_cutoff
 
     batches = Batch.objects.aggregate(games=Sum("games"), stored=Sum("stored_bytes"))
     uploads = {state: Upload.objects.filter(state=state).count() for state in ("pending", "refused")}
@@ -27,7 +28,8 @@ def status():
         "batches_here": Path(settings.NYAYO_BATCHES_DIR).is_dir(),
         "uploads_waiting": uploads["pending"],
         "uploads_refused": uploads["refused"],
-        "running": Match.objects.filter(state="running").count(),
+        # live: running and heard from lately, as the match list's cards count them; a silent match is left out
+        "running": Match.objects.filter(state="running", updated_at__gte=silent_cutoff()).count(),
         "in_play": Game.objects.filter(result="*", match__state="running").count(),
     }
 
