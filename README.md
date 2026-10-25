@@ -82,3 +82,8 @@ service in a conda env) and connecting Elephant are described in [docs/deploy.md
 ## License
 
 GPL-3.0, see [LICENSE](LICENSE).
+
+Bundled with it: lichess's board, [chessground](https://github.com/lichess-org/chessground) 9.1.1 (GPL-3.0,
+`nyayo/matches/static/vendor/`), and nyayo's icon, the chess elephant
+[Chess_elt45.svg](https://commons.wikimedia.org/wiki/File:Chess_elt45.svg) by NikNaks93 (BSD 3-Clause,
+`nyayo/runs/static/img/LICENSE-elephant.txt`).

@@ -246,7 +246,7 @@ the pages on.
 
 ### Pages
 
-Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar and a top bar. The sidebar has a status block
+Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar and a top bar. nyayo's icon, in the sidebar and as the favicon (SVG, a 32 px PNG and a 180 px apple-touch-icon), is the chess elephant from Wikimedia Commons (Chess_elt45.svg by NikNaks93), bundled under `nyayo/runs/static/img/` and used under the BSD 3-Clause License (`LICENSE-elephant.txt`). The sidebar has a status block
 (whether the worker holds its lock, the game reader, uploads waiting or refused, whether the batches' directory is
 there and how much it holds) and the links, grouped as Main (Dashboard), Testing (Matches with the number running, Runs, Compare),
 Catalogue (Games with the number kept, Uploads in the admin) and System (Admin); the page's own link is marked. The
