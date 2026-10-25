@@ -107,8 +107,9 @@ are changed only here, by agreement with the owner.
   reverse proxy goes in front later. See `docs/deploy.md`.
 - OpenBench on bobby is Django `runserver` on port 8000 as `openbench.service`, at the root path. The owner edits
   server files and runs `sudo` there; propose changes, don't make them.
-- bobby runs a newer OpenBench than the local `D:\dev\openbench_eg` checkout: engine configs live in its database, not
-  in `Engines/*.json`. OpenBench bounds are normalized Elo.
+- bobby runs the owner's fork, looak/openbench_eg, from `~/dev/openbench_eg` (the local checkout is
+  `D:\dev\openbench_eg`). Engines and books come from `Config/config.json` and the `Engines/*.json` it lists, read at
+  startup, so a change takes a pull and a restart of `openbench.service`. OpenBench bounds are normalized Elo.
 - **Test machine: hunt** (172.16.100.15, user `loodinek`, 32 cores, ssh key auth works), the OpenBench worker.
 - From the owner's Windows PC, `*.home` names only resolve while the hosts file lists them (the work VPN blocks the home
   DNS server). Prefer IP addresses in scripts.
