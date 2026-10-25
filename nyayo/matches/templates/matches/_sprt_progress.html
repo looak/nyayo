@@ -1,7 +1,9 @@
 {% load runs_extras matches_extras %}
-{# an SPRT's Elo and LLR over games, from the snapshots #}
+{# an SPRT's Elo and LLR over games, from the snapshots, side by side #}
+<div class="columns">
 {% for g in graphs %}
-<h4 class="graph-title">{{ g.label }} <span class="muted">over games{% if g.band %}, with its 95% interval{% endif %}</span></h4>
+<div class="card">
+<h3 class="box-title">{{ g.label }} over games <span class="right muted">{% if g.band %}with its 95% interval{% else %}with its bounds{% endif %}</span></h3>
 <svg class="chart" viewBox="0 0 {{ g.width }} {{ g.height }}" role="img" aria-label="{{ g.label }} over games">
   {% for t in g.yticks %}
   <line x1="{{ g.left }}" x2="{{ g.right }}" y1="{{ t.y }}" y2="{{ t.y }}" class="grid"/>
@@ -16,4 +18,6 @@
   <polyline points="{{ g.line }}" class="series white"/>
   <circle cx="{{ g.last.x }}" cy="{{ g.last.y }}" r="3" class="dot-white"/>
 </svg>
+</div>
 {% endfor %}
+</div>

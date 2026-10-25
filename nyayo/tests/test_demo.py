@@ -49,8 +49,29 @@ class SeedDemo(NyayoTestCase):
         self.assertEqual(self.client.get("/matches/demo-sprt-running/games/7").status_code, 200)
         self.assertEqual(self.client.get("/matches/demo-sprt-running/games/1").status_code, 200)
 
+    def test_the_gauntlets(self):
+        self.seed()
+        states = {m.pk: m.state for m in Match.objects.filter(kind="gauntlet")}
+        self.assertEqual(states, {"demo-gauntlet-running": "running", "demo-gauntlet-finished": "finished",
+                                  "demo-gauntlet-stopped": "stopped", "demo-gauntlet-silent": "running",
+                                  "demo-gauntlet-new": "running"})
+        # the counts are the finished games', and every game started has its PGN
+        finished = Match.objects.get(pk="demo-gauntlet-finished")
+        self.assertEqual(sum(r.games for r in finished.results.all()), 96)
+        self.assertEqual(finished.games.exclude(result="*").count(), 96)
+        running = Match.objects.get(pk="demo-gauntlet-running")
+        self.assertEqual(running.games.filter(result="*").count(), 6)
+        # the pages: boards in play, cut off games, a silent one, and the list's cards
+        page = self.client.get("/matches/demo-gauntlet-running").content.decode()
+        self.assertEqual(page.count('class="mini live-board"'), 6)
+        self.assertIn(">Performance<", page)
+        self.assertIn(">Cut off <", self.client.get("/matches/demo-gauntlet-stopped").content.decode())
+        self.assertContains(self.client.get("/matches/demo-gauntlet-silent"), "badge silent")
+        self.assertIn("mini live-board", self.client.get("/matches").content.decode())
+        self.assertEqual(self.client.get("/matches/demo-gauntlet-running/games/41").status_code, 200)
+
     def test_seeding_again_starts_over(self):
         self.seed()
         self.seed()
-        self.assertEqual(Match.objects.filter(pk__startswith="demo-").count(), 6)
+        self.assertEqual(Match.objects.filter(pk__startswith="demo-").count(), 11)
         self.assertEqual(Batch.objects.count(), 1)

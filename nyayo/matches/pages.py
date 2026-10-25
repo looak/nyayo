@@ -199,6 +199,17 @@ def sprt_progress(match):
 
 # most running matches the list shows a card for; one or two is usual
 RUNNING_CARDS = 6
+# most boards in play a card shows, the latest started
+CARD_BOARDS = 6
+
+
+def playing_entries(match, limit):
+    """The games of a running match that are being played, as live_boards() takes them, without building every
+    entry of the match (an SPRT's can be tens of thousands)."""
+    names = opponent_names(match)
+    rows = sorted(match.games.filter(result="*").order_by("-started_at")[:limit], key=lambda g: g.started_at)
+    return [{"number": g.game, "colour": g.colour, "opponent": g.opponent,
+             "opponent_name": names.get(g.opponent, g.opponent)} for g in rows]
 
 
 def running_cards(cutoff, now):
@@ -218,7 +229,8 @@ def running_cards(cutoff, now):
                                match.updated_at, total, played, playing, [], (match.settings or {}).get("concurrency"),
                                now)
         card = {"match": match, "total": total, "played": played, "playing": playing, "timing": run,
-                "score": summary.overall.score, "tc": (match.settings or {}).get("tc"), "sprt": sprt_view(match)}
+                "score": summary.overall.score, "tc": (match.settings or {}).get("tc"), "sprt": sprt_view(match),
+                "boards": live_boards(match, playing_entries(match, CARD_BOARDS))}
         if card["sprt"]:
             card.update(sprt_card(match, card["sprt"], now))
         else:
@@ -378,18 +390,20 @@ def match_detail(request, match_id):
 
 
 def live_boards(match, playing):
-    """The boards of the games being played, as they stand, for the match page to show at a glance."""
+    """The boards of the games being played, as they stand, for the match page to show at a glance. Each is drawn in
+    the browser by chessground from its position, the side the engine under test plays at the bottom."""
     boards = []
     for entry in playing:
         raw = games.read_pgn(match.pk, entry["number"])
         parsed = pgnview.load(raw) if raw else None
         if parsed is None:
             continue
-        plies = len(parsed.moves)
-        orientation = chess.BLACK if entry["colour"] == "black" else chess.WHITE
-        boards.append({"entry": entry, "plies": plies, "last": parsed.moves[-1] if parsed.moves else None,
+        shown = pgnview.positions(parsed)[-1]
+        boards.append({"entry": entry, "plies": len(parsed.moves),
+                       "last": parsed.moves[-1] if parsed.moves else None,
                        "white": parsed.headers.get("White", ""), "black": parsed.headers.get("Black", ""),
-                       "svg": pgnview.board_svg(parsed, plies, orientation, size=260)})
+                       "fen": shown["fen"], "last_move": " ".join(shown["last"] or []),
+                       "orientation": "black" if entry["colour"] == "black" else "white"})
     return boards
 
 
