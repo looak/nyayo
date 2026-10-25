@@ -5,7 +5,7 @@ themselves: a few scans of one table, each well under a second for a hundred tho
 """
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -32,14 +32,23 @@ PALETTE = ("#3c8dbc", "#0b8ea8", "#12895a", "#d98a12", "#c64a3a", "#7b5ea7", "#6
 OUTCOME_COLOURS = {"win": "#2ecc71", "draw": "#9aa4ad", "loss": "#e5533d", "unknown": "#4b545c"}
 
 
+# the calendar counts games by quarter hour in SQL, then puts each quarter in its day in the site's zone (TIME_ZONE),
+# whose days aren't all 24 hours long and may start at a half or three quarter hour
+QUARTER = 900
+
+
 def calendar(now):
     """Games kept by the day they were played, the last WEEKS weeks as GitHub draws a year of commits: a column a week
-    from Monday, the darker green the more games. Days are UTC."""
-    today = now.date()
+    from Monday, the darker green the more games. Days are the site's time zone's."""
+    zone = django_timezone.get_current_timezone()
+    today = django_timezone.localdate(now)
     first = today - timedelta(days=today.weekday() + 7 * (WEEKS - 1))
-    epoch = int(datetime(first.year, first.month, first.day, tzinfo=timezone.utc).timestamp())
-    counts = dict(catalogue.index().execute(
-        "SELECT (played_at - ?) / 86400, count(*) FROM card WHERE played_at >= ? GROUP BY 1", (epoch, epoch)))
+    epoch = int(datetime.combine(first, time.min, tzinfo=zone).timestamp())
+    counts = {}
+    for quarter, n in catalogue.index().execute(
+            "SELECT played_at / ?, count(*) FROM card WHERE played_at >= ? GROUP BY 1", (QUARTER, epoch)):
+        offset = (datetime.fromtimestamp(quarter * QUARTER, zone).date() - first).days
+        counts[offset] = counts.get(offset, 0) + n
     most = max(counts.values(), default=0)
     left, top = 28, 16
     days, months, seen = [], [], None
@@ -54,6 +63,7 @@ def calendar(now):
             months.append({"x": x, "label": f"{day:%b}"})
             seen = day.month
     return {"days": days, "months": months, "total": sum(counts.values()), "levels": LEVELS,
+            "zone": django_timezone.localtime(now).strftime("%Z"),
             "width": left + WEEKS * (CELL + GAP), "height": top + 7 * (CELL + GAP),
             "weekdays": [{"y": top + i * (CELL + GAP) + CELL - 2, "label": label}
                          for i, label in ((0, "Mon"), (2, "Wed"), (4, "Fri"))]}

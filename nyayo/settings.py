@@ -162,7 +162,8 @@ DATABASES = {
 AUTH_PASSWORD_VALIDATORS = []
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+# Times are stored in UTC and shown in this zone (an IANA name, e.g. America/Vancouver); the pages say which.
+TIME_ZONE = os.environ.get("NYAYO_TIME_ZONE", "").strip() or "UTC"
 USE_I18N = False
 USE_TZ = True
 

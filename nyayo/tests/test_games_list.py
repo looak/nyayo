@@ -2,7 +2,7 @@
 
 import bz2
 import re
-from datetime import datetime, timezone as zone
+from datetime import datetime, timedelta, timezone as zone
 from io import StringIO
 
 from django.core.management import call_command
@@ -10,7 +10,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from nyayo.matches import cards, catalogue
-from nyayo.matches.models import Batch, Match, MatchResult
+from nyayo.matches.models import Batch, Match, MatchResult, Upload
 
 from .test_index import MATE, OPENBENCH, RESIGNED
 from .test_uploads import BatchCase, batch_text, game
@@ -216,3 +216,40 @@ class PlayedExtractor(BatchCase):
         call_command("reindex", "--only", "played", stdout=StringIO())
         self.assertEqual(index.execute("SELECT played_at FROM card WHERE game = '2.0.1'").fetchone()[0], utc(2026, 10, 18))
         self.assertEqual(catalogue.filled(sealed)["played"], cards.PLAYED_VERSION)
+
+    def test_a_game_with_only_a_date_is_placed_at_its_arrival_that_day(self):
+        def arrival(*when):
+            return datetime(*when, tzinfo=zone.utc)
+
+        day = {"tags": {"Date": "2026.10.24"}}
+        # an upload that came in that evening, or the next morning (UTC) for a worker west of it: when it came
+        for received in (arrival(2026, 10, 24, 19, 5), arrival(2026, 10, 25, 9, 0)):
+            fields = cards.played_fields(day, received)
+            self.assertEqual((fields["played_at"], fields["played_flags"]), (int(received.timestamp()), 0))
+        # one far from the date (resent later, or reindexed without its upload): the date's midnight
+        self.assertEqual(cards.played_fields(day, arrival(2026, 11, 3))["played_at"], utc(2026, 10, 24))
+        # no date at all: the arrival
+        self.assertEqual(cards.played_fields({"tags": {}}, arrival(2026, 11, 3))["played_at"], utc(2026, 11, 3))
+
+    def test_reindex_dates_a_batch_by_its_uploads_arrival(self):
+        today = timezone.now()
+        with override_settings(NYAYO_BATCH_GAMES=1):  # full at once, so sealed
+            self.keep(bz2.compress(batch_text(game("1-0", moves=MATE, Date=today.strftime("%Y.%m.%d")))))
+        arrived = Upload.objects.get().received_at
+        Batch.objects.update(created_at=today + timedelta(hours=5))  # put away well after it arrived
+        index = catalogue.index()
+        index.execute("UPDATE card SET played_at = 0")
+        index.execute("DELETE FROM filled WHERE extractor = 'played'")
+        call_command("reindex", "--only", "played", stdout=StringIO())
+        self.assertEqual(index.execute("SELECT played_at FROM card").fetchone()[0], int(arrived.timestamp()))
+
+    def test_times_are_shown_in_the_sites_zone_and_say_so(self):
+        self.keep(bz2.compress(batch_text(game("1-0", moves=MATE, GameEndTime="2026-10-18T16:29:31 -0700"))))
+        page = self.client.get("/games").content.decode()
+        self.assertIn("23:29", page)
+        self.assertIn("2026-10-18 23:29 UTC", page)
+        with override_settings(TIME_ZONE="America/Vancouver"):
+            page = self.client.get("/games").content.decode()
+        self.assertIn("2026-10-18 16:29 PDT", page)
+        self.assertIn('<span class="muted">16:29</span>', page)
+        self.assertIn('times in <code title="America/Vancouver">PDT</code>', page)

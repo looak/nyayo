@@ -86,6 +86,9 @@ It fills in the units in `deploy/` for this checkout, user and conda env (found 
 
 - `nyayo-backup.timer`, which runs `manage.py backup` daily at 05:00 through `nyayo-backup.service`; see *Backup*.
 
+The pages show times in `NYAYO_TIME_ZONE` (an IANA name, UTC when unset), and the top bar says which; on bobby set
+`NYAYO_TIME_ZONE=America/Vancouver` in `.env`. Times are stored in UTC whatever it is, so it can change at any time.
+
 A running match with no report for `NYAYO_SILENT_AFTER` minutes (30 by default, in `.env`) is shown as *silent* on
 `/matches` and its page; nothing is stored, and its next report clears it.
 
@@ -170,6 +173,10 @@ python manage.py reindex               # at low priority, one batch at a time, s
 
 It visits only the batches whose cards were filled by an older reader or extractor version. `--rebuild` writes every
 card again and is how a lost index is made again from the batches. `--only eval` runs one extractor.
+
+The played extractor's version 2 dates a game that has only a `Date` tag (OpenBench's, today) by when its upload
+arrived, not midnight, so a workload sorts among the games of its day. After updating to it, restamp the stored cards
+once with `python manage.py reindex --only played`.
 
 ## Migrating the stored games into batches
 

@@ -70,12 +70,12 @@
   {% if games_page.object_list %}
   <div class="scroll">
   <table class="games-table">
-    <thead><tr><th>Played</th><th>Game</th><th>White</th><th>Black</th><th class="num">Moves</th><th>Result</th>
+    <thead><tr><th>Played <span class="muted">{% now "T" %}</span></th><th>Game</th><th>White</th><th>Black</th><th class="num">Moves</th><th>Result</th>
       <th>Ended by</th><th>Opening</th><th>Source</th></tr></thead>
     <tbody>
     {% for g in games_page.object_list %}
       <tr{% if g.outcome == "win" or g.outcome == "loss" %} class="t-{{ g.outcome }}"{% endif %}>
-        <td title="{% if g.played %}{{ g.played|date:'Y-m-d H:i' }} UTC{% if not g.exact_time %} (the day, or when nyayo got it){% endif %}{% endif %}">{% if g.played %}{{ g.played|date:"Y-m-d" }}{% if g.exact_time %} <span class="muted">{{ g.played|date:"H:i" }}</span>{% endif %}{% endif %}</td>
+        <td title="{% if g.played %}{{ g.played|date:'Y-m-d H:i T' }}{% if not g.exact_time %} (the game's day, placed at when nyayo got it){% endif %}{% endif %}">{% if g.played %}{{ g.played|date:"Y-m-d" }}{% if g.exact_time %} <span class="muted">{{ g.played|date:"H:i" }}</span>{% endif %}{% endif %}</td>
         <td><a href="{% url 'game' g.match.pk g.game %}">{{ g.game }}</a></td>
         <td{% if g.colour == "white" %} class="subject"{% endif %}>{{ g.white|default:"?" }}</td>
         <td{% if g.colour == "black" %} class="subject"{% endif %}>{{ g.black|default:"?" }}</td>
