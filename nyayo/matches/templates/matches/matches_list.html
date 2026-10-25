@@ -6,68 +6,7 @@
 <h1>Matches</h1>
 {% if running %}<div class="columns">{% endif %}
 {% for c in running %}
-<div class="card running-card top-running">
-  <div class="card-head">
-    <h3 title="{{ c.match.name|default:c.match.pk }}"><a href="{% url 'match' c.match.pk %}">{{ c.match.name|default:c.match.pk }}</a></h3>
-    <span class="tier">{{ c.match.kind }}</span>
-    {% if c.tc %}<span class="muted">{{ c.tc }}</span>{% endif %}
-    <span class="outcome running card-state">running</span>
-    {% if c.timing.elapsed is not None %}<span class="timing muted">for {{ c.timing.elapsed|seconds }}</span>{% endif %}
-  </div>
-  <div class="score-row sprt-figures">
-    <div class="score-figure">
-      <span class="score-value">{{ c.played }}{% if c.total %}<span class="score-total">/{{ c.total }}</span>{% endif %}</span>
-      <span class="score-label muted">games</span>
-    </div>
-    <div class="score-figure">
-      <span class="score-value {% if c.elo > 0 %}better{% elif c.elo < 0 %}worse{% endif %}">{{ c.elo|elo }}</span>
-      <span class="score-label muted">{% if c.error is not None %}± {{ c.error|floatformat:1 }} Elo{% else %}Elo{% endif %}</span>
-    </div>
-    {% if c.sprt %}
-    <div class="score-figure">
-      <span class="score-value">{{ c.sprt.llr|floatformat:2 }}</span>
-      <span class="score-label muted">LLR ({{ c.sprt.lower|floatformat:2 }}, {{ c.sprt.upper|floatformat:2 }})</span>
-    </div>
-    {% else %}
-    <div class="score-figure">
-      <span class="score-value {% if c.score > 0.5 %}better{% elif c.score < 0.5 %}worse{% endif %}">{{ c.score|percent }}</span>
-      <span class="score-label muted">score</span>
-    </div>
-    {% endif %}
-  </div>
-  {% if c.sprt and c.sprt.llr is not None %}
-  <div class="bar-wrap sprt-bar">
-    <div class="bar sprt-track" role="img" aria-label="LLR {{ c.sprt.llr|floatformat:2 }} between {{ c.sprt.lower|floatformat:2 }} and {{ c.sprt.upper|floatformat:2 }}">
-      {% if c.sprt.fill %}<span class="fill {% if c.sprt.fill.passing %}pass{% else %}fail{% endif %}" style="left: {{ c.sprt.fill.left|stringformat:".3f" }}%; width: {{ c.sprt.fill.width|stringformat:".3f" }}%"></span>{% endif %}
-      <span class="mark minimum" style="left: {{ c.sprt.lower_pct|stringformat:".3f" }}%"></span>
-      <span class="mark minimum" style="left: {{ c.sprt.upper_pct|stringformat:".3f" }}%"></span>
-      <span class="mark zero" style="left: {{ c.sprt.zero_pct|stringformat:".3f" }}%"></span>
-    </div>
-  </div>
-  {% elif c.total %}
-  <div class="bar-wrap sprt-bar">
-    <div class="bar" role="img" aria-label="{{ c.played }} of {{ c.total }} games played, {{ c.playing }} playing">
-      <span class="seg pass" style="width: {{ c.timing.percent_finished|stringformat:".3f" }}%"></span>
-      <span class="seg newly-passing" style="width: {{ c.timing.percent_playing|stringformat:".3f" }}%"></span>
-    </div>
-  </div>
-  {% endif %}
-  <dl class="chips">
-    {% if c.timing.per_hour is not None %}<div><dt>Pace</dt><dd>{{ c.timing.per_hour|floatformat:0 }} games/h</dd></div>{% endif %}
-    {% if c.playing %}<div><dt>Playing</dt><dd>{{ c.playing }} game{{ c.playing|pluralize }}</dd></div>{% endif %}
-    {% if c.projection.bound %}
-    <div><dt>To go</dt><dd>~{{ c.projection.games|floatformat:0 }} games{% if c.projection.seconds is not None %} <span class="muted">~{{ c.projection.seconds|seconds }}</span>{% endif %}</dd></div>
-    {% if c.projection.at %}<div><dt>Done around</dt><dd>{{ c.projection.at|date:"D j M H:i" }}</dd></div>{% endif %}
-    {% elif c.timing.eta_at %}
-    <div><dt>To go</dt><dd>~{{ c.timing.eta_seconds|seconds }} <span class="muted">{{ c.timing.eta_at|date:"D H:i" }}</span></dd></div>
-    {% endif %}
-    <div><dt>Last report</dt><dd>{{ c.match.updated_at|date:"H:i:s" }}</dd></div>
-  </dl>
-  {% if c.boards %}
-  <h4 class="minis-title">In play</h4>
-  {% include "matches/_minis.html" with boards=c.boards match=c.match %}
-  {% endif %}
-</div>
+{% include "matches/_running_card.html" %}
 {% endfor %}
 {% if running %}</div>{% endif %}
 <form class="filters" method="get">

@@ -61,8 +61,15 @@ cut off, silent, just started) with every game they started, for working on the 
 
 The **Games** page (`/games`) lists every game kept as data, newest first, 64 to a page: when it was played, its id,
 who played white and black, its length, result and how it ended, the book position it started from (with a link to the
-other games from it) and the match it came from; a game opens in its own view with every move. `?match=` and
-`?opening=` filter it. It reads the index of cards, so it shows a game once the worker has put it away.
+other games from it) and the match it came from; a game opens in its own view with every move. It filters by match,
+result for the engine under test, how the game ended, its length in moves and its opening. It reads the index of
+cards, so it shows a game once the worker has put it away.
+
+The **Dashboard** (`/`, the home page) shows what nyayo holds at a glance: tiles for the
+game database (size, games, how much is indexed), what is being played or was played last, the latest SPRT's
+verdict with any faults of the engine under test, and the commits pushed in the last week, a GitHub-style calendar of the games
+kept by day, how the kept games ended and how they went for the engine under test, the running matches with their
+boards, the latest matches, and the most played book positions.
 
 Finished games sent in bulk (OpenBench uploads one per workload) are taken at once and put away by the worker,
 `manage.py worker`, which runs next to the site: it checks every game and keeps them in nyayo's own 64-game zstd

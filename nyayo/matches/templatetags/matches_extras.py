@@ -20,6 +20,12 @@ def error(value):
 
 
 @register.filter
+def thousands(value):
+    """45,673: a count with its thousands marked."""
+    return f"{value:,}" if isinstance(value, int) else value
+
+
+@register.filter
 def percent(value):
     return "–" if value is None else f"{value * 100:.1f}%"
 

@@ -1,6 +1,7 @@
 """The games page (/games): every game kept as data, newest first, 64 to a page."""
 
 import bz2
+import re
 from datetime import datetime, timezone as zone
 from io import StringIO
 
@@ -17,6 +18,7 @@ from .test_uploads import BatchCase, batch_text, game
 BOOK = "rnbqkb1r/pp2pppp/3p1n2/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 0 5"
 OTHER_BOOK = "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"
 MASK = 2 ** 64 - 1
+ROW = re.compile(r"<tr[ >]")
 
 
 def utc(*when):
@@ -47,7 +49,7 @@ class GamesPage(BatchCase):
 
     def rows(self, query=""):
         """The rows of the table, the header's left out."""
-        return self.page(query).content.decode().split("<tr>")[2:]
+        return ROW.split(self.page(query).content.decode())[2:]
 
     def test_a_game_with_everything_on_its_row(self):
         self.keep(bz2.compress(batch_text(game("1-0", moves=MATE, Date="2026.10.18",
@@ -99,7 +101,7 @@ class GamesPage(BatchCase):
     def test_64_to_a_page(self):
         self.keep(bz2.compress(batch_text(*[game("1-0", moves=MATE, Date="2026.10.18") for _ in range(70)])))
         first = self.page().content.decode()
-        self.assertEqual(first.count("<tr>") - 1, 64)
+        self.assertEqual(len(ROW.findall(first)) - 1, 64)
         self.has(first, "70 games")
         self.has(first, "?page=2")
         self.assertEqual(len(self.rows("?page=2")), 6)
@@ -144,6 +146,39 @@ class GamesPage(BatchCase):
         other = self.page("?match=ghost").content.decode()
         self.has(other, "0 games matching")
         self.has(other, "No games match")
+
+    def test_filtered_by_result_ending_and_length(self):
+        self.keep(bz2.compress(batch_text(
+            game("1-0", moves=MATE),                                      # 1.0.1 won, checkmate, 4 moves
+            game("0-1", moves=RESIGNED),                                  # 1.0.2 lost, resignation
+            game("1/2-1/2", moves="1. e4 e5 2. Nf3 Nc6 3. Bb5 a6"),      # 1.0.3 drawn, 3 moves
+            game("1-0", moves=MATE, Subject="black"))))                   # 1.0.4 lost, checkmate
+        won = self.rows("?result=win")
+        self.assertEqual([("1.0.1" in r) for r in won], [True])
+        self.assertIn('class="t-win"', self.page("?result=win").content.decode())
+        lost = "".join(self.rows("?result=loss"))
+        self.has(lost, "1.0.2")
+        self.has(lost, "1.0.4")
+        self.lacks(lost, "1.0.1")
+        self.assertEqual(len(self.rows("?result=draw")), 1)
+        mates = "".join(self.rows("?ended=checkmate"))
+        self.has(mates, "1.0.1")
+        self.has(mates, "1.0.4")
+        self.lacks(mates, "1.0.2")
+        short = "".join(self.rows("?moves_to=3"))
+        self.has(short, "1.0.3")
+        self.lacks(short, "1.0.1")
+        both = self.page("?result=loss&ended=checkmate").content.decode()
+        self.has(both, "1 game matching")
+        self.has(both, "Ended by checkmate.")
+        self.has(both, '<option value="checkmate" selected>')
+        self.has(both, "<details class=\"filterbar\" open>")
+
+    def test_bad_filters_are_400(self):
+        self.page("?ended=boredom", status=400)
+        self.page("?ended=rule", status=400)
+        self.page("?moves_from=ten", status=400)
+        self.assertEqual(self.page("?result=maybe").status_code, 200)  # not a result: no filter
 
     def test_a_bad_opening_is_400(self):
         for bad in ("zz", "123", "g" * 16, "0" * 17):
