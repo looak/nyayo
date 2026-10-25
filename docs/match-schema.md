@@ -122,8 +122,9 @@ are OpenBench's, the source of truth for an SPRT, rather than a second calculati
 
 ### What may change under one id
 
-`state`, `updated_at`, `finished_at`, the counts in `results`, `sprt.llr` and `sprt.result`, `stats`, `machines`,
-`pgn`, `progress`, `report`, and each game's `state`, `result`, `termination` and `fault`. **Counts only grow**, across restarts too (a
+`state`, `updated_at`, `finished_at`, `producer.url` (a link back, which a producer may only learn later), the counts in
+`results`, `sprt.llr` and `sprt.result`, `stats`, `machines`, `pgn`, `progress`, `report`, and each game's `state`,
+`result`, `termination` and `fault`. **Counts only grow**, across restarts too (a
 row can't disappear, `penta` and the per-side counts can't shrink). Everything else (subject, opponents, settings,
 SPRT bounds, a started game's number, round, opponent and colour) is fixed once received, and a change is `409` naming
 the field.

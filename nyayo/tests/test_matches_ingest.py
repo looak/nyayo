@@ -293,6 +293,18 @@ class FixedAfterReceived(MatchTestCase):
         document["opponents"][0]["rating"]["value"] = 2500
         self.assertRefused(self.put_match(document), 409, "opponents[0].rating.value changed")
 
+    def test_producer_cant_change(self):
+        document = gauntlet()
+        document["match"]["producer"]["version"] = "0.2.0"
+        self.assertRefused(self.put_match(document), 409, "match.producer.version changed")
+
+    def test_producer_url_may_change(self):
+        # A link back, set once a producer knows its own address; OpenBench sent null before NYAYO_OPENBENCH_URL
+        document = gauntlet()
+        document["match"]["producer"]["url"] = "http://172.16.100.11:8000/test/1/"
+        self.assertEqual(self.put_match(document).status_code, 200)
+        self.assertEqual(Match.objects.get().producer["url"], "http://172.16.100.11:8000/test/1/")
+
     def test_kind_cant_change(self):
         document = gauntlet()
         document["match"]["kind"] = "games"
