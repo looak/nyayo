@@ -212,6 +212,15 @@ not yet in a batch, so every game is in it once. The filters are `kind`, `engine
 more), `tc`, `book`, `since`, `until` and `match`, combined with *and*. A match's page counts its stored games and links
 its export. The games page below filters by match and by opening; a position is otherwise found by reading the games.
 
+`manage.py export_training --out NAME` writes a training selection's games (milestone 10) as stored, comments
+included, to `NAME.pgn.zst`, one zstd stream that `phant-indexer --draw` reads, and `NAME.manifest.json`: the
+filters, the count, nyayo's and the reader's versions, and every batch's id and sha256 with each game's place, offset
+and length in it. Only games in sealed batches and with a result are taken. The filters (matches or OpenBench test ids,
+kind, the engine under test's version as `1.3.0-` or `1.2.0-1.3.0`, book, time control, and the endings kept, by
+default rule, resignation and adjudication, inferred ones included) live in `nyayo.matches.selection`, shared with the
+games page. `--from-manifest` writes the same games again from the batches alone, refusing a batch whose sha256
+changed (`docs/match-schema.md`, Training export). 45,073 games export in 9 s on the demo data.
+
 ### Matches: SPRT viewer
 
 A match with an `sprt` block gets **its own page**: an SPRT is a test of one change, not a field of opponents, so it

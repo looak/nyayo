@@ -372,6 +372,35 @@ a file.
 Filters combine with *and*; no filter is every game. Matches are filtered on what is indexed already; there is no index
 of positions.
 
+### Training export
+
+`manage.py export_training --out NAME [filters]` writes the games a training selection chooses (game database,
+milestone 10) for elephant's `phant-indexer --draw` to draw positions from:
+
+- **`NAME.pgn.zst`**: one zstd stream of the games' PGN exactly as stored in their batches, comments included (so every
+  move's eval comes along), each followed by a blank line, in batch order. Only games in **sealed** batches and with a
+  result (1-0, 0-1, 1/2-1/2) are taken; games in a batch still open wait for the next export.
+- **`NAME.manifest.json`**, format 1: `name`, `made_at`, `filters` (as given), `games` (the count),
+  `left_out_in_open_batches`, `nyayo` (`git describe` of the checkout), `reader` (the game reader configured, e.g.
+  `phant-indexer 1.3.1`), and `batches`: each with its `id`, `match`, `number`, `sha256` (of the sealed file), the
+  `reader` that read it, and its `games` taken, each `position`, `game` (its id), `offset` and `length` in the batch's
+  decompressed PGN.
+
+`--from-manifest FILE --out NAME` writes the same games again from the batches alone, each batch checked against the
+manifest's sha256 (a batch gone or changed is an error), so a fit can be redone from exactly the same games after the
+index is rebuilt or on another machine.
+
+| Flag | Chooses |
+|:--|:--|
+| `--match ID`, `--openbench TEST` | given matches, by id or by OpenBench test id (`openbench-<host>-<TEST>`, or the test's URL); repeat or separate with commas; any of them |
+| `--kind` | `sprt`, `gauntlet`, `selfplay`, `games` |
+| `--subject-version` | the engine under test's version: `1.3.0-` at least, `1.2.0-1.3.0` between (both included), `1.3.0` that one; a subject without a version number (a branch) is left out |
+| `--book`, `--tc` | `settings.book`, `settings.tc` exactly |
+| `--endings LIST` | how a game ended, from its card: `rule`, `resignation`, `adjudication` (a draw or a win), `time`, `crash`, `illegal`, `unexplained`, `other`; inferred endings count as their ending. Default `rule,resignation,adjudication` |
+| `--exclude LIST` | endings taken out of the kept ones, e.g. `time,crash` |
+
+The filters are `nyayo.matches.selection`, which the games page shares.
+
 ## OpenBench
 
 OpenBench (the fork, [looak/openbench_eg](https://github.com/looak/openbench_eg)) sends a test as version 1, and is

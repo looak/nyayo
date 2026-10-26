@@ -65,6 +65,11 @@ other games from it) and the match it came from; a game opens in its own view wi
 result for the engine under test, how the game ended, its length in moves and its opening. It reads the index of
 cards, so it shows a game once the worker has put it away.
 
+For tuning, `manage.py export_training --out NAME` writes the games of a training selection (by match or OpenBench
+test, the engine under test's version, book, time control and how the games ended) as stored, comments included, to
+`NAME.pgn.zst` for `phant-indexer --draw`, with `NAME.manifest.json` naming every batch and game taken, so
+`--from-manifest` takes exactly the same games again.
+
 The **Dashboard** (`/`, the home page) shows what nyayo holds at a glance: tiles for the
 game database (size, games, how much is indexed), what is being played or was played last, the latest SPRT's
 verdict with any faults of the engine under test, and the commits pushed in the last week, a GitHub-style calendar of the games
