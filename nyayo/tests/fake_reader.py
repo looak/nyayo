@@ -1,22 +1,25 @@
 """A stand-in for phant-indexer in the tests: the same command line and output, from python-chess."""
 
 import json
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 if sys.argv[1:] == ["--version"]:
-    print("phant-indexer 9.9.9 format 2")
+    print(os.environ.get("FAKE_READER_VERSION", "phant-indexer 9.9.9 format 2"))
     sys.exit(0)
 
 from nyayo.matches.reader import PythonChess  # noqa: E402
 
 
 def draw(args, data):
-    """--draw N [--min-ply M] [--seed S] [--quiet] as elephant's contract has it: up to N positions a game from
-    ply M on, not in check (the stand-in's "quiet"), deduped across the whole input, chosen by a generator seeded
-    once, each written `<fen> [result]` with white's result."""
+    """--draw N [--min-ply M] [--seed S] [--quiet] as elephant's contract has it (elephant#34): up to N positions
+    a game from ply M on, not in check (the stand-in's "quiet"; the real one also runs a quiescence search), never a
+    mate or a stalemate, chosen by a generator seeded once; deduped across the whole input, a position already taken
+    passed over for the game's next candidate; each written `<fen> [result]` with white's result, and a summary on
+    stderr."""
     import io
     import random
 
@@ -33,13 +36,19 @@ def draw(args, data):
         board, quiet = game.board(), []
         for ply, move in enumerate(game.mainline_moves(), start=1):
             board.push(move)
-            if ply >= min_ply and not board.is_check():
+            if ply >= min_ply and not board.is_check() and not board.is_game_over():
                 quiet.append(board.fen())
-        for fen in sorted(rng.sample(quiet, min(per_game, len(quiet))), key=quiet.index):
+        taken = []
+        for fen in rng.sample(quiet, len(quiet)):  # the candidates in a random order, the next one after a duplicate
             key = " ".join(fen.split()[:4])
             if key not in seen:
                 seen.add(key)
-                print(f"{fen} [{label}]")
+                taken.append(fen)
+                if len(taken) == per_game:
+                    break
+        for fen in sorted(taken, key=quiet.index):
+            print(f"{fen} [{label}]")
+    print(f"draw: {len(seen)} positions written", file=sys.stderr)
 
 
 data = sys.stdin.buffer.read()

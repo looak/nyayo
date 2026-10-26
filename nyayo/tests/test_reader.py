@@ -4,11 +4,12 @@ import bz2
 import os
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import override_settings
+from django.test import SimpleTestCase, override_settings
 
 from nyayo.matches import reader
 from nyayo.matches.models import Batch, Upload
@@ -79,3 +80,15 @@ class TheRealOne(BatchCase):
         # python-chess fills in the seven tag roster ("?" for what a PGN lacks); phant-indexer keeps what is written
         self.assertEqual([{k: v for k, v in a["tags"].items() if k in b["tags"]} for a, b in zip(mine, theirs)],
                          [r["tags"] for r in theirs])
+
+
+class Versions(SimpleTestCase):
+    def test_a_release_with_a_positions_format(self):
+        with mock.patch.dict(os.environ, {"FAKE_READER_VERSION": "phant-indexer 1.3.2 format 2 positions 2"}):
+            found = fake()
+        self.assertEqual((found.version, found.format, found.positions_format), ("1.3.2", 2, 2))
+        self.assertEqual(fake().positions_format, 1)
+        for said in ("phant-indexer 1.3.2 format 2 positions", "phant-indexer 1.3.2 format 2 moves 2",
+                     "phant-indexer 1.3.2 format x"):
+            with mock.patch.dict(os.environ, {"FAKE_READER_VERSION": said}), self.assertRaises(reader.WrongReader):
+                fake()

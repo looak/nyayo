@@ -217,6 +217,10 @@ def end(dataset):
         dataset.rebuild_matched = dataset.sha256 == dataset.rebuild_of_sha256
     dataset.state, dataset.finished_at = "done", timezone.now()
     dataset.save()
+    # --draw's own summary on stderr: games, quiet positions looked at, the yield, written and duplicates
+    summary = run.errors.decode("utf-8", "replace").strip()
+    if summary:
+        log.info("dataset %d: the reader says: %s", dataset.pk, " | ".join(summary.splitlines()))
     log.info("dataset %d: %d positions from %d games%s", dataset.pk, dataset.positions, dataset.games,
              "" if dataset.rebuild_matched is None else
              (", the same as before" if dataset.rebuild_matched else ", NOT the same as before"))

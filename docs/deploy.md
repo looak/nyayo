@@ -165,7 +165,7 @@ about 37 to 1, is what carries over.
 
 The worker draws position datasets for the tuner (the Exports page, `POST /api/exports`; `docs/match-schema.md`,
 Position datasets), after everything else it has to do, a batch a turn. It needs phant-indexer as the reader, in a
-release with `--draw` (elephant's, after 1.3.1): pin it as for reading games (`NYAYO_READER`, `NYAYO_READER_SHA256`)
+release with `--draw` (1.3.2 on, looak/elephant#34; its `--version` may add `positions 2`, which nyayo accepts): pin it as for reading games (`NYAYO_READER`, `NYAYO_READER_SHA256`)
 and restart the worker. The files go to `NYAYO_DATASETS_DIR`, by default `datasets/` next to the batches, on the
 share; a dataset of 2026-10's 45,000 games is under 10 MB.
 
