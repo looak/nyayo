@@ -217,7 +217,8 @@ or `POST /api/exports` with a machine token, one at a time, and only when there 
 turn, so uploads never wait behind one. The worker resolves the selection to a manifest of sealed batches and their
 games (V1: every game that read and has a result, ended by rule, resignation or adjudication, inferred ones included;
 the filters are `nyayo.matches.selection`, which the games page shares), then feeds each batch's chosen games, as
-stored, to one `phant-indexer --draw 10 --quiet --min-ply 16 --seed S` process open from the first batch to the last,
+stored, to one `phant-indexer --draw 10 --quiet --seed S` process (with `--merge` when the dataset asks for it) open
+from the first batch to the last,
 so positions are deduped across the dataset, and writes its `<fen> [result]` lines to `positions-<id>.txt.zst` in
 `NYAYO_DATASETS_DIR`. Progress is exact (batches read of those selected, games read, positions written), on the
 page and from `GET /api/exports/{id}`. The record is kept for good: the selection, the draw's settings and seed,
@@ -225,7 +226,10 @@ nyayo's and the reader's versions with the reader's sha256, the counts, the mani
 positions' sha256 and a free note. Deleting (`DELETE /api/exports/{id}`, with a machine token) removes the file and keeps the record; a rebuild reads the same games
 again from the batches alone and checks the new sha256 against the old. Drawing needs phant-indexer as the reader
 (`NYAYO_READER`); with python-chess a dataset fails saying so. A dataset left running by a worker that stopped
-starts over (`docs/match-schema.md`, Position datasets). The Exports page (V1) is one list: every dataset, newest
+starts over (`docs/match-schema.md`, Position datasets). The first ply positions are taken from is by the match's opening book, counted from
+where a game starts: `NYAYO_BOOK_MIN_PLY` (`8moves_v3` 4, `Endgames` 0) and `NYAYO_MIN_PLY_DEFAULT` (8) for any other,
+the map kept with each dataset and each batch's minimum in its manifest. Until `--draw` takes a minimum per input
+(elephant's, being settled), a run passes the lowest of its batches' minimums as `--min-ply`. The Exports page (V1) is one list: every dataset, newest
 first, with its state (queued, running, done, failed), age, positions and whether its file is there or was deleted
 and needs rebuilding; a download link where the file is, a Rebuild button where it's gone; the dataset in progress on
 top with its progress, the page refreshing while one runs; and a New dataset button. No filter form yet.
@@ -309,7 +313,7 @@ runs `sudo` on bobby; changes there are proposed, not made. [deploy.md](deploy.m
   `NYAYO_CSRF_TRUSTED_ORIGINS`, `NYAYO_SCRIPT_NAME` (for a path prefix behind a proxy), `NYAYO_DATA_DIR`,
   `NYAYO_WIP_DAYS`, `NYAYO_COMMITTED_DAYS`, `NYAYO_SILENT_AFTER`, `NYAYO_GAME_POLL_MS`, `NYAYO_GAME_THREADS`,
   `NYAYO_ARCHIVE_EVERY`, `NYAYO_BATCHES_DIR`, `NYAYO_BATCH_GAMES`, `NYAYO_SEAL_AFTER`, `NYAYO_READER`,
-  `NYAYO_READER_SHA256`, `NYAYO_INDEX_DB`, `NYAYO_BACKUP_REPO`, `NYAYO_DATASETS_DIR` (position datasets' files, next to the batches by default), `NYAYO_GITHUB_REPO` (the engine's repository, owner/name, for the dashboard's links), `NYAYO_TIME_ZONE` (the zone pages show times in, an IANA name) and `NYAYO_LOG_LEVEL`. A server error's traceback goes
+  `NYAYO_READER_SHA256`, `NYAYO_INDEX_DB`, `NYAYO_BACKUP_REPO`, `NYAYO_DATASETS_DIR` (position datasets' files, next to the batches by default), `NYAYO_BOOK_MIN_PLY` and `NYAYO_MIN_PLY_DEFAULT` (a dataset's first ply by book), `NYAYO_GITHUB_REPO` (the engine's repository, owner/name, for the dashboard's links), `NYAYO_TIME_ZONE` (the zone pages show times in, an IANA name) and `NYAYO_LOG_LEVEL`. A server error's traceback goes
   to the journal (`journalctl -u nyayo`); the worker's reasons are in `journalctl -u nyayo-worker`.
 - **The share.** The batches are on the Synology's `nyayo-batches` folder over NFS 4.1, mounted on bobby at
   `/mnt/nyayo-batches` (`NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches`); a `RequiresMountsFor` drop-in on both units

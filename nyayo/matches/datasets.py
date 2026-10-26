@@ -29,8 +29,9 @@ from .reader import file_sha256
 
 log = logging.getLogger("nyayo.datasets")
 
-# phant-indexer --draw 10 --quiet --min-ply 16: ten quiet positions a game at most, past the 8-move book
-DRAW = {"per_game": 10, "quiet": True, "min_ply": 16}
+# phant-indexer --draw 10 --quiet: ten quiet positions a game at most; the first ply by the match's book
+# (NYAYO_BOOK_MIN_PLY), and with merge each position written once with its results averaged
+DRAW = {"per_game": 10, "quiet": True}
 ZSTD_LEVEL = 10
 
 
@@ -56,17 +57,36 @@ def nyayo_version():
     return found.stdout.strip() or "unknown"
 
 
-def draw_arguments(draw):
-    """phant-indexer's flags for the draw's settings and seed."""
-    flags = ["--draw", str(draw["per_game"]), "--min-ply", str(draw["min_ply"]), "--seed", str(draw["seed"])]
-    return flags + (["--quiet"] if draw["quiet"] else [])
+def book_key(book):
+    """A book's name as the map has it: `8moves_v3.epd` is `8moves_v3`."""
+    return Path(book or "").stem.lower()
 
 
-def request(requested_by="", note=""):
-    """A new dataset, waiting for the worker: V1's selection, every game that read with a good label."""
+def min_ply_for(book, draw):
+    """The first ply positions are taken from for a match's book, from the map the dataset recorded."""
+    if isinstance(draw.get("min_ply"), int):  # a dataset from before the map: one minimum for every book
+        return draw["min_ply"]
+    found = {book_key(name): ply for name, ply in draw["min_ply"]["books"].items()}
+    return found.get(book_key(book), draw["min_ply"]["default"])
+
+
+def draw_arguments(draw, manifest):
+    """phant-indexer's flags for the draw's settings and seed. Until --draw takes a minimum per game or per input
+    (elephant's, being settled), one --min-ply for the whole run: the lowest of the manifest's books, so no book loses
+    positions it should have."""
+    lowest = min((entry["min_ply"] for entry in manifest if "min_ply" in entry), default=min_ply_for(None, draw))
+    flags = ["--draw", str(draw["per_game"]), "--min-ply", str(lowest), "--seed", str(draw["seed"])]
+    return flags + (["--quiet"] if draw["quiet"] else []) + (["--merge"] if draw.get("merge") else [])
+
+
+def request(requested_by="", note="", merge=False):
+    """A new dataset, waiting for the worker: V1's selection, every game that read with a good label, and the book
+    map in force now, kept with it."""
     chosen = selection.Selection(endings=selection.endings_kept())
     return Dataset.objects.create(requested_by=requested_by[:100], note=note, selection=chosen.described(),
-                                  draw={**DRAW, "seed": random.randrange(1, 2 ** 31)})
+                                  draw={**DRAW, "merge": bool(merge), "seed": random.randrange(1, 2 ** 31),
+                                        "min_ply": {"books": dict(settings.NYAYO_BOOK_MIN_PLY),
+                                                    "default": settings.NYAYO_MIN_PLY_DEFAULT}})
 
 
 def rebuild(dataset):
@@ -91,18 +111,21 @@ def reset(dataset, state):
     dataset.batches_done = dataset.games = dataset.positions = 0
 
 
-def manifest_for(chosen):
-    """[{id, match, number, sha256, games: [[place, offset, length]]}] for the selection's games in sealed batches,
-    in order; games in a batch still open wait for a later dataset."""
+def manifest_for(chosen, draw):
+    """[{id, match, number, sha256, book, min_ply, games: [[place, offset, length]]}] for the selection's games in
+    sealed batches, in order, each batch with its match's book and the first ply it is drawn from; games in a batch
+    still open wait for a later dataset."""
     where, params = chosen.where()
     db = catalogue.index()
     out = []
-    for batch in Batch.objects.filter(match__in=chosen.matches(), state="sealed", games__gt=0).order_by("pk"):
+    batches = Batch.objects.filter(match__in=chosen.matches(), state="sealed", games__gt=0).select_related("match")
+    for batch in batches.order_by("pk"):
         rows = db.execute(f"SELECT position, offset, length FROM card WHERE batch = ? AND {where} ORDER BY position",
                           (batch.pk, *params)).fetchall()
         if rows:
+            book = (batch.match.settings or {}).get("book") or ""
             out.append({"id": batch.pk, "match": batch.match_id, "number": batch.number, "sha256": batch.sha256,
-                        "games": [list(row) for row in rows]})
+                        "book": book, "min_ply": min_ply_for(book, draw), "games": [list(row) for row in rows]})
     return out
 
 
@@ -137,7 +160,7 @@ class Run:
         self.dataset = dataset
         directory().mkdir(parents=True, exist_ok=True)
         self.partial = file_path(dataset).with_suffix(".zst.part")
-        self.process = subprocess.Popen([*command, *draw_arguments(dataset.draw)], stdin=subprocess.PIPE,
+        self.process = subprocess.Popen([*command, *draw_arguments(dataset.draw, dataset.manifest)], stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.out = open(self.partial, "wb")
         self.stream = zstandard.ZstdCompressor(level=ZSTD_LEVEL).stream_writer(self.out, closefd=False)
@@ -192,7 +215,7 @@ def begin(dataset, reader):
     reader's process."""
     global _run
     if not dataset.rebuild_of_sha256:
-        dataset.manifest = manifest_for(selection_of(dataset))
+        dataset.manifest = manifest_for(selection_of(dataset), dataset.draw)
     reset(dataset, "running")
     dataset.started_at = timezone.now()
     dataset.batches_total = len(dataset.manifest)

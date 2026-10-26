@@ -19,7 +19,8 @@ def draw(args, data):
     a game from ply M on, not in check (the stand-in's "quiet"; the real one also runs a quiescence search), never a
     mate or a stalemate, chosen by a generator seeded once; deduped across the whole input, a position already taken
     passed over for the game's next candidate; each written `<fen> [result]` with white's result, and a summary on
-    stderr."""
+    stderr. With --merge, a position is written once, at the end, with the average of every result it was drawn
+    with, in the order first drawn."""
     import io
     import random
 
@@ -27,7 +28,7 @@ def draw(args, data):
 
     flags = dict(zip(args[::2], args[1::2]))
     per_game, min_ply = int(flags["--draw"]), int(flags.get("--min-ply", 0))
-    rng, seen = random.Random(int(flags.get("--seed", 0))), set()
+    rng, seen, merged = random.Random(int(flags.get("--seed", 0))), set(), {}
     stream = io.StringIO(data.decode("utf-8", "replace"))
     while (game := chess.pgn.read_game(stream)) is not None:
         label = {"1-0": "1.0", "0-1": "0.0", "1/2-1/2": "0.5"}.get(game.headers.get("Result"))
@@ -41,19 +42,27 @@ def draw(args, data):
         taken = []
         for fen in rng.sample(quiet, len(quiet)):  # the candidates in a random order, the next one after a duplicate
             key = " ".join(fen.split()[:4])
-            if key not in seen:
+            if merge:
+                merged.setdefault(key, [fen, []])[1].append(float(label))
+                taken.append(fen)
+                if len(taken) == per_game:
+                    break
+            elif key not in seen:
                 seen.add(key)
                 taken.append(fen)
                 if len(taken) == per_game:
                     break
-        for fen in sorted(taken, key=quiet.index):
+        for fen in sorted(taken, key=quiet.index) if not merge else ():
             print(f"{fen} [{label}]")
-    print(f"draw: {len(seen)} positions written", file=sys.stderr)
+    for fen, results in merged.values():
+        print(f"{fen} [{sum(results) / len(results):.2f}]")
+    print(f"draw: {len(merged) if merge else len(seen)} positions written", file=sys.stderr)
 
 
 data = sys.stdin.buffer.read()
 if "--draw" in sys.argv:
-    draw([a for a in sys.argv[1:] if a != "--quiet"], data)
+    merge = "--merge" in sys.argv
+    draw([a for a in sys.argv[1:] if a not in ("--quiet", "--merge")], data)
     sys.exit(0)
 if data.startswith(b"FAIL"):
     print("can't decompress", file=sys.stderr)

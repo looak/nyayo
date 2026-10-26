@@ -4,6 +4,7 @@ Everything that differs between the dev PC and bobby comes from the environment 
 repository root; see .env.example.
 """
 
+import json
 import os
 from pathlib import Path
 
@@ -72,6 +73,11 @@ NYAYO_BATCHES_DIR = Path(os.environ.get("NYAYO_BATCHES_DIR") or NYAYO_GAMES_DIR 
 # Position datasets (datasets.py): the positions files the worker draws from the batches, next to the batches on the
 # share by default. A dataset's record is in the database; its file can be deleted and made again.
 NYAYO_DATASETS_DIR = Path(os.environ.get("NYAYO_DATASETS_DIR") or NYAYO_BATCHES_DIR.parent / "datasets").resolve()
+# The first ply a dataset takes positions from, counted from where a game starts, by the match's opening book (its
+# file's name without the extension, any case): 8moves_v3's positions are 8 moves in, so 4 more plies past the book;
+# Endgames.epd's positions are wanted from the start. A book not named gets NYAYO_MIN_PLY_DEFAULT (owner, 2026-10-26).
+NYAYO_BOOK_MIN_PLY = json.loads(os.environ.get("NYAYO_BOOK_MIN_PLY") or '{"8moves_v3": 4, "Endgames": 0}')
+NYAYO_MIN_PLY_DEFAULT = int(os.environ.get("NYAYO_MIN_PLY_DEFAULT", 8))
 NYAYO_MAX_BATCH_UPLOAD_BYTES = 64 * 1024 * 1024
 # Games in one of nyayo's batches; every batch records its own count, so changing this needs nothing else.
 NYAYO_BATCH_GAMES = int(os.environ.get("NYAYO_BATCH_GAMES", 64))

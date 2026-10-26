@@ -187,3 +187,40 @@ class Datasets(BatchCase):
         dataset.refresh_from_db()
         self.assertEqual((dataset.state, dataset.rebuild_matched, dataset.file_deleted_at), ("done", True, None))
         self.assertIn("download</a>", self.client.get("/exports").content.decode())
+
+
+    def test_each_batch_has_its_books_first_ply_and_the_map_is_kept(self):
+        Match.objects.update(settings={**OPENBENCH, "book": "books/8moves_v3.epd"})
+        with override_settings(NYAYO_BOOK_MIN_PLY={"8moves_v3": 4, "Endgames": 0}, NYAYO_MIN_PLY_DEFAULT=8):
+            dataset = datasets.request()
+        self.assertEqual(dataset.draw["min_ply"], {"books": {"8moves_v3": 4, "Endgames": 0}, "default": 8})
+        self.draw()
+        dataset.refresh_from_db()
+        self.assertEqual((dataset.manifest[0]["book"], dataset.manifest[0]["min_ply"]), ("books/8moves_v3.epd", 4))
+        self.assertIn("--min-ply 4", " ".join(datasets.draw_arguments(dataset.draw, dataset.manifest)))
+        # the map kept with the dataset decides, not the settings of the day
+        with override_settings(NYAYO_BOOK_MIN_PLY={}, NYAYO_MIN_PLY_DEFAULT=30):
+            self.assertEqual(datasets.min_ply_for("8moves_v3.epd", dataset.draw), 4)
+            self.assertEqual(datasets.min_ply_for("Endgames.EPD", dataset.draw), 0)
+            self.assertEqual(datasets.min_ply_for("UHO_Lichess_4852_v1.epd", dataset.draw), 8)
+            self.assertEqual(datasets.min_ply_for(None, dataset.draw), 8)
+        # until --draw takes one per input, a run uses the lowest of its books
+        manifest = [{"min_ply": 4}, {"min_ply": 0}, {"min_ply": 8}]
+        self.assertIn("--min-ply 0", " ".join(datasets.draw_arguments(dataset.draw, manifest)))
+        # a dataset from before the map had one minimum
+        self.assertEqual(datasets.min_ply_for("8moves_v3", {"min_ply": 16}), 16)
+
+    def test_merge_is_a_choice_kept_with_the_dataset(self):
+        self.assertEqual(self.post({"merge": "yes"}).status_code, 400)
+        response = self.post({"merge": True})
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.json()["draw"]["merge"])
+        dataset = Dataset.objects.get()
+        self.assertIn("--merge", datasets.draw_arguments(dataset.draw, []))
+        self.assertNotIn("--merge", datasets.draw_arguments(datasets.request().draw, []))
+        self.client.post("/exports", {"action": "new", "merge": "on"})
+        self.assertTrue(Dataset.objects.order_by("-pk").first().draw["merge"])
+        self.draw()
+        dataset.refresh_from_db()
+        self.assertEqual(dataset.state, "done", dataset.error)
+        self.assertIn(">merged</span>", self.client.get("/exports").content.decode())

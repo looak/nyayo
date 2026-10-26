@@ -5,7 +5,8 @@
 <style>
   .exports-head { display: flex; align-items: baseline; gap: .8rem; margin: .25rem 0 1rem; }
   .exports-head h1 { margin: 0; }
-  .exports-head form { margin-left: auto; }
+  .exports-head form { margin-left: auto; display: flex; gap: .8rem; align-items: center; }
+  .exports-head label.merge { color: var(--muted); font-size: .85rem; }
   button.act { padding: .35rem .9rem; border: 0; border-radius: 3px; background: var(--accent); color: #fff; font: inherit;
                cursor: pointer; }
   button.act.small { padding: .15rem .6rem; font-size: .85rem; background: #4b545c; }
@@ -18,7 +19,9 @@
 {% block content %}
 <div class="exports-head">
   <h1>Exports</h1><span class="muted">position datasets for the tuner</span>
-  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="new"><button class="act">New dataset</button></form>
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="new">
+    <label class="merge" title="each position written once, with its results averaged"><input type="checkbox" name="merge"> merge</label>
+    <button class="act">New dataset</button></form>
 </div>
 
 {% if current %}{% with d=current %}
@@ -44,7 +47,7 @@
     <tbody>
     {% for d in datasets %}
       <tr>
-        <td><a href="{% url 'api_export' d.pk %}" title="its record and manifest">{{ d.pk }}</a>{% if d.note %} <span class="muted">{{ d.note|truncatechars:60 }}</span>{% endif %}</td>
+        <td><a href="{% url 'api_export' d.pk %}" title="its record and manifest">{{ d.pk }}</a>{% if d.draw.merge %} <span class="tier" title="each position once, its results averaged">merged</span>{% endif %}{% if d.note %} <span class="muted">{{ d.note|truncatechars:60 }}</span>{% endif %}</td>
         <td>{% if d.state == "requested" %}<span class="badge stopped">queued</span>{% elif d.state == "running" %}<span class="badge running">running</span>{% elif d.state == "done" %}<span class="badge finished">done</span>{% else %}<span class="badge error" title="{{ d.error }}">failed</span>{% endif %}</td>
         <td class="nowrap" title="requested {{ d.requested_at|date:'Y-m-d H:i' }}">{{ d.requested_at|timesince }}</td>
         <td class="num">{% if d.state == "done" %}{{ d.positions|thousands }}{% endif %}</td>

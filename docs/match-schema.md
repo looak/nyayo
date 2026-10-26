@@ -394,13 +394,13 @@ The record, as JSON:
 | `note`, `requested_by` | free text, what it was used for; the machine that asked, or `page` |
 | `requested_at`, `started_at`, `finished_at` | ISO 8601 |
 | `selection` | the filters: V1 takes every game that read and has a result, ended by rule, resignation or adjudication, inferred ones included (`endings`); matches, versions, book and time control come later in the same object |
-| `draw` | `per_game` (10), `quiet` (true), `min_ply` (16) and `seed`, as given to `phant-indexer --draw`; `min_ply` counts from the initial position wherever a game began, and where its PGN doesn't say (a book FEN with its counters at `0 1`, OpenBench's), the reader's evaluator's game phase leaves out positions too early (owner, 2026-10-26) |
+| `draw` | `per_game` (10), `quiet` (true), `merge` (false: each position written once, its results averaged, when true), `seed`, and `min_ply`: `books`, the first ply to take positions from by opening book, counted from where a game starts (`8moves_v3` 4, `Endgames` 0), and the `default` for a book not named, the map in force when the dataset was requested (owner, 2026-10-26) |
 | `progress` | `batches` read `of` the batches selected, `games` read, `positions` written so far |
 | `nyayo`, `reader`, `reader_sha256` | `git describe` of nyayo's checkout; the reader's name and the sha256 of its binary |
 | `sha256`, `bytes` | of the positions, decompressed; the file's size |
 | `file`, `file_deleted_at` | the file's URL while there is one; when it was deleted |
 | `rebuild_of_sha256`, `rebuild_matched` | a rebuild's: the sha256 it had to give, and whether it did |
-| `manifest` (one dataset only) | every batch read, in order: `id`, `match`, `number`, `sha256` of the sealed file, and `games`, each `[place, offset, length]` in the batch's decompressed PGN |
+| `manifest` (one dataset only) | every batch read, in order: `id`, `match`, `number`, `sha256` of the sealed file, its match's `book` and the `min_ply` it is drawn from, and `games`, each `[place, offset, length]` in the batch's decompressed PGN |
 
 The file, `positions-<id>.txt.zst` in `NYAYO_DATASETS_DIR` (next to the batches on the share by default), is zstd of
 `phant-indexer --draw`'s output: `<fen> [result]` lines, the result white's (`[1.0]`, `[0.5]`, `[0.0]`), the format

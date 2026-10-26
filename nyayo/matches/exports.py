@@ -49,7 +49,8 @@ def stamp(when):
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def api_exports(request):
-    """GET: every dataset, newest first. POST, with a machine's token: a new one, `{"note": ...}` optional; 201."""
+    """GET: every dataset, newest first. POST, with a machine's token: a new one, `{"note": ..., "merge": ...}`
+    optional; 201."""
     if request.method == "GET":
         return JsonResponse({"exports": [described(d, request) for d in Dataset.objects.all()]})
     machine = machine_for(request)
@@ -59,9 +60,11 @@ def api_exports(request):
         body = json.loads(request.body or b"{}")
     except ValueError:
         return text(400, "the body must be JSON, or empty")
-    if not isinstance(body, dict) or not isinstance(body.get("note", ""), str):
-        return text(400, 'the body is {"note": "..."}, the note optional')
-    dataset = datasets.request(requested_by=machine.name, note=body.get("note", "")[:NOTE_MAX])
+    if (not isinstance(body, dict) or not isinstance(body.get("note", ""), str)
+            or not isinstance(body.get("merge", False), bool)):
+        return text(400, 'the body is {"note": "...", "merge": false}, both optional')
+    dataset = datasets.request(requested_by=machine.name, note=body.get("note", "")[:NOTE_MAX],
+                               merge=body.get("merge", False))
     return JsonResponse(described(dataset, request), status=201)
 
 
@@ -98,7 +101,7 @@ def exports_page(request):
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "new":
-            datasets.request(requested_by="page")
+            datasets.request(requested_by="page", merge=request.POST.get("merge") == "on")
         elif action == "rebuild":
             dataset = get_object_or_404(Dataset, pk=request.POST.get("id") or 0)
             if dataset.state == "done" and dataset.file_deleted_at is not None:
