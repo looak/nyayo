@@ -222,10 +222,13 @@ so positions are deduped across the dataset, and writes its `<fen> [result]` lin
 `NYAYO_DATASETS_DIR`. Progress is exact (batches read of those selected, games read, positions written), on the
 page and from `GET /api/exports/{id}`. The record is kept for good: the selection, the draw's settings and seed,
 nyayo's and the reader's versions with the reader's sha256, the counts, the manifest with every batch's sha256, the
-positions' sha256 and a free note. Deleting removes the file and keeps the record; a rebuild reads the same games
+positions' sha256 and a free note. Deleting (`DELETE /api/exports/{id}`, with a machine token) removes the file and keeps the record; a rebuild reads the same games
 again from the batches alone and checks the new sha256 against the old. Drawing needs phant-indexer as the reader
 (`NYAYO_READER`); with python-chess a dataset fails saying so. A dataset left running by a worker that stopped
-starts over (`docs/match-schema.md`, Position datasets).
+starts over (`docs/match-schema.md`, Position datasets). The Exports page (V1) is one list: every dataset, newest
+first, with its state (queued, running, done, failed), age, positions and whether its file is there or was deleted
+and needs rebuilding; a download link where the file is, a Rebuild button where it's gone; the dataset in progress on
+top with its progress, the page refreshing while one runs; and a New dataset button. No filter form yet.
 
 ### Matches: SPRT viewer
 

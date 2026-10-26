@@ -1,85 +1,59 @@
 {% extends "runs/base.html" %}
 {% load matches_extras %}
 {% block title %}Exports · nyayo{% endblock %}
-{% block head %}{% if busy %}<meta http-equiv="refresh" content="5">{% endif %}
+{% block head %}{% if current %}<meta http-equiv="refresh" content="5">{% endif %}
 <style>
-  .dataset .figures { display: flex; flex-wrap: wrap; gap: .4rem 2.2rem; margin: .2rem 0 .6rem; }
-  .dataset .figures b { display: block; font-size: 1.5rem; color: var(--bright); font-variant-numeric: tabular-nums; }
-  .dataset .figures span { font-size: .75rem; color: var(--muted); }
-  .dataset .bar { margin-bottom: .6rem; }
-  .dataset dl.facts { font-size: .82rem; }
-  .dataset form { display: inline; }
-  .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .7rem; }
-  .actions button, .request button { padding: .35rem .9rem; border: 0; border-radius: 3px; background: var(--accent);
-                                     color: #fff; font: inherit; cursor: pointer; }
-  .actions button.quiet { background: #4b545c; }
-  .actions a.download { padding: .35rem .9rem; border-radius: 3px; background: var(--success); color: #fff; }
-  .note-field { flex: 1 1 18rem; padding: .3rem .4rem; border: 1px solid var(--line); border-radius: 3px;
-                background: var(--code-bg); color: var(--fg); font: inherit; }
-  .request { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
-  .match-ok { color: var(--better); font-weight: 600; } .match-bad { color: var(--worse); font-weight: 600; }
+  .exports-head { display: flex; align-items: baseline; gap: .8rem; margin: .25rem 0 1rem; }
+  .exports-head h1 { margin: 0; }
+  .exports-head form { margin-left: auto; }
+  button.act { padding: .35rem .9rem; border: 0; border-radius: 3px; background: var(--accent); color: #fff; font: inherit;
+               cursor: pointer; }
+  button.act.small { padding: .15rem .6rem; font-size: .85rem; background: #4b545c; }
+  .current .figures { display: flex; flex-wrap: wrap; gap: .4rem 2.2rem; margin: .3rem 0 .6rem; }
+  .current .figures b { display: block; font-size: 1.5rem; color: var(--bright); font-variant-numeric: tabular-nums; }
+  .current .figures span { font-size: .75rem; color: var(--muted); }
+  table.exports form { display: inline; }
 </style>
 {% endblock %}
 {% block content %}
-<div class="pagehead"><h1>Exports</h1><span class="muted">position datasets for the tuner, drawn from the games kept</span></div>
-
-<div class="card">
-  <h3 class="box-title">Draw a position dataset <span class="right muted">the worker draws it when it has nothing else to do, one batch a turn</span></h3>
-  <p class="muted" style="margin-top: 0">Every game that read and ended with a good label (by rule, resignation or adjudication, inferred ones
-    included; not on time, a crash, an illegal move or unexplained), from every sealed batch, through
-    <code>phant-indexer --draw {{ draw.per_game }}{% if draw.quiet %} --quiet{% endif %} --min-ply {{ draw.min_ply }}</code> with a new seed:
-    <code>&lt;fen&gt; [result]</code> lines, white's result, deduped. Filters come later.</p>
-  <form class="request" method="post">{% csrf_token %}
-    <input type="hidden" name="action" value="request">
-    <input class="note-field" name="note" placeholder="what it is for (optional), e.g. retune the king table for 1.4">
-    <button>Draw a dataset</button>
-  </form>
+<div class="exports-head">
+  <h1>Exports</h1><span class="muted">position datasets for the tuner</span>
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="new"><button class="act">New dataset</button></form>
 </div>
 
-{% for d in datasets %}
-<div class="card dataset top-{% if d.state == 'done' %}finished{% elif d.state == 'failed' %}failed{% elif d.state == 'running' %}running{% else %}stopped{% endif %}" id="dataset-{{ d.pk }}">
-  <div class="card-head">
-    <h3>Dataset {{ d.pk }}</h3>
-    <span class="outcome card-state {% if d.state == 'done' %}finished{% elif d.state == 'failed' %}fail{% elif d.state == 'running' %}running{% else %}stopped{% endif %}">{{ d.state }}{% if d.rebuild_of_sha256 and d.state != 'done' %}, rebuilding{% endif %}</span>
-    <span class="muted">requested {{ d.requested_at|date:"Y-m-d H:i" }}{% if d.requested_by %} by {{ d.requested_by }}{% endif %}</span>
-  </div>
+{% if current %}{% with d=current %}
+<div class="card current top-running">
+  <h3 class="box-title">Dataset {{ d.pk }} <span class="outcome card-state running">{% if d.state == "requested" %}queued{% else %}running{% endif %}</span>
+    <span class="right muted">{% if d.started_at %}started {{ d.started_at|timesince }} ago{% else %}waiting for the worker{% endif %}</span></h3>
   <div class="figures">
     <div><b>{{ d.batches_done|thousands }}<small class="muted"> / {{ d.batches_total|thousands }}</small></b><span>batches read</span></div>
     <div><b>{{ d.games|thousands }}</b><span>games read</span></div>
     <div><b>{{ d.positions|thousands }}</b><span>positions written</span></div>
-    {% if d.file_bytes %}<div><b>{% widthratio d.file_bytes 1000000 1 %} MB</b><span>zstd</span></div>{% endif %}
   </div>
-  {% if d.state == "running" or d.state == "requested" %}
   <div class="bar" role="img" aria-label="{{ d.batches_done }} of {{ d.batches_total }} batches read">
     <span class="seg pass" style="width: {% if d.batches_total %}{% widthratio d.batches_done d.batches_total 100 %}{% else %}0{% endif %}%"></span>
   </div>
-  {% endif %}
-  {% if d.error %}<p class="note">{{ d.error }}</p>{% endif %}
-  {% if d.rebuild_matched is not None %}<p>Rebuilt {{ d.finished_at|date:"Y-m-d H:i" }}:
-    {% if d.rebuild_matched %}<span class="match-ok">the same positions</span>, sha256 as before{% else %}<span class="match-bad">different positions</span>: sha256 <span class="mono">{{ d.sha256|slice:":16" }}</span>, was <span class="mono">{{ d.rebuild_of_sha256|slice:":16" }}</span>{% endif %}</p>{% endif %}
-  <dl class="facts">
-    <dt>Draw</dt><dd><span class="mono">--draw {{ d.draw.per_game }}{% if d.draw.quiet %} --quiet{% endif %} --min-ply {{ d.draw.min_ply }} --seed {{ d.draw.seed }}</span></dd>
-    <dt>Selection</dt><dd>endings {{ d.selection.endings|join:", " }}{% if d.selection.matches %}; matches {{ d.selection.matches|join:", " }}{% endif %}</dd>
-    {% if d.started_at %}<dt>Ran</dt><dd>{{ d.started_at|date:"Y-m-d H:i:s" }}{% if d.finished_at %} to {{ d.finished_at|date:"H:i:s" }}{% endif %}</dd>{% endif %}
-    {% if d.reader %}<dt>Versions</dt><dd>nyayo <span class="mono">{{ d.nyayo_version }}</span>, {{ d.reader }} <span class="mono" title="the reader's sha256">{{ d.reader_sha256|slice:":16" }}</span></dd>{% endif %}
-    {% if d.sha256 %}<dt>Positions' sha256</dt><dd class="mono">{{ d.sha256 }}</dd>{% endif %}
-    {% if d.file_deleted_at %}<dt>File</dt><dd class="muted">deleted {{ d.file_deleted_at|date:"Y-m-d H:i" }}; the record stays, and a rebuild makes it again</dd>{% endif %}
-  </dl>
-  <div class="actions">
-    {% if d.state == "done" and not d.file_deleted_at %}<a class="download" href="{% url 'export_file' d.pk %}">Download positions</a>{% endif %}
-    <a href="{% url 'api_export' d.pk %}">record and manifest (JSON)</a>
-    {% if d.state == "done" %}
-    <form method="post">{% csrf_token %}<input type="hidden" name="id" value="{{ d.pk }}"><input type="hidden" name="action" value="rebuild"><button class="quiet" title="draw it again from the record, and check it gives the same positions">Rebuild</button></form>
-    {% if not d.file_deleted_at %}<form method="post" onsubmit="return confirm('Delete dataset {{ d.pk }}\'s file? The record stays.')">{% csrf_token %}<input type="hidden" name="id" value="{{ d.pk }}"><input type="hidden" name="action" value="delete"><button class="quiet">Delete file</button></form>{% endif %}
-    {% endif %}
-  </div>
-  <form class="request" method="post" style="margin-top: .6rem">{% csrf_token %}
-    <input type="hidden" name="id" value="{{ d.pk }}"><input type="hidden" name="action" value="note">
-    <input class="note-field" name="note" value="{{ d.note }}" placeholder="what it was used for, e.g. tuned 1.4's king table">
-    <button>Save note</button>
-  </form>
 </div>
-{% empty %}
-<p class="muted">No dataset yet.</p>
-{% endfor %}
+{% endwith %}{% endif %}
+
+<div class="card">
+  <h3 class="box-title">Datasets <span class="right muted">newest first</span></h3>
+  {% if datasets %}
+  <div class="scroll"><table class="exports">
+    <thead><tr><th>Dataset</th><th>State</th><th>Age</th><th class="num">Positions</th><th>File</th><th></th></tr></thead>
+    <tbody>
+    {% for d in datasets %}
+      <tr>
+        <td><a href="{% url 'api_export' d.pk %}" title="its record and manifest">{{ d.pk }}</a>{% if d.note %} <span class="muted">{{ d.note|truncatechars:60 }}</span>{% endif %}</td>
+        <td>{% if d.state == "requested" %}<span class="badge stopped">queued</span>{% elif d.state == "running" %}<span class="badge running">running</span>{% elif d.state == "done" %}<span class="badge finished">done</span>{% else %}<span class="badge error" title="{{ d.error }}">failed</span>{% endif %}</td>
+        <td class="nowrap" title="requested {{ d.requested_at|date:'Y-m-d H:i' }}">{{ d.requested_at|timesince }}</td>
+        <td class="num">{% if d.state == "done" %}{{ d.positions|thousands }}{% endif %}</td>
+        <td>{% if d.state == "done" %}{% if d.file_deleted_at %}<span class="muted">deleted, needs rebuilding</span>{% else %}{% widthratio d.file_bytes 1000000 1 %} MB{% endif %}{% elif d.state == "failed" %}<span class="worse">{{ d.error|truncatechars:80 }}</span>{% endif %}</td>
+        <td class="nowrap">{% if d.state == "done" %}{% if d.file_deleted_at %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="rebuild"><input type="hidden" name="id" value="{{ d.pk }}"><button class="act small">Rebuild</button></form>{% else %}<a href="{% url 'export_file' d.pk %}">download</a>{% endif %}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">No dataset yet.</p>{% endif %}
+</div>
 {% endblock %}

@@ -382,7 +382,9 @@ made by nyayo's worker as a job. Requesting one:
 - the Exports page's button (`/exports`), which does the same.
 
 `GET /api/exports` lists every dataset, newest first; `GET /api/exports/{id}` gives one's record with its manifest;
-both are open, like the pages. `GET /exports/{id}/file` is the file, once done and while not deleted.
+both are open, like the pages. `GET /exports/{id}/file` is the file, once done and while not deleted. `DELETE
+/api/exports/{id}` with a machine's token deletes a finished dataset's file and keeps its record (`409` for one not
+done); the Exports page rebuilds it.
 
 The record, as JSON:
 

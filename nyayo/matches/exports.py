@@ -3,7 +3,7 @@
 `POST /api/exports` with a machine's token requests one, so another agent starts a dataset with one request; `GET
 /api/exports` lists them and `GET /api/exports/{id}` gives one's state, progress and record, with its file's URL once
 it's done. Reading is open, like the pages; the page's buttons are forms, as the admin's are, on a LAN site without
-logins.
+logins: New dataset, and Rebuild for a dataset whose file was deleted.
 """
 
 import json
@@ -65,10 +65,19 @@ def api_exports(request):
     return JsonResponse(described(dataset, request), status=201)
 
 
-@require_http_methods(["GET"])
+@csrf_exempt
+@require_http_methods(["GET", "DELETE"])
 def api_export(request, dataset_id):
-    """GET: one dataset's record, progress and manifest."""
-    return JsonResponse(described(get_object_or_404(Dataset, pk=dataset_id), request, manifest=True))
+    """GET: one dataset's record, progress and manifest. DELETE, with a machine's token: its file, the record kept
+    (a rebuild makes the file again); 409 for a dataset not done."""
+    dataset = get_object_or_404(Dataset, pk=dataset_id)
+    if request.method == "DELETE":
+        if machine_for(request) is None:
+            return unauthorized()
+        if dataset.state != "done":
+            return text(409, f"dataset {dataset.pk} is {dataset.state}; only a finished one's file can be deleted")
+        datasets.delete_file(dataset)
+    return JsonResponse(described(dataset, request, manifest=True))
 
 
 @require_http_methods(["GET"])
@@ -83,23 +92,19 @@ def export_file(request, dataset_id):
 
 @require_http_methods(["GET", "POST"])
 def exports_page(request):
-    """The Exports page: a button to request a dataset, and every dataset with its progress and record. Its forms
-    request, note, rebuild and delete the file."""
+    """The Exports page (V1): every dataset, newest first, with its state, age, positions and whether its file is
+    still there; the one in progress on top with its progress; a New dataset button, and Rebuild for a file
+    deleted."""
     if request.method == "POST":
         action = request.POST.get("action")
-        dataset = Dataset.objects.filter(pk=request.POST.get("id") or 0).first()
-        if action == "request":
-            datasets.request(requested_by="page", note=request.POST.get("note", "")[:NOTE_MAX])
-        elif dataset is None:
-            raise Http404("no such dataset")
-        elif action == "note":
-            dataset.note = request.POST.get("note", "")[:NOTE_MAX]
-            dataset.save(update_fields=["note"])
-        elif action == "rebuild" and dataset.state == "done":
-            datasets.rebuild(dataset)
-        elif action == "delete" and dataset.state == "done":
-            datasets.delete_file(dataset)
+        if action == "new":
+            datasets.request(requested_by="page")
+        elif action == "rebuild":
+            dataset = get_object_or_404(Dataset, pk=request.POST.get("id") or 0)
+            if dataset.state == "done" and dataset.file_deleted_at is not None:
+                datasets.rebuild(dataset)
         return redirect("exports")
     rows = list(Dataset.objects.all())
-    busy = any(d.state in ("requested", "running") for d in rows)
-    return render(request, "matches/exports.html", {"datasets": rows, "busy": busy, "draw": datasets.DRAW})
+    current = next((d for d in rows if d.state == "running"), None) or next(
+        (d for d in reversed(rows) if d.state == "requested"), None)
+    return render(request, "matches/exports.html", {"datasets": rows, "current": current})
