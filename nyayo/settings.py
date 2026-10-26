@@ -68,6 +68,10 @@ NYAYO_BACKUP_REPO = os.environ.get("NYAYO_BACKUP_REPO", "")
 # purge_games never touches them; put them on the NAS's share by pointing this there. A batch is at most 64 MB as sent
 # and 256 MB once decompressed.
 NYAYO_BATCHES_DIR = Path(os.environ.get("NYAYO_BATCHES_DIR") or NYAYO_GAMES_DIR / "batches").resolve()
+
+# Position datasets (datasets.py): the positions files the worker draws from the batches, next to the batches on the
+# share by default. A dataset's record is in the database; its file can be deleted and made again.
+NYAYO_DATASETS_DIR = Path(os.environ.get("NYAYO_DATASETS_DIR") or NYAYO_BATCHES_DIR.parent / "datasets").resolve()
 NYAYO_MAX_BATCH_UPLOAD_BYTES = 64 * 1024 * 1024
 # Games in one of nyayo's batches; every batch records its own count, so changing this needs nothing else.
 NYAYO_BATCH_GAMES = int(os.environ.get("NYAYO_BATCH_GAMES", 64))

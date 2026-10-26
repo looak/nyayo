@@ -372,34 +372,38 @@ a file.
 Filters combine with *and*; no filter is every game. Matches are filtered on what is indexed already; there is no index
 of positions.
 
-### Training export
+### Position datasets
 
-`manage.py export_training --out NAME [filters]` writes the games a training selection chooses (game database,
-milestone 10) for elephant's `phant-indexer --draw` to draw positions from:
+A **position dataset** (game database, milestone 10) is positions drawn from the games kept, for elephant's tuner,
+made by nyayo's worker as a job. Requesting one:
 
-- **`NAME.pgn.zst`**: one zstd stream of the games' PGN exactly as stored in their batches, comments included (so every
-  move's eval comes along), each followed by a blank line, in batch order. Only games in **sealed** batches and with a
-  result (1-0, 0-1, 1/2-1/2) are taken; games in a batch still open wait for the next export.
-- **`NAME.manifest.json`**, format 1: `name`, `made_at`, `filters` (as given), `games` (the count),
-  `left_out_in_open_batches`, `nyayo` (`git describe` of the checkout), `reader` (the game reader configured, e.g.
-  `phant-indexer 1.3.1`), and `batches`: each with its `id`, `match`, `number`, `sha256` (of the sealed file), the
-  `reader` that read it, and its `games` taken, each `position`, `game` (its id), `offset` and `length` in the batch's
-  decompressed PGN.
+- `POST /api/exports` with a machine's token, body `{"note": "..."}` or empty: `201` with the dataset's record
+  (below), state `requested`; `401` without a token;
+- the Exports page's button (`/exports`), which does the same.
 
-`--from-manifest FILE --out NAME` writes the same games again from the batches alone, each batch checked against the
-manifest's sha256 (a batch gone or changed is an error), so a fit can be redone from exactly the same games after the
-index is rebuilt or on another machine.
+`GET /api/exports` lists every dataset, newest first; `GET /api/exports/{id}` gives one's record with its manifest;
+both are open, like the pages. `GET /exports/{id}/file` is the file, once done and while not deleted.
 
-| Flag | Chooses |
+The record, as JSON:
+
+| Field | |
 |:--|:--|
-| `--match ID`, `--openbench TEST` | given matches, by id or by OpenBench test id (`openbench-<host>-<TEST>`, or the test's URL); repeat or separate with commas; any of them |
-| `--kind` | `sprt`, `gauntlet`, `selfplay`, `games` |
-| `--subject-version` | the engine under test's version: `1.3.0-` at least, `1.2.0-1.3.0` between (both included), `1.3.0` that one; a subject without a version number (a branch) is left out |
-| `--book`, `--tc` | `settings.book`, `settings.tc` exactly |
-| `--endings LIST` | how a game ended, from its card: `rule`, `resignation`, `adjudication` (a draw or a win), `time`, `crash`, `illegal`, `unexplained`, `other`; inferred endings count as their ending. Default `rule,resignation,adjudication` |
-| `--exclude LIST` | endings taken out of the kept ones, e.g. `time,crash` |
+| `id`, `state` | `requested`, `running`, `done` or `failed` (with `error`) |
+| `note`, `requested_by` | free text, what it was used for; the machine that asked, or `page` |
+| `requested_at`, `started_at`, `finished_at` | ISO 8601 |
+| `selection` | the filters: V1 takes every game that read and has a result, ended by rule, resignation or adjudication, inferred ones included (`endings`); matches, versions, book and time control come later in the same object |
+| `draw` | `per_game` (10), `quiet` (true), `min_ply` (16) and `seed`, as given to `phant-indexer --draw` |
+| `progress` | `batches` read `of` the batches selected, `games` read, `positions` written so far |
+| `nyayo`, `reader`, `reader_sha256` | `git describe` of nyayo's checkout; the reader's name and the sha256 of its binary |
+| `sha256`, `bytes` | of the positions, decompressed; the file's size |
+| `file`, `file_deleted_at` | the file's URL while there is one; when it was deleted |
+| `rebuild_of_sha256`, `rebuild_matched` | a rebuild's: the sha256 it had to give, and whether it did |
+| `manifest` (one dataset only) | every batch read, in order: `id`, `match`, `number`, `sha256` of the sealed file, and `games`, each `[place, offset, length]` in the batch's decompressed PGN |
 
-The filters are `nyayo.matches.selection`, which the games page shares.
+The file, `positions-<id>.txt.zst` in `NYAYO_DATASETS_DIR` (next to the batches on the share by default), is zstd of
+`phant-indexer --draw`'s output: `<fen> [result]` lines, the result white's (`[1.0]`, `[0.5]`, `[0.0]`), the format
+`ElephantTuner` reads. Deleting it keeps the record; a rebuild reads the manifest's games again, each batch checked
+against its sha256, with the same settings and seed, and compares the positions' sha256 with the one recorded.
 
 ## OpenBench
 

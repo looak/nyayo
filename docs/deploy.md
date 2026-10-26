@@ -161,6 +161,21 @@ They agree on every game: its place, offset and length, whether it read, its res
 tags a PGN has; python-chess also fills in the seven-tag roster). bobby's CPU is slower than this one; the ratio,
 about 37 to 1, is what carries over.
 
+## Position datasets
+
+The worker draws position datasets for the tuner (the Exports page, `POST /api/exports`; `docs/match-schema.md`,
+Position datasets), after everything else it has to do, a batch a turn. It needs phant-indexer as the reader, in a
+release with `--draw` (elephant's, after 1.3.1): pin it as for reading games (`NYAYO_READER`, `NYAYO_READER_SHA256`)
+and restart the worker. The files go to `NYAYO_DATASETS_DIR`, by default `datasets/` next to the batches, on the
+share; a dataset of 2026-10's 45,000 games is under 10 MB.
+
+To start one from another machine, with that machine's token:
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" -d '{"note": "retune the king table"}' http://172.16.100.11:8001/api/exports
+curl http://172.16.100.11:8001/api/exports/<id>     # state, progress, and the file's URL once done
+```
+
 ## The index
 
 Every game kept as data has a card in `index.sqlite3` (see *Storage* in `match-schema.md`). The worker writes a

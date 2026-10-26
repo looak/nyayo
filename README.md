@@ -65,10 +65,9 @@ other games from it) and the match it came from; a game opens in its own view wi
 result for the engine under test, how the game ended, its length in moves and its opening. It reads the index of
 cards, so it shows a game once the worker has put it away.
 
-For tuning, `manage.py export_training --out NAME` writes the games of a training selection (by match or OpenBench
-test, the engine under test's version, book, time control and how the games ended) as stored, comments included, to
-`NAME.pgn.zst` for `phant-indexer --draw`, with `NAME.manifest.json` naming every batch and game taken, so
-`--from-manifest` takes exactly the same games again.
+For tuning, the **Exports** page (`/exports`) and `POST /api/exports` request a position dataset: the worker draws
+quiet positions from every well-labelled game kept, through `phant-indexer --draw`, as `<fen> [result]` lines for
+`ElephantTuner`, and keeps a record (selection, seed, versions, the batches read) that rebuilds the same file.
 
 The **Dashboard** (`/`, the home page) shows what nyayo holds at a glance: tiles for the
 game database (size, games, how much is indexed), what is being played or was played last, the latest SPRT's

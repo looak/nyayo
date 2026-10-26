@@ -212,14 +212,20 @@ not yet in a batch, so every game is in it once. The filters are `kind`, `engine
 more), `tc`, `book`, `since`, `until` and `match`, combined with *and*. A match's page counts its stored games and links
 its export. The games page below filters by match and by opening; a position is otherwise found by reading the games.
 
-`manage.py export_training --out NAME` writes a training selection's games (milestone 10) as stored, comments
-included, to `NAME.pgn.zst`, one zstd stream that `phant-indexer --draw` reads, and `NAME.manifest.json`: the
-filters, the count, nyayo's and the reader's versions, and every batch's id and sha256 with each game's place, offset
-and length in it. Only games in sealed batches and with a result are taken. The filters (matches or OpenBench test ids,
-kind, the engine under test's version as `1.3.0-` or `1.2.0-1.3.0`, book, time control, and the endings kept, by
-default rule, resignation and adjudication, inferred ones included) live in `nyayo.matches.selection`, shared with the
-games page. `--from-manifest` writes the same games again from the batches alone, refusing a batch whose sha256
-changed (`docs/match-schema.md`, Training export). 45,073 games export in 9 s on the demo data.
+**Position datasets** (milestone 10) are made by the worker, as jobs: requested from the Exports page (`/exports`)
+or `POST /api/exports` with a machine token, one at a time, and only when there is nothing else to do, a batch a
+turn, so uploads never wait behind one. The worker resolves the selection to a manifest of sealed batches and their
+games (V1: every game that read and has a result, ended by rule, resignation or adjudication, inferred ones included;
+the filters are `nyayo.matches.selection`, which the games page shares), then feeds each batch's chosen games, as
+stored, to one `phant-indexer --draw 10 --quiet --min-ply 16 --seed S` process open from the first batch to the last,
+so positions are deduped across the dataset, and writes its `<fen> [result]` lines to `positions-<id>.txt.zst` in
+`NYAYO_DATASETS_DIR`. Progress is exact (batches read of those selected, games read, positions written), on the
+page and from `GET /api/exports/{id}`. The record is kept for good: the selection, the draw's settings and seed,
+nyayo's and the reader's versions with the reader's sha256, the counts, the manifest with every batch's sha256, the
+positions' sha256 and a free note. Deleting removes the file and keeps the record; a rebuild reads the same games
+again from the batches alone and checks the new sha256 against the old. Drawing needs phant-indexer as the reader
+(`NYAYO_READER`); with python-chess a dataset fails saying so. A dataset left running by a worker that stopped
+starts over (`docs/match-schema.md`, Position datasets).
 
 ### Matches: SPRT viewer
 
@@ -259,7 +265,7 @@ the pages on.
 Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar, which stays in place while the page scrolls, and a top bar. nyayo's icon, in the sidebar and as the favicon (SVG, a 32 px PNG and a 180 px apple-touch-icon), is the chess elephant from Wikimedia Commons (Chess_elt45.svg by NikNaks93), bundled under `nyayo/runs/static/img/` and used under the BSD 3-Clause License (`LICENSE-elephant.txt`). The sidebar has a status block
 (whether the worker holds its lock, the game reader, uploads waiting or refused, whether the batches' directory is
 there and how much it holds) and the links, grouped as Main (Dashboard), Testing (Matches with the number live: running and not silent, as the list's cards count them; Runs, Compare),
-Catalogue (Games with the number kept, Uploads in the admin) and System (Admin); the page's own link is marked. The
+Catalogue (Games with the number kept, Exports, Uploads in the admin) and System (Admin); the page's own link is marked. The
 top bar says where the page is, names the host and the time zone the pages' times are in (`NYAYO_TIME_ZONE`, UTC by default; times are stored in UTC). The status is worked out only when a page's frame is drawn, never
 for the game page's polled fragment. The site has one colour scheme, dark.
 
@@ -300,7 +306,7 @@ runs `sudo` on bobby; changes there are proposed, not made. [deploy.md](deploy.m
   `NYAYO_CSRF_TRUSTED_ORIGINS`, `NYAYO_SCRIPT_NAME` (for a path prefix behind a proxy), `NYAYO_DATA_DIR`,
   `NYAYO_WIP_DAYS`, `NYAYO_COMMITTED_DAYS`, `NYAYO_SILENT_AFTER`, `NYAYO_GAME_POLL_MS`, `NYAYO_GAME_THREADS`,
   `NYAYO_ARCHIVE_EVERY`, `NYAYO_BATCHES_DIR`, `NYAYO_BATCH_GAMES`, `NYAYO_SEAL_AFTER`, `NYAYO_READER`,
-  `NYAYO_READER_SHA256`, `NYAYO_INDEX_DB`, `NYAYO_BACKUP_REPO`, `NYAYO_GITHUB_REPO` (the engine's repository, owner/name, for the dashboard's links), `NYAYO_TIME_ZONE` (the zone pages show times in, an IANA name) and `NYAYO_LOG_LEVEL`. A server error's traceback goes
+  `NYAYO_READER_SHA256`, `NYAYO_INDEX_DB`, `NYAYO_BACKUP_REPO`, `NYAYO_DATASETS_DIR` (position datasets' files, next to the batches by default), `NYAYO_GITHUB_REPO` (the engine's repository, owner/name, for the dashboard's links), `NYAYO_TIME_ZONE` (the zone pages show times in, an IANA name) and `NYAYO_LOG_LEVEL`. A server error's traceback goes
   to the journal (`journalctl -u nyayo`); the worker's reasons are in `journalctl -u nyayo-worker`.
 - **The share.** The batches are on the Synology's `nyayo-batches` folder over NFS 4.1, mounted on bobby at
   `/mnt/nyayo-batches` (`NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches`); a `RequiresMountsFor` drop-in on both units
