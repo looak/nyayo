@@ -119,8 +119,9 @@ def exports_page(request):
 # the rings' colours: Pi-hole's, and the results' green, grey and red as everywhere else
 RESULT_COLOURS = {"white wins": "#2ecc71", "draws": "#9aa4ad", "black wins": "#e5533d", "mixed": "#d98a12"}
 GAME_COLOURS = {"used": "#12895a", "didn't read": "#c64a3a", "no result": "#6c757d", "a null move": "#7b5ea7"}
-POSITION_COLOURS = {"written": "#3c8dbc", "duplicates": "#d98a12", "quiet, not drawn": "#0b8ea8",
-                    "not quiet": "#4b545c"}
+# four hues far apart, each clear of the ring's dark ground: what was written stands out, what wasn't recedes
+POSITION_COLOURS = {"written": "#3498db", "duplicates": "#f39c12", "quiet, not drawn": "#9b59b6",
+                    "not quiet": "#d0d6db"}
 # what the quiet-per-game figures are, for their tooltips
 QUIET_TIPS = {
     "mean": "the quiet positions past a game's first ply, averaged over the games used: how many each game had to "
