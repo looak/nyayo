@@ -11,8 +11,12 @@
   dl.quiet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem 1.5rem; margin: 0; }
   dl.quiet dt { color: var(--muted); font-size: .8rem; cursor: help; text-decoration: underline dotted; }
   dl.quiet dd { margin: 0; font-size: 1.6rem; font-weight: 700; color: var(--bright); font-variant-numeric: tabular-nums; }
-  table.figures { width: auto; }
-  table.figures td { padding: .2rem 1.2rem .2rem 0; }
+  /* the two tables fill their cards: the label on the left, its value across the rest */
+  table.figures { width: 100%; }
+  table.figures td { padding: .3rem .6rem; }
+  table.figures td:first-child { width: 40%; white-space: nowrap; }
+  table.figures td.num { text-align: right; }
+  table.figures td.mono { overflow-wrap: anywhere; }
   .wdl-bar { display: flex; height: 22px; border-radius: 3px; overflow: hidden; font-size: .75rem; font-weight: 700;
              color: #fff; }
   .wdl-bar span { display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; }
