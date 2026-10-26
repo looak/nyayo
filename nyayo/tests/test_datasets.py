@@ -9,7 +9,7 @@ import sys
 import zstandard
 from django.test import override_settings
 
-from nyayo.matches import catalogue, datasets, reader, worker
+from nyayo.matches import catalogue, datasets, exports, reader, worker
 from nyayo.matches.models import Batch, Dataset, Match, MatchResult, Upload
 
 from .test_index import MATE, OPENBENCH, RESIGNED
@@ -254,13 +254,34 @@ class Datasets(BatchCase):
         self.assertTrue(view["quiet_share"].endswith("%"))
         self.assertEqual(len(view["wdl"]), 3)
         self.assertIn(("games read", 2), view["rows"])
+        results = stats["positions"]["results"]
+        counted = results["white"] + results["draw"] + results["black"]
+        self.assertEqual([r["share"] for r in view["wdl"]],
+                         [f"{100 * results[k] / counted:.1f}" for k in ("white", "draw", "black")])
+        # the list: the settings and quiet share in a line, and a W/D/L bar, each share to one decimal on top
         page = self.client.get("/exports").content.decode()
-        self.assertIn(f"{view['quiet_share']} quiet", page)
-        self.assertIn("<summary>settings and statistics</summary>", page)
-        self.assertIn("10/game · ", page)
-        self.assertIn('<td class="muted">first ply, by book</td><td>8moves_v3 4, endgames 0; any other book 8</td>'.lower(),
-                      page.lower())
+        self.assertIn(f"10/game · {view['quiet_share']} quiet", page)
+        white = view["wdl"][0]
+        self.assertIn(f'<span class="pass" style="width: {white["share"]}%" title="white wins: {results["white"]}">'
+                      f'{white["share"]}%</span>', page)
+        self.assertIn(f'href="/exports/{dataset.pk}">Dataset {dataset.pk}</a>', page)
+        self.assertNotIn("<details>", page)
+        # its own page: tiles, the three rings, the quiet figures with what they are, every figure, the record
+        page = self.client.get(f"/exports/{dataset.pk}").content.decode()
+        self.assertIn(">Positions written<", page)
+        self.assertIn('aria-label="Results: white wins', page)
+        self.assertIn('aria-label="Games: used 2', page)
+        self.assertIn('aria-label="Positions: written', page)
+        self.assertIn('<dt title="half the games had fewer quiet positions than this, half more">median</dt>', page)
         self.assertIn('<td class="muted">positions written</td>', page)
+        self.assertIn('<td class="muted">first ply, by book</td><td>8moves_v3 4, Endgames 0; any other book 8</td>',
+                      page)
+        self.assertIn(dataset.sha256, page)
+        self.assertIn('href="/exports" class="active"', page)
+        # the positions ring adds up to the candidates
+        ring = exports.rings(view["found"])["positions"]
+        self.assertEqual(ring["total"], stats["positions"]["candidates"])
         # a reader that writes none, or another shape: nothing shown, nothing broken
         self.assertIsNone(datasets.stats_view(None))
         self.assertEqual(datasets.stats_view({"other": 1})["rows"], [])
+        self.assertEqual(self.client.get(f"/exports/{datasets.request().pk}").status_code, 200)

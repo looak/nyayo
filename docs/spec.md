@@ -233,11 +233,15 @@ book's minimum as a `[DrawMinPly "P"]` tag in the copy fed (the stored games are
 standard input over `--min-ply` (looak/elephant#34). The Exports page (V1) is one list: every dataset, newest
 first, with its state (queued, running, done, failed), age, positions and whether its file is there or was deleted
 and needs rebuilding; a download link where the file is, a Rebuild button where it's gone; the dataset in progress on
-top with its progress, the page refreshing while one runs; and a New dataset button, with a merge checkbox. Each dataset shows its draw's settings (positions per game, whether merged, compact as `10/game · merged`; in
-the expanded row also the seed and the book map it used) and, once finished, its statistics, which the
-reader writes with `--stats` and the record keeps: compact in the list (the quiet share of the candidates, white
-wins, draws and black wins of the positions written), the full table when its row is expanded, read by
-`--stats`'s own names (`"stats": 1`, elephant's indexer/README.md) through `datasets.STATS`. No filter form yet.
+top with its progress, the page refreshing while one runs; and a New dataset button, with a merge checkbox. Each row shows its draw's settings and quiet share in a line (`10/game · merged · 80% quiet`) over a bar of
+the written positions' white wins, draws and black wins in green, grey and red, each share to one decimal on it, and
+links to the dataset's own page (`/exports/{id}`), built like an SPRT's or a gauntlet's: tiles (positions written,
+games used, quiet positions a game, when it finished, with the download or a Rebuild), the results bar, three rings
+(the written positions' results, mixed ones included; the games read: used, didn't read, no result; and the
+candidate positions past the first ply: written, duplicates dropped or merged into one, quiet but not drawn, not
+quiet), the quiet positions a game (mean, median, 5th percentile, minimum, each with a tooltip saying what it is),
+every figure the reader's `--stats` wrote (`"stats": 1`, read through `datasets.STATS`), and the settings (the seed and
+book map among them) and record. No filter form yet.
 
 ### Matches: SPRT viewer
 

@@ -1,0 +1,108 @@
+{% extends "runs/base.html" %}
+{% load runs_extras matches_extras %}
+{% block title %}Dataset {{ d.pk }} · nyayo{% endblock %}
+{% block crumb %}Catalogue › Exports › dataset {{ d.pk }}{% endblock %}
+{% block head %}{% if running %}<meta http-equiv="refresh" content="5">{% endif %}
+<style>
+  .rings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 1rem; align-items: start; }
+  .rings > .card { margin: 0 0 1rem; }
+  .rings .donut-wrap { grid-template-columns: 110px minmax(0, 1fr); }
+  @media (max-width: 1300px) { .rings { grid-template-columns: minmax(0, 1fr); } }
+  dl.quiet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem 1.5rem; margin: 0; }
+  dl.quiet dt { color: var(--muted); font-size: .8rem; cursor: help; text-decoration: underline dotted; }
+  dl.quiet dd { margin: 0; font-size: 1.6rem; font-weight: 700; color: var(--bright); font-variant-numeric: tabular-nums; }
+  table.figures { width: auto; }
+  table.figures td { padding: .2rem 1.2rem .2rem 0; }
+  .wdl-bar { display: flex; height: 22px; border-radius: 3px; overflow: hidden; font-size: .75rem; font-weight: 700;
+             color: #fff; }
+  .wdl-bar span { display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; }
+  .wdl-bar .pass { background: var(--cell-pass); } .wdl-bar .draw { background: #6c757d; }
+  .wdl-bar .fail { background: var(--cell-fail); }
+  form.inline { display: inline; }
+  button.act { padding: .3rem .9rem; border: 0; border-radius: 3px; background: var(--accent); color: #fff; font: inherit;
+               cursor: pointer; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1>Dataset {{ d.pk }}</h1>
+  {% if d.state == "requested" %}<span class="badge stopped">queued</span>{% elif d.state == "running" %}<span class="badge running">running</span>{% elif d.state == "done" %}<span class="badge finished">done</span>{% else %}<span class="badge error">failed</span>{% endif %}
+  <span class="muted">{{ settings.compact }} · requested {{ d.requested_at|date:"Y-m-d H:i" }}{% if d.requested_by %} by {{ d.requested_by }}{% endif %}{% if d.note %} · {{ d.note }}{% endif %}</span>
+</div>
+
+{% with f=stats.found %}
+<div class="tiles">
+  <div class="tile info"><div class="inner"><h4>Positions written</h4><div class="big">{{ d.positions|thousands }}</div>
+    <div class="sub">{% if stats and f.quiet is not None %}of {{ f.quiet|thousands }} naturally quiet, {{ f.candidates|thousands }} candidates{% endif %}</div></div>
+    {% if has_file %}<a class="foot" href="{% url 'export_file' d.pk %}">Download, {% widthratio d.file_bytes 1000000 1 %} MB ➔</a>{% else %}<span class="foot">{% if d.file_deleted_at %}file deleted{% else %}&nbsp;{% endif %}</span>{% endif %}</div>
+  <div class="tile success"><div class="inner"><h4>Games used</h4><div class="big">{% if stats and f.games_used is not None %}{{ f.games_used|thousands }}{% else %}{{ d.games|thousands }}{% endif %}</div>
+    <div class="sub">{% if stats and f.games_read is not None %}of {{ f.games_read|thousands }} read · {{ d.batches_done|thousands }} of {{ d.batches_total|thousands }} batches{% else %}{{ d.batches_done|thousands }} of {{ d.batches_total|thousands }} batches{% endif %}</div></div>
+    <span class="foot">&nbsp;</span></div>
+  <div class="tile warning"><div class="inner"><h4>Quiet positions a game</h4><div class="big">{% if stats and f.per_game_mean is not None %}{{ f.per_game_mean }}{% else %}–{% endif %}</div>
+    <div class="sub">{% if stats and f.per_game_median is not None %}median {{ f.per_game_median }} · {{ f.short_games|thousands }} games gave fewer than {{ d.draw.per_game }}{% endif %}</div></div>
+    <span class="foot">&nbsp;</span></div>
+  <div class="tile grey"><div class="inner"><h4>{% if d.finished_at %}Finished{% else %}Started{% endif %}</h4>
+    <div class="big">{% if d.finished_at %}{{ d.finished_at|date:"D H:i" }}{% elif d.started_at %}{{ d.started_at|date:"D H:i" }}{% else %}–{% endif %}</div>
+    <div class="sub">{% if took is not None %}after {{ took|seconds }}{% elif not d.started_at %}waiting for the worker{% endif %}</div></div>
+    {% if d.state == "done" and d.file_deleted_at %}<form class="inline foot" method="post" action="{% url 'exports' %}" style="padding: .25rem .8rem; text-align: right">{% csrf_token %}<input type="hidden" name="action" value="rebuild"><input type="hidden" name="id" value="{{ d.pk }}"><button class="act">Rebuild</button></form>{% else %}<a class="foot" href="{% url 'exports' %}">All exports ➔</a>{% endif %}</div>
+</div>
+
+{% if running %}
+<div class="card top-running">
+  <h3 class="box-title">Progress <span class="right muted">{% if d.state == "requested" %}waiting for the worker{% else %}started {{ d.started_at|timesince }} ago{% endif %}</span></h3>
+  <div class="bar" role="img" aria-label="{{ d.batches_done }} of {{ d.batches_total }} batches read">
+    <span class="seg pass" style="width: {% if d.batches_total %}{% widthratio d.batches_done d.batches_total 100 %}{% else %}0{% endif %}%"></span>
+  </div>
+  <p class="muted">{{ d.batches_done|thousands }} of {{ d.batches_total|thousands }} batches read, {{ d.games|thousands }} games, {{ d.positions|thousands }} positions written</p>
+</div>
+{% endif %}
+{% if d.error %}<p class="note">{{ d.error }}</p>{% endif %}
+
+{% if stats %}
+{% if stats.wdl %}
+<div class="card">
+  <h3 class="box-title">Results of the positions written <span class="right muted">white's result, as the tuner reads it</span></h3>
+  <div class="wdl-bar" role="img" aria-label="{% for r in stats.wdl %}{{ r.label }} {{ r.share }}%{% if not forloop.last %}, {% endif %}{% endfor %}">
+    {% for r in stats.wdl %}<span class="{{ r.kind }}" style="width: {{ r.share }}%" title="{{ r.label }}: {{ r.count|thousands }}">{{ r.share }}%</span>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="rings">
+  {% include "matches/_donut.html" with title="Results" note="of the positions written, white's" ring=rings.results unit="positions" empty="No positions written." %}
+  {% include "matches/_donut.html" with title="Games" note="of those read" ring=rings.games unit="games" empty="No game read." %}
+  {% include "matches/_donut.html" with title="Positions" note="of the candidates past the first ply" ring=rings.positions unit="candidates" empty="No candidate positions." %}
+</div>
+
+<div class="card">
+  <h3 class="box-title">Quiet positions a game <span class="right muted">a game's quiet positions past its first ply, over the games used</span></h3>
+  <dl class="quiet">
+    {% for label, value, tip in quiet %}<div><dt title="{{ tip }}">{{ label }}</dt><dd title="{{ tip }}">{{ value|default_if_none:"–" }}</dd></div>{% endfor %}
+  </dl>
+</div>
+{% endif %}
+{% endwith %}
+
+<div class="columns">
+  <div class="card">
+    <h3 class="box-title">Every figure <span class="right muted">as the reader's --stats wrote them</span></h3>
+    {% if stats %}<table class="figures">{% for label, value in stats.rows %}<tr><td class="muted">{{ label }}</td><td class="num">{{ value|thousands }}</td></tr>{% endfor %}</table>
+    {% else %}<p class="muted">No statistics{% if running %} yet{% endif %}.</p>{% endif %}
+  </div>
+  <div class="card">
+    <h3 class="box-title">Settings and record <span class="right"><a href="{% url 'api_export' d.pk %}">JSON, with the manifest</a></span></h3>
+    <table class="figures">
+      {% for label, value in settings.rows %}<tr><td class="muted">{{ label }}</td><td>{{ value }}</td></tr>{% endfor %}
+      <tr><td class="muted">selection</td><td>endings {{ d.selection.endings|join:", " }}</td></tr>
+      <tr><td class="muted">batches</td><td>{{ d.batches_total|thousands }}, each with its sha256 in the manifest</td></tr>
+      <tr><td class="muted">requested</td><td>{{ d.requested_at|date:"Y-m-d H:i:s" }}{% if d.requested_by %} by {{ d.requested_by }}{% endif %}</td></tr>
+      {% if d.started_at %}<tr><td class="muted">ran</td><td>{{ d.started_at|date:"Y-m-d H:i:s" }}{% if d.finished_at %} to {{ d.finished_at|date:"H:i:s" }}{% endif %}</td></tr>{% endif %}
+      {% if d.reader %}<tr><td class="muted">nyayo</td><td class="mono">{{ d.nyayo_version }}</td></tr>
+      <tr><td class="muted">reader</td><td>{{ d.reader }} <span class="mono muted" title="its sha256">{{ d.reader_sha256|slice:":16" }}</span></td></tr>{% endif %}
+      {% if d.sha256 %}<tr><td class="muted">positions' sha256</td><td class="mono">{{ d.sha256 }}</td></tr>{% endif %}
+      {% if d.rebuild_matched is not None %}<tr><td class="muted">rebuilt</td><td>{% if d.rebuild_matched %}<span class="better">the same positions</span>{% else %}<span class="worse">different positions</span>, was <span class="mono">{{ d.rebuild_of_sha256|slice:":16" }}</span>{% endif %}</td></tr>{% endif %}
+      {% if d.file_deleted_at %}<tr><td class="muted">file</td><td>deleted {{ d.file_deleted_at|date:"Y-m-d H:i" }}; the record stays</td></tr>{% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}

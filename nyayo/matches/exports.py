@@ -114,3 +114,65 @@ def exports_page(request):
     current = next((d for d in rows if d.state == "running"), None) or next(
         (d for d in reversed(rows) if d.state == "requested"), None)
     return render(request, "matches/exports.html", {"datasets": rows, "current": current})
+
+
+# the rings' colours: Pi-hole's, and the results' green, grey and red as everywhere else
+RESULT_COLOURS = {"white wins": "#2ecc71", "draws": "#9aa4ad", "black wins": "#e5533d", "mixed": "#d98a12"}
+GAME_COLOURS = {"used": "#12895a", "didn't read": "#c64a3a", "no result": "#6c757d", "a null move": "#7b5ea7"}
+POSITION_COLOURS = {"written": "#3c8dbc", "duplicates": "#d98a12", "quiet, not drawn": "#0b8ea8",
+                    "not quiet": "#4b545c"}
+# what the quiet-per-game figures are, for their tooltips
+QUIET_TIPS = {
+    "mean": "the quiet positions past a game's first ply, averaged over the games used: how many each game had to "
+            "draw its 10 from",
+    "median": "half the games had fewer quiet positions than this, half more",
+    "p5": "one game in twenty had fewer quiet positions than this: the short or tactical games, which give fewer "
+          "than 10",
+    "min": "the fewest quiet positions any game had",
+}
+
+
+def rings(found):
+    """The export page's three rings, each from dashboard.donut(): the written positions' results, the games read,
+    and the candidate positions: written, duplicates (dropped, or merged into one), quiet but not drawn, not
+    quiet."""
+    from .dashboard import donut
+
+    def n(name):
+        return found.get(name) or 0
+
+    results = donut([(label, n(name), RESULT_COLOURS[label]) for label, name in
+                     (("white wins", "white_wins"), ("draws", "draws"), ("black wins", "black_wins"),
+                      ("mixed", "mixed"))])
+    games = donut([("used", n("games_used"), GAME_COLOURS["used"]),
+                   ("didn't read", n("unread"), GAME_COLOURS["didn't read"]),
+                   ("no result", n("no_result"), GAME_COLOURS["no result"])])
+    # merged: positions drawn, of which written distinct; else written, and duplicates passed over
+    drawn = found.get("drawn")
+    duplicates = (drawn - n("written")) if drawn is not None else n("duplicates")
+    taken = drawn if drawn is not None else n("written") + n("duplicates")
+    positions = donut([("written", n("written"), POSITION_COLOURS["written"]),
+                       ("merged into one" if drawn is not None else "duplicates dropped", duplicates,
+                        POSITION_COLOURS["duplicates"]),
+                       ("quiet, not drawn", max(0, n("quiet") - taken), POSITION_COLOURS["quiet, not drawn"]),
+                       ("not quiet", max(0, n("candidates") - n("quiet")), POSITION_COLOURS["not quiet"])])
+    return {"results": results, "games": games, "positions": positions}
+
+
+@require_http_methods(["GET"])
+def export_page(request, dataset_id):
+    """One dataset's page, as an SPRT's or a gauntlet's: tiles, its rings, the quiet positions per game, every
+    statistic, its settings and its record."""
+    dataset = get_object_or_404(Dataset, pk=dataset_id)
+    stats = datasets.stats_view(dataset.stats)
+    found = stats["found"] if stats else {}
+    quiet = [(label, found.get(name), QUIET_TIPS[key]) for key, name, label in
+             (("mean", "per_game_mean", "mean"), ("median", "per_game_median", "median"),
+              ("p5", "per_game_p5", "5th percentile"), ("min", "per_game_min", "minimum"))]
+    return render(request, "matches/export.html", {
+        "d": dataset, "stats": stats, "rings": rings(found) if stats else None, "quiet": quiet,
+        "settings": datasets.settings_view(dataset.draw), "has_file": dataset.state == "done"
+        and dataset.file_deleted_at is None, "running": dataset.state in ("requested", "running"),
+        "took": (dataset.finished_at - dataset.started_at).total_seconds()
+        if dataset.started_at and dataset.finished_at else None,
+    })

@@ -329,8 +329,9 @@ STATS = [
 
 
 def stats_view(stats):
-    """A dataset's statistics as the page shows them: the compact figures (written, quiet share, W/D/L shares) and
-    the full table's rows, (label, value); None for a dataset without any."""
+    """A dataset's statistics as the pages show them: each figure by nyayo's name (`found`), the quiet share, the
+    written positions' white wins, draws and black wins as a bar (`wdl`: shares to one decimal, each with its kind),
+    and every figure as a row, (label, value); None for a dataset without any."""
     if not isinstance(stats, dict):
         return None
 
@@ -341,16 +342,18 @@ def stats_view(stats):
         return value
 
     found = {name: get(path) for name, path, _ in STATS}
-    written = found["written"] or 0
-    results = [found["white_wins"], found["draws"], found["black_wins"]]
-
-    def share(part, whole):
-        return f"{100 * part / whole:.0f}%" if isinstance(part, (int, float)) and whole else None
-
+    results = [("white wins", found["white_wins"], "pass"), ("draws", found["draws"], "draw"),
+               ("black wins", found["black_wins"], "fail")]
+    counted = sum(n for _, n, _ in results if isinstance(n, int))
+    wdl = None
+    if counted and all(isinstance(n, int) for _, n, _ in results):
+        wdl = [{"label": label, "count": n, "kind": kind, "share": f"{100 * n / counted:.1f}"}
+               for label, n, kind in results]
+    quiet, candidates = found["quiet"], found["candidates"]
     return {
-        "written": found["written"], "quiet_share": share(found["quiet"], found["candidates"]),
-        "wdl": [share(n, written) for n in results] if all(isinstance(n, int) for n in results) else None,
-        "rows": [(label, found[name]) for name, _, label in STATS if found[name] is not None],
+        "found": found, "written": found["written"],
+        "quiet_share": f"{100 * quiet / candidates:.0f}%" if isinstance(quiet, int) and candidates else None,
+        "wdl": wdl, "rows": [(label, found[name]) for name, _, label in STATS if found[name] is not None],
     }
 
 

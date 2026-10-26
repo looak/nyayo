@@ -7,6 +7,7 @@ urlpatterns = [
     path("matches", pages.matches_list, name="matches"),
     path("games", gameslist.games_list, name="games"),
     path("exports", exports.exports_page, name="exports"),
+    path("exports/<int:dataset_id>", exports.export_page, name="export"),
     path("exports/<int:dataset_id>/file", exports.export_file, name="export_file"),
     path("api/exports", exports.api_exports, name="api_exports"),
     path("api/exports/<int:dataset_id>", exports.api_export, name="api_export"),

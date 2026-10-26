@@ -1,17 +1,17 @@
 {% load matches_extras %}{# a ring of parts from dashboard.donut(), with its legend #}
 <div class="card">
-  <h3 class="box-title">{{ title }}</h3>
+  <h3 class="box-title">{{ title }}{% if note %} <span class="right muted">{{ note }}</span>{% endif %}</h3>
   {% if ring.total %}
   <div class="donut-wrap">
     <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="{{ title }}: {% for p in ring.parts %}{{ p.label }} {{ p.count }}{% if not forloop.last %}, {% endif %}{% endfor %}">
       <circle cx="21" cy="21" r="15.915" fill="none" stroke="#3a4147" stroke-width="6"/>
       {% for p in ring.parts %}<circle cx="21" cy="21" r="15.915" fill="none" stroke="{{ p.colour }}" stroke-width="6" stroke-dasharray="{{ p.dash }}" stroke-dashoffset="{{ p.offset }}"><title>{{ p.label }}: {{ p.count }}, {{ p.share }}</title></circle>{% endfor %}
       <text x="21" y="22" text-anchor="middle">{{ ring.total|thousands }}</text>
-      <text x="21" y="26.5" text-anchor="middle" class="small">games</text>
+      <text x="21" y="26.5" text-anchor="middle" class="small">{{ unit|default:"games" }}</text>
     </svg>
     <ul class="parts">
       {% for p in ring.parts %}<li><i style="background: {{ p.colour }}"></i>{{ p.label }}<span class="n">{{ p.count|thousands }} <span class="muted">{{ p.share }}</span></span></li>{% endfor %}
     </ul>
   </div>
-  {% else %}<p class="muted">No games kept yet.</p>{% endif %}
+  {% else %}<p class="muted">{{ empty|default:"No games kept yet." }}</p>{% endif %}
 </div>
