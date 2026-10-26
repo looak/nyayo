@@ -394,7 +394,7 @@ The record, as JSON:
 | `note`, `requested_by` | free text, what it was used for; the machine that asked, or `page` |
 | `requested_at`, `started_at`, `finished_at` | ISO 8601 |
 | `selection` | the filters: V1 takes every game that read and has a result, ended by rule, resignation or adjudication, inferred ones included (`endings`); matches, versions, book and time control come later in the same object |
-| `draw` | `per_game` (10), `quiet` (true), `min_ply` (16) and `seed`, as given to `phant-indexer --draw` |
+| `draw` | `per_game` (10), `quiet` (true), `min_ply` (16) and `seed`, as given to `phant-indexer --draw`; `min_ply` counts from the initial position wherever a game began, and where its PGN doesn't say (a book FEN with its counters at `0 1`, OpenBench's), the reader's evaluator's game phase leaves out positions too early (owner, 2026-10-26) |
 | `progress` | `batches` read `of` the batches selected, `games` read, `positions` written so far |
 | `nyayo`, `reader`, `reader_sha256` | `git describe` of nyayo's checkout; the reader's name and the sha256 of its binary |
 | `sha256`, `bytes` | of the positions, decompressed; the file's size |
