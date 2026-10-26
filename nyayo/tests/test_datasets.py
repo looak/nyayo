@@ -3,6 +3,7 @@
 import bz2
 import hashlib
 import json
+import os
 import sys
 
 import zstandard
@@ -23,7 +24,11 @@ THREE = batch_text(game("1-0", moves=LONG, Termination="adjudication"), game("0-
 
 
 def stand_in():
-    """The tests' phant-indexer: --draw as elephant's contract has it, from python-chess."""
+    """The tests' phant-indexer: --draw as elephant's contract has it, from python-chess. NYAYO_TEST_DRAW_READER
+    naming a real phant-indexer runs these tests against it instead."""
+    real = os.environ.get("NYAYO_TEST_DRAW_READER")
+    if real:
+        return reader.PhantIndexer(real, reader.file_sha256(real))
     return reader.PhantIndexer(FAKE, reader.file_sha256(FAKE), launcher=[sys.executable])
 
 
@@ -74,8 +79,8 @@ class Datasets(BatchCase):
         self.assertEqual(dataset.sha256, hashlib.sha256(data).hexdigest())
         # the record: versions, the reader's sha256, and the manifest with each batch's
         batch = Batch.objects.get()
-        self.assertEqual(dataset.reader, "phant-indexer 9.9.9")
-        self.assertEqual(dataset.reader_sha256, reader.file_sha256(FAKE))
+        self.assertEqual(dataset.reader, self.reader.name)
+        self.assertEqual(dataset.reader_sha256, reader.file_sha256(self.reader.path))
         self.assertTrue(dataset.nyayo_version)
         self.assertEqual(dataset.manifest[0]["sha256"], batch.sha256)
         self.assertEqual([g[0] for g in dataset.manifest[0]["games"]], [1, 2])  # the time loss is left out
@@ -197,18 +202,21 @@ class Datasets(BatchCase):
         self.draw()
         dataset.refresh_from_db()
         self.assertEqual((dataset.manifest[0]["book"], dataset.manifest[0]["min_ply"]), ("books/8moves_v3.epd", 4))
-        self.assertIn("--min-ply 4", " ".join(datasets.draw_arguments(dataset.draw, dataset.manifest)))
+        # each game goes to the reader tagged with its book's first ply; --min-ply is the default
+        self.assertIn("--min-ply 8", " ".join(datasets.draw_arguments(dataset.draw)))
+        fed = datasets.batch_games(dataset.manifest[0]).decode()
+        self.assertEqual(fed.count('[DrawMinPly "4"]\n[Event '), 2)
+        self.assertEqual(dataset.stats["games"]["own_minimum"], 2)
+        self.assertNotIn(b"DrawMinPly", catalogue.batch_bytes(Batch.objects.get()))  # the stored games untouched
         # the map kept with the dataset decides, not the settings of the day
         with override_settings(NYAYO_BOOK_MIN_PLY={}, NYAYO_MIN_PLY_DEFAULT=30):
             self.assertEqual(datasets.min_ply_for("8moves_v3.epd", dataset.draw), 4)
             self.assertEqual(datasets.min_ply_for("Endgames.EPD", dataset.draw), 0)
             self.assertEqual(datasets.min_ply_for("UHO_Lichess_4852_v1.epd", dataset.draw), 8)
             self.assertEqual(datasets.min_ply_for(None, dataset.draw), 8)
-        # until --draw takes one per input, a run uses the lowest of its books
-        manifest = [{"min_ply": 4}, {"min_ply": 0}, {"min_ply": 8}]
-        self.assertIn("--min-ply 0", " ".join(datasets.draw_arguments(dataset.draw, manifest)))
-        # a dataset from before the map had one minimum
+        # a dataset from before the map had one minimum, for every game
         self.assertEqual(datasets.min_ply_for("8moves_v3", {"min_ply": 16}), 16)
+        self.assertIn("--min-ply 16", " ".join(datasets.draw_arguments({**dataset.draw, "min_ply": 16})))
 
     def test_merge_is_a_choice_kept_with_the_dataset(self):
         self.assertEqual(self.post({"merge": "yes"}).status_code, 400)
@@ -216,13 +224,15 @@ class Datasets(BatchCase):
         self.assertEqual(response.status_code, 201)
         self.assertTrue(response.json()["draw"]["merge"])
         dataset = Dataset.objects.get()
-        self.assertIn("--merge", datasets.draw_arguments(dataset.draw, []))
-        self.assertNotIn("--merge", datasets.draw_arguments(datasets.request().draw, []))
+        self.assertIn("--merge", datasets.draw_arguments(dataset.draw))
+        self.assertNotIn("--merge", datasets.draw_arguments(datasets.request().draw))
         self.client.post("/exports", {"action": "new", "merge": "on"})
         self.assertTrue(Dataset.objects.order_by("-pk").first().draw["merge"])
         self.draw()
         dataset.refresh_from_db()
         self.assertEqual(dataset.state, "done", dataset.error)
+        self.assertIsNone(dataset.stats["positions"]["duplicates_dropped"])
+        self.assertIsNotNone(dataset.stats["positions"]["drawn"])
         self.assertIn("10/game · merged", self.client.get("/exports").content.decode())
         self.assertEqual(datasets.settings_view({"per_game": 10, "min_ply": 16})["rows"][-1],
                          ("first ply, by book", "16 for every book"))
@@ -232,10 +242,11 @@ class Datasets(BatchCase):
         self.draw()
         dataset.refresh_from_db()
         stats = dataset.stats
-        self.assertEqual(stats["written"], dataset.positions)
-        self.assertEqual(stats["games"], {"read": 2, "skipped": 0})
-        self.assertEqual(sum(stats["results"].values()), dataset.positions)
-        self.assertGreaterEqual(stats["candidates"], stats["quiet"])
+        self.assertEqual(stats["stats"], 1)
+        self.assertEqual(stats["positions"]["written"], dataset.positions)
+        self.assertEqual((stats["games"]["read"], stats["games"]["used"]), (2, 2))
+        self.assertEqual(sum(stats["positions"]["results"].values()), dataset.positions)
+        self.assertGreaterEqual(stats["positions"]["candidates"], stats["positions"]["quiet"])
         self.assertFalse(list(datasets.directory().glob("*.stats.json")))  # read into the record, then gone
         self.assertEqual(self.client.get(f"/api/exports/{dataset.pk}").json()["stats"], stats)
         view = datasets.stats_view(stats)

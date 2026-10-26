@@ -71,12 +71,10 @@ def min_ply_for(book, draw):
     return found.get(book_key(book), draw["min_ply"]["default"])
 
 
-def draw_arguments(draw, manifest):
-    """phant-indexer's flags for the draw's settings and seed. Until --draw takes a minimum per game or per input
-    (elephant's, being settled), one --min-ply for the whole run: the lowest of the manifest's books, so no book loses
-    positions it should have."""
-    lowest = min((entry["min_ply"] for entry in manifest if "min_ply" in entry), default=min_ply_for(None, draw))
-    flags = ["--draw", str(draw["per_game"]), "--min-ply", str(lowest), "--seed", str(draw["seed"])]
+def draw_arguments(draw):
+    """phant-indexer's flags for the draw's settings and seed (looak/elephant#34). Each game fed carries its own
+    first ply (batch_games); --min-ply is the default, and for a dataset from before the book map, the one minimum."""
+    flags = ["--draw", str(draw["per_game"]), "--min-ply", str(min_ply_for(None, draw)), "--seed", str(draw["seed"])]
     return flags + (["--quiet"] if draw["quiet"] else []) + (["--merge"] if draw.get("merge") else [])
 
 
@@ -147,7 +145,10 @@ def batch_games(entry):
     if hashlib.sha256(stored).hexdigest() != entry["sha256"]:
         raise DatasetError(f"batch {entry['id']} ({entry['match']} {entry['number']}) changed: its sha256 differs")
     data = zstandard.ZstdDecompressor().decompress(stored)
-    return b"".join(data[offset:offset + length].rstrip() + b"\n\n" for _, offset, length in entry["games"])
+    # the batch's book's first ply as a tag on each game in the copy the reader gets: --draw takes [DrawMinPly] on
+    # standard input over --min-ply; the stored games are untouched
+    tag = f'[DrawMinPly "{entry["min_ply"]}"]\n'.encode() if "min_ply" in entry else b""
+    return b"".join(tag + data[offset:offset + length].rstrip() + b"\n\n" for _, offset, length in entry["games"])
 
 
 class Run:
@@ -164,7 +165,7 @@ class Run:
         # the reader's statistics of the draw, JSON, read into the record once it's done
         self.stats_path = directory() / f"positions-{dataset.pk}.stats.json"
         self.stats_path.unlink(missing_ok=True)
-        flags = [*draw_arguments(dataset.draw, dataset.manifest), "--stats", str(self.stats_path)]
+        flags = [*draw_arguments(dataset.draw), "--stats", str(self.stats_path)]
         self.process = subprocess.Popen([*command, *flags], stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.out = open(self.partial, "wb")
@@ -300,21 +301,30 @@ def step(reader):
     return True
 
 
-# The reader's statistics, by the names it writes them (--stats). elephant's names are still being settled; these are
-# nyayo's reading of the brief, and the only place to change when they differ.
-STATS_FIELDS = {
-    "games_read": ("games", "read"), "games_skipped": ("games", "skipped"), "candidates": ("candidates",),
-    "quiet": ("quiet",), "per_game_mean": ("quiet_per_game", "mean"), "per_game_median": ("quiet_per_game", "median"),
-    "per_game_p5": ("quiet_per_game", "p5"), "per_game_min": ("quiet_per_game", "min"),
-    "short_games": ("short_games",), "written": ("written",), "duplicates": ("duplicates",),
-    "white_wins": ("results", "white"), "draws": ("results", "draw"), "black_wins": ("results", "black"),
-}
-STATS_LABELS = [
-    ("games_read", "games read"), ("games_skipped", "games skipped"), ("candidates", "candidate positions"),
-    ("quiet", "naturally quiet"), ("per_game_mean", "quiet per game, mean"), ("per_game_median", "median"),
-    ("per_game_p5", "5th percentile"), ("per_game_min", "minimum"), ("short_games", "games giving fewer than N"),
-    ("written", "positions written"), ("duplicates", "duplicates dropped or merged"), ("white_wins", "white wins"),
-    ("draws", "draws"), ("black_wins", "black wins"),
+# The reader's statistics as --stats writes them (`"stats": 1`; elephant's indexer/README.md, Training positions):
+# nyayo's name for each, its path in the JSON, and its label on the page, in the order the page lists them.
+STATS = [
+    ("games_read", ("games", "read"), "games read"), ("games_used", ("games", "used"), "games used"),
+    ("games_skipped", ("games", "skipped"), "games skipped"),
+    ("unread", ("games", "unread"), "games that didn't read"),
+    ("no_result", ("games", "no_result"), "games without a result"),
+    ("own_minimum", ("games", "own_minimum"), "games with their own first ply"),
+    ("bad_minimum_tags", ("games", "bad_minimum_tags"), "bad first-ply tags"),
+    ("candidates", ("positions", "candidates"), "candidate positions"),
+    ("quiet", ("positions", "quiet"), "naturally quiet"),
+    ("per_game_mean", ("positions", "quiet_per_game", "mean"), "quiet per game, mean"),
+    ("per_game_median", ("positions", "quiet_per_game", "median"), "median"),
+    ("per_game_p5", ("positions", "quiet_per_game", "p5"), "5th percentile"),
+    ("per_game_min", ("positions", "quiet_per_game", "min"), "minimum"),
+    ("short_games", ("positions", "games_under_n"), "games giving fewer than N"),
+    ("drawn", ("positions", "drawn"), "positions drawn"),
+    ("written", ("positions", "written"), "positions written"),
+    ("duplicates", ("positions", "duplicates_dropped"), "duplicates dropped"),
+    ("merged", ("positions", "merged"), "drawn by more than one game, merged"),
+    ("white_wins", ("positions", "results", "white"), "white wins"),
+    ("draws", ("positions", "results", "draw"), "draws"),
+    ("black_wins", ("positions", "results", "black"), "black wins"),
+    ("mixed", ("positions", "results", "mixed"), "mixed results, merged"),
 ]
 
 
@@ -324,13 +334,13 @@ def stats_view(stats):
     if not isinstance(stats, dict):
         return None
 
-    def get(name):
+    def get(path):
         value = stats
-        for part in STATS_FIELDS[name]:
+        for part in path:
             value = value.get(part) if isinstance(value, dict) else None
         return value
 
-    found = {name: get(name) for name in STATS_FIELDS}
+    found = {name: get(path) for name, path, _ in STATS}
     written = found["written"] or 0
     results = [found["white_wins"], found["draws"], found["black_wins"]]
 
@@ -340,7 +350,7 @@ def stats_view(stats):
     return {
         "written": found["written"], "quiet_share": share(found["quiet"], found["candidates"]),
         "wdl": [share(n, written) for n in results] if all(isinstance(n, int) for n in results) else None,
-        "rows": [(label, found[name]) for name, label in STATS_LABELS if found[name] is not None],
+        "rows": [(label, found[name]) for name, _, label in STATS if found[name] is not None],
     }
 
 
