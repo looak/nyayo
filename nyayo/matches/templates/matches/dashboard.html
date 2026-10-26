@@ -8,14 +8,6 @@
   .cal-legend { display: flex; gap: 3px; align-items: center; justify-content: flex-end; font-size: .72rem; margin-top: .3rem; }
   .cal-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; }
   .cal-legend span { margin: 0 .3rem; }
-  .donut-wrap { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 1rem; align-items: center; }
-  .donut { display: block; width: 100%; height: auto; }
-  .donut text { fill: var(--bright); font-size: 5px; font-weight: 700; }
-  .donut text.small { fill: var(--muted); font-size: 3px; font-weight: 400; }
-  .parts { list-style: none; margin: 0; padding: 0; font-size: .82rem; }
-  .parts li { display: flex; gap: .5rem; align-items: baseline; padding: .1rem 0; }
-  .parts i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
-  .parts .n { margin-left: auto; font-variant-numeric: tabular-nums; }
   .freq { display: flex; height: 8px; min-width: 70px; border-radius: 1px; overflow: hidden; background: #3a4147; }
   .freq i { display: block; height: 100%; }
   .stack-boxes { display: grid; gap: 1rem; }
@@ -26,24 +18,24 @@
 {# Pi-hole's four tiles: the game database, what is being played, the latest SPRT, and GitHub activity #}
 <div class="tiles">
   {% with d=tiles.database %}
-  <div class="tile info"><div class="inner"><h4>Game database</h4><div class="big">{{ d.size }}</div>
+  <div class="tile info">{% include "runs/_tile_icon.html" with icon="database" %}<div class="inner"><h4>Game database</h4><div class="big">{{ d.size }}</div>
     <div class="sub">{{ d.games|thousands }} game{{ d.games|pluralize }} · {{ d.indexed }}% indexed{% if d.waiting %} · {{ d.waiting }} upload{{ d.waiting|pluralize }} waiting{% endif %}{% if d.refused %} · <b>{{ d.refused }} refused</b>{% endif %}</div>
     <div class="sub">{% for name, size in d.parts %}{{ name }} {{ size }}{% if not forloop.last %} · {% endif %}{% endfor %}</div></div>
     <a class="foot" href="{% url 'games' %}">Browse the games ➔</a></div>
   {% endwith %}
   {% with p=tiles.playing %}
   {% if p.running %}
-  <div class="tile success"><div class="inner"><h4>Playing now</h4><div class="big">{{ p.running }} match{{ p.running|pluralize:"es" }}</div>
+  <div class="tile success">{% include "runs/_tile_icon.html" with icon="play" %}<div class="inner"><h4>Playing now</h4><div class="big">{{ p.running }} match{{ p.running|pluralize:"es" }}</div>
     <div class="sub">{% for kind, n in p.kinds %}{{ n }} {{ kind }}{% if n != 1 %}s{% endif %} · {% endfor %}{{ p.in_play }} game{{ p.in_play|pluralize }} in play</div></div>
     <a class="foot" href="{% url 'matches' %}?state=running">The matches running ➔</a></div>
   {% else %}
-  <div class="tile grey"><div class="inner"><h4>Last played</h4><div class="big">{% if p.last %}{{ p.last_at|timesince }} ago{% else %}–{% endif %}</div>
+  <div class="tile grey">{% include "runs/_tile_icon.html" with icon="clock" %}<div class="inner"><h4>Last played</h4><div class="big">{% if p.last %}{{ p.last_at|timesince }} ago{% else %}–{% endif %}</div>
     <div class="sub">{% if p.last %}{{ p.last.name|default:p.last.pk|truncatechars:40 }} · {{ p.last.kind }}, {{ p.last.state }}{% else %}nothing yet{% endif %}</div></div>
     {% if p.last %}<a class="foot" href="{% url 'match' p.last.pk %}">That match ➔</a>{% else %}<a class="foot" href="{% url 'matches' %}">All matches ➔</a>{% endif %}</div>
   {% endif %}
   {% endwith %}
   {% with s=tiles.sprt %}
-  <div class="tile {% if not s %}grey{% elif s.faults or s.result == "failed" %}danger{% elif s.result == "passed" %}success{% else %}warning{% endif %}"><div class="inner">
+  <div class="tile {% if not s %}grey{% elif s.faults or s.result == "failed" %}danger{% elif s.result == "passed" %}success{% else %}warning{% endif %}">{% include "runs/_tile_icon.html" with icon="scale-balanced" %}<div class="inner">
     <h4>Latest SPRT{% if s %} · {{ s.result|default:s.match.state }}{% endif %}</h4>
     <div class="big">{% if s %}{{ s.elo|elo }}{% else %}–{% endif %}</div>
     <div class="sub">{% if s %}{{ s.match.name|default:s.match.pk|truncatechars:34 }}{% if s.error is not None %} · {{ s.error|error }}{% endif %}{% if s.llr is not None %} · LLR {{ s.llr|floatformat:2 }}{% endif %}{% else %}no SPRT yet{% endif %}</div>
@@ -51,7 +43,7 @@
     {% if s %}<a class="foot" href="{% url 'match' s.match.pk %}">The test ➔</a>{% else %}<a class="foot" href="{% url 'matches' %}?kind=sprt">SPRTs ➔</a>{% endif %}</div>
   {% endwith %}
   {% with g=tiles.github %}
-  <div class="tile purple"><div class="inner"><h4>GitHub, last 7 days{% if g.repo %} · {{ g.repo }}{% endif %}</h4>
+  <div class="tile purple">{% include "runs/_tile_icon.html" with icon="code-commit" %}<div class="inner"><h4>GitHub, last 7 days{% if g.repo %} · {{ g.repo }}{% endif %}</h4>
     <div class="big">{% if g.links.commits %}<a href="{{ g.links.commits }}">{{ g.commits }} commit{{ g.commits|pluralize }}</a>{% else %}{{ g.commits }} commit{{ g.commits|pluralize }}{% endif %}</div>
     <div class="sub">pushed with a run here, on {{ g.branches }} branch{{ g.branches|pluralize:"es" }} · <a href="{% url 'runs' %}?state=published">{{ g.runs }} run{{ g.runs|pluralize }}</a></div>
     <div class="sub">{% if g.latest %}last push {{ g.latest.published_at|timesince }} ago, {% if g.links.latest %}<a href="{{ g.links.latest }}">{{ g.latest.branch|default:"?" }} @ {{ g.latest.commit|slice:":7" }}</a>{% else %}{{ g.latest.branch|default:"?" }}{% endif %}{% else %}no pushed run yet{% endif %}</div></div>

@@ -79,3 +79,17 @@ class Frame(BatchCase):
         for name in ("elephant.svg", "elephant-32.png", "apple-touch-icon.png", "LICENSE-elephant.txt"):
             self.assertIsNotNone(finders.find(f"img/{name}"), name)
         self.assertIn("BSD 3-Clause", open(finders.find("img/LICENSE-elephant.txt"), encoding="utf-8").read())
+
+    def test_the_tiles_icons_are_font_awesome_with_its_licence(self):
+        page = self.page("/")
+        for icon in ("database", "play", "scale-balanced", "code-commit"):
+            self.assertIn(f"--icon: url('/static/img/fa/{icon}.svg')", page)
+        used = {"chart-line", "chess-board", "chess-knight", "clock", "code-commit", "database", "download", "filter",
+                "hourglass-half", "play", "scale-balanced", "trophy"}
+        for icon in used:
+            path = finders.find(f"img/fa/{icon}.svg")
+            self.assertIsNotNone(path, icon)
+            self.assertIn("Font Awesome Free 6.6.0 by @fontawesome", open(path, encoding="utf-8").read())
+        licence = open(finders.find("img/fa/LICENSE-fontawesome.txt"), encoding="utf-8").read()
+        self.assertIn("Creative Commons Attribution 4.0", licence)
+        self.assertIn("Fonticons, Inc.", licence)

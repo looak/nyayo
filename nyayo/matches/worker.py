@@ -29,7 +29,7 @@ from django.utils import timezone
 
 from nyayo.runs.ingest import IngestError
 
-from . import cards, catalogue, games as single_games, reader as readers, uploads
+from . import cards, catalogue, datasets, games as single_games, reader as readers, uploads
 from .models import Batch, Game, Match, MatchResult, Upload
 
 log = logging.getLogger("nyayo.worker")
@@ -216,7 +216,8 @@ def step(reader):
         seal(batch, reader)
         log.info("sealed %s/%d short, its match has ended", batch.match_id, batch.number)
         return True
-    return False
+    # a position dataset, a batch a turn, last: an upload that comes meanwhile goes first
+    return datasets.step(reader)
 
 
 @contextlib.contextmanager

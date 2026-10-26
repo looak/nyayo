@@ -188,10 +188,14 @@ class PhantIndexer:
         self.command = [*launcher, str(self.path)]
         version = subprocess.run([*self.command, "--version"], capture_output=True, text=True, timeout=30)
         words = version.stdout.split()
-        # phant-indexer <elephant version> format <format version>
-        if version.returncode or len(words) != 4 or words[0] != "phant-indexer" or words[2] != "format":
+        # phant-indexer <elephant version> format <format version>, and from 1.3.2 on, with the moves in --positions'
+        # records, positions <positions version>
+        known = (len(words) in (4, 6) and words[0] == "phant-indexer" and words[2] == "format"
+                 and words[3].isdigit() and (len(words) == 4 or (words[4] == "positions" and words[5].isdigit())))
+        if version.returncode or not known:
             raise WrongReader(f"{self.path} --version said {version.stdout.strip()!r}, not phant-indexer's")
         self.version, self.format = words[1], int(words[3])
+        self.positions_format = int(words[5]) if len(words) == 6 else 1
         if self.format not in self.FORMATS:
             raise WrongReader(f"{self.path} writes format {self.format}, nyayo reads {self.FORMATS}")
         self.name = f"phant-indexer {self.version}"

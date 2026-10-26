@@ -1,0 +1,73 @@
+{% extends "runs/base.html" %}
+{% load matches_extras %}
+{% block title %}Exports · nyayo{% endblock %}
+{% block head %}{% if current %}<meta http-equiv="refresh" content="5">{% endif %}
+<style>
+  .exports-head { display: flex; align-items: baseline; gap: .8rem; margin: .25rem 0 1rem; }
+  .exports-head h1 { margin: 0; }
+  .exports-head form { margin-left: auto; display: flex; gap: .8rem; align-items: center; }
+  .exports-head label.merge { color: var(--muted); font-size: .85rem; }
+  button.act { padding: .35rem .9rem; border: 0; border-radius: 3px; background: var(--accent); color: #fff; font: inherit;
+               cursor: pointer; }
+  button.act.small { padding: .15rem .6rem; font-size: .85rem; background: #4b545c; }
+  .current .figures { display: flex; flex-wrap: wrap; gap: .4rem 2.2rem; margin: .3rem 0 .6rem; }
+  .current .figures b { display: block; font-size: 1.5rem; color: var(--bright); font-variant-numeric: tabular-nums; }
+  .current .figures span { font-size: .75rem; color: var(--muted); }
+  table.exports form { display: inline; }
+  td.wdl-cell { min-width: 16rem; }
+  .small-line { display: block; font-size: .78rem; margin-bottom: .15rem; }
+  .wdl-bar { display: flex; height: 18px; border-radius: 3px; overflow: hidden; font-size: .7rem; font-weight: 700;
+             color: #fff; }
+  .wdl-bar span { display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; }
+  .wdl-bar .pass { background: var(--cell-pass); } .wdl-bar .draw { background: #6c757d; }
+  .wdl-bar .fail { background: var(--cell-fail); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="exports-head">
+  <h1>Exports</h1><span class="muted">position datasets for the tuner</span>
+  <form method="post">{% csrf_token %}<input type="hidden" name="action" value="new">
+    <label class="merge" title="each position written once, with its results averaged"><input type="checkbox" name="merge"> merge</label>
+    <button class="act">New dataset</button></form>
+</div>
+
+{% if current %}{% with d=current %}
+<div class="card current top-running">
+  <h3 class="box-title">Dataset {{ d.pk }} <span class="outcome card-state running">{% if d.state == "requested" %}queued{% else %}running{% endif %}</span>
+    <span class="right muted">{% if d.started_at %}started {{ d.started_at|timesince }} ago{% else %}waiting for the worker{% endif %}</span></h3>
+  <div class="figures">
+    <div><b>{{ d.batches_done|thousands }}<small class="muted"> / {{ d.batches_total|thousands }}</small></b><span>batches read</span></div>
+    <div><b>{{ d.games|thousands }}</b><span>games read</span></div>
+    <div><b>{{ d.positions|thousands }}</b><span>positions written</span></div>
+  </div>
+  <div class="bar" role="img" aria-label="{{ d.batches_done }} of {{ d.batches_total }} batches read">
+    <span class="seg pass" style="width: {% if d.batches_total %}{% widthratio d.batches_done d.batches_total 100 %}{% else %}0{% endif %}%"></span>
+  </div>
+</div>
+{% endwith %}{% endif %}
+
+<div class="card">
+  <h3 class="box-title">Datasets <span class="right muted">newest first</span></h3>
+  {% if datasets %}
+  <div class="scroll"><table class="exports">
+    <thead><tr><th>Dataset</th><th>State</th><th>Age</th><th class="num">Positions</th><th>Draw <span class="muted">· white wins, draws, black wins of the positions</span></th><th>File</th><th></th></tr></thead>
+    <tbody>
+    {% for d in datasets %}
+      <tr>
+        <td><a href="{% url 'export' d.pk %}">Dataset {{ d.pk }}</a>{% if d.note %} <span class="muted">{{ d.note|truncatechars:60 }}</span>{% endif %}</td>
+        <td>{% if d.state == "requested" %}<span class="badge stopped">queued</span>{% elif d.state == "running" %}<span class="badge running">running</span>{% elif d.state == "done" %}<span class="badge finished">done</span>{% else %}<span class="badge error" title="{{ d.error }}">failed</span>{% endif %}</td>
+        <td class="nowrap" title="requested {{ d.requested_at|date:'Y-m-d H:i' }}">{{ d.requested_at|timesince }}</td>
+        <td class="num">{% if d.state == "done" %}{{ d.positions|thousands }}{% endif %}</td>
+        <td class="wdl-cell">{% with v=d.stats_view %}
+          <span class="muted small-line">{{ d.settings_view.compact }}{% if v.quiet_share %} · {{ v.quiet_share }} quiet{% endif %}</span>
+          {% if v.wdl %}<div class="wdl-bar" role="img" aria-label="{% for r in v.wdl %}{{ r.label }} {{ r.share }}%{% if not forloop.last %}, {% endif %}{% endfor %}">{% for r in v.wdl %}<span class="{{ r.kind }}" style="width: {{ r.share }}%" title="{{ r.label }}: {{ r.count|thousands }}">{{ r.share }}%</span>{% endfor %}</div>{% endif %}
+        {% endwith %}</td>
+        <td>{% if d.state == "done" %}{% if d.file_deleted_at %}<span class="muted">deleted, needs rebuilding</span>{% else %}{% widthratio d.file_bytes 1000000 1 %} MB{% endif %}{% elif d.state == "failed" %}<span class="worse">{{ d.error|truncatechars:80 }}</span>{% endif %}</td>
+        <td class="nowrap">{% if d.state == "done" %}{% if d.file_deleted_at %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="rebuild"><input type="hidden" name="id" value="{{ d.pk }}"><button class="act small">Rebuild</button></form>{% else %}<a href="{% url 'export_file' d.pk %}">download</a>{% endif %}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">No dataset yet.</p>{% endif %}
+</div>
+{% endblock %}

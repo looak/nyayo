@@ -17,9 +17,10 @@ from django.utils import timezone as django_timezone
 from nyayo.runs.models import Run
 
 from . import cards, catalogue, sprtview, stats
-from .gameslist import ENDINGS, LOST, RULES, STARTPOS, WON, hex_key, signed
+from .gameslist import STARTPOS, hex_key, signed
 from .models import Batch, Game, Match, Upload
 from .pages import is_silent, match_queryset, running_cards, silent_cutoff
+from .selection import ENDINGS, LOST, RULES, WON
 
 WEEKS = 53
 CELL, GAP = 11, 3

@@ -16,20 +16,12 @@ from django.shortcuts import render
 from nyayo.paging import paginate
 
 from . import cards, catalogue
+from .selection import ENDINGS, RESULT_FILTERS, RULES, ending_choices, ending_filter
 from .models import Batch, Match, MatchResult
 from .pages import OUTCOMES
 
 STARTPOS = 0x463B96181691FC9C
 
-# how a position ended a game by the rules (cards.ENDED), and the other endings (cards.ENDINGS)
-RULES = {1: "Checkmate", 2: "Stalemate", 3: "Insufficient material", 4: "Fifty-move rule", 5: "Threefold repetition"}
-ENDINGS = {"rule": "Rules", "resignation": "Resignation", "draw_adjudication": "Draw adjudicated",
-           "adjudication": "Adjudicated", "time_forfeit": "Lost on time", "illegal_move": "Illegal move",
-           "crash": "Crash", "other": "Other", "unexplained": "Unexplained"}
-# the engine under test's result as SQL over a card's colour (1 white, 2 black) and result (1 1-0, 2 0-1, 3 draw)
-WON = "((colour = 1 AND result = 1) OR (colour = 2 AND result = 2))"
-LOST = "((colour = 1 AND result = 2) OR (colour = 2 AND result = 1))"
-RESULT_FILTERS = {"win": WON, "loss": LOST, "draw": "(colour > 0 AND result = 3)"}
 COLUMNS = ", ".join(("batch", "position", "game", "colour", "opponent", "result", "plies", "ended", "ending",
                      "flags", "start", "opening", "played_at"))
 
@@ -113,21 +105,6 @@ def decorate(rows):
             "opening": hex_key(key),
         })
     return out
-
-
-def ending_choices():
-    """(value, label) for the `ended` filter: the rules first, then the other endings."""
-    rules = [(name, RULES[code]) for code, name in enumerate(cards.ENDED) if code]
-    return rules + [(name, ENDINGS[name]) for name in cards.ENDINGS if name != "rule"]
-
-
-def ending_filter(value):
-    """(SQL, params) for an `ended` value; ValueError for one that isn't."""
-    if value in cards.ENDED[1:]:
-        return "(ending = ? AND ended = ?)", [cards.ENDINGS.index("rule"), cards.ENDED.index(value)]
-    if value in cards.ENDINGS and value != "rule":
-        return "ending = ?", [cards.ENDINGS.index(value)]
-    raise ValueError(value)
 
 
 def whole(text):

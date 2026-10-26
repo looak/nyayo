@@ -264,3 +264,52 @@ class Game(models.Model):
     @property
     def live(self):
         return self.result == "*"
+
+
+DATASET_STATES = ["requested", "running", "done", "failed"]
+
+
+class Dataset(models.Model):
+    """A position dataset (game database, milestone 10): positions drawn from the games kept, by the worker through
+    `phant-indexer --draw`, for elephant's tuner. The record is kept for good, its file deleted or not: what was
+    selected, the draw's settings and seed, both versions and the manifest of every batch read, so a rebuild reads
+    the same games and is checked against the sha256 recorded (datasets.py)."""
+
+    state = models.CharField(max_length=10, choices=[(s, s) for s in DATASET_STATES], default="requested",
+                             db_index=True)
+    # what it was used for, free text, and who asked for it: a machine's name, or "page"
+    note = models.TextField(blank=True)
+    requested_by = models.CharField(max_length=100, blank=True)
+    requested_at = models.DateTimeField(default=timezone.now)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    # the filters given (V1: every game that read with a good label) and phant-indexer --draw's settings and seed
+    selection = models.JSONField(default=dict)
+    draw = models.JSONField(default=dict)
+    # progress, exact: batches read of those selected, games read, positions written
+    batches_total = models.PositiveIntegerField(default=0)
+    batches_done = models.PositiveIntegerField(default=0)
+    games = models.PositiveIntegerField(default=0)
+    positions = models.PositiveIntegerField(default=0)
+    nyayo_version = models.CharField(max_length=100, blank=True)
+    reader = models.CharField(max_length=100, blank=True)
+    reader_sha256 = models.CharField(max_length=64, blank=True)
+    # every batch read, in order: its id, match, number and sha256, and each game taken (place, offset, length)
+    manifest = models.JSONField(default=list)
+    # the reader's statistics of the draw (--stats), as it wrote them: candidates, quiet, per game, written,
+    # duplicates, results, games read and skipped
+    stats = models.JSONField(null=True, blank=True)
+    # the positions, decompressed: what a rebuild must give again
+    sha256 = models.CharField(max_length=64, blank=True)
+    file_bytes = models.PositiveBigIntegerField(default=0)
+    file_deleted_at = models.DateTimeField(null=True, blank=True)
+    # a rebuild's: the sha256 it had to give, and whether it did
+    rebuild_of_sha256 = models.CharField(max_length=64, blank=True)
+    rebuild_matched = models.BooleanField(null=True, blank=True)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-requested_at", "-pk"]
+
+    def __str__(self):
+        return f"dataset {self.pk}"

@@ -65,6 +65,10 @@ other games from it) and the match it came from; a game opens in its own view wi
 result for the engine under test, how the game ended, its length in moves and its opening. It reads the index of
 cards, so it shows a game once the worker has put it away.
 
+For tuning, the **Exports** page (`/exports`) and `POST /api/exports` request a position dataset: the worker draws
+quiet positions from every well-labelled game kept, through `phant-indexer --draw`, as `<fen> [result]` lines for
+`ElephantTuner`, and keeps a record (selection, seed, versions, the batches read) that rebuilds the same file.
+
 The **Dashboard** (`/`, the home page) shows what nyayo holds at a glance: tiles for the
 game database (size, games, how much is indexed), what is being played or was played last, the latest SPRT's
 verdict with any faults of the engine under test, and the commits pushed in the last week, a GitHub-style calendar of the games
@@ -86,4 +90,6 @@ GPL-3.0, see [LICENSE](LICENSE).
 Bundled with it: lichess's board, [chessground](https://github.com/lichess-org/chessground) 9.1.1 (GPL-3.0,
 `nyayo/matches/static/vendor/`), and nyayo's icon, the chess elephant
 [Chess_elt45.svg](https://commons.wikimedia.org/wiki/File:Chess_elt45.svg) by NikNaks93 (BSD 3-Clause,
-`nyayo/runs/static/img/LICENSE-elephant.txt`).
+`nyayo/runs/static/img/LICENSE-elephant.txt`), and the tiles' icons, twelve of
+[Font Awesome Free](https://fontawesome.com) 6.6.0's solid icons by Fonticons, Inc. (CC BY 4.0,
+`nyayo/runs/static/img/fa/LICENSE-fontawesome.txt`).

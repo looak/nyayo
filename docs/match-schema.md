@@ -372,6 +372,42 @@ a file.
 Filters combine with *and*; no filter is every game. Matches are filtered on what is indexed already; there is no index
 of positions.
 
+### Position datasets
+
+A **position dataset** (game database, milestone 10) is positions drawn from the games kept, for elephant's tuner,
+made by nyayo's worker as a job. Requesting one:
+
+- `POST /api/exports` with a machine's token, body `{"note": "..."}` or empty: `201` with the dataset's record
+  (below), state `requested`; `401` without a token;
+- the Exports page's button (`/exports`), which does the same.
+
+`GET /api/exports` lists every dataset, newest first; `GET /api/exports/{id}` gives one's record with its manifest;
+both are open, like the pages. `GET /exports/{id}/file` is the file, once done and while not deleted. `DELETE
+/api/exports/{id}` with a machine's token deletes a finished dataset's file and keeps its record (`409` for one not
+done); the Exports page rebuilds it.
+
+The record, as JSON:
+
+| Field | |
+|:--|:--|
+| `id`, `state` | `requested`, `running`, `done` or `failed` (with `error`) |
+| `note`, `requested_by` | free text, what it was used for; the machine that asked, or `page` |
+| `requested_at`, `started_at`, `finished_at` | ISO 8601 |
+| `selection` | the filters: V1 takes every game that read and has a result, ended by rule, resignation or adjudication, inferred ones included (`endings`); matches, versions, book and time control come later in the same object |
+| `draw` | `per_game` (10), `quiet` (true), `merge` (false: each position written once, its results averaged, when true), `seed`, and `min_ply`: `books`, the first ply to take positions from by opening book, counted from where a game starts (`8moves_v3` 4, `Endgames` 0), and the `default` for a book not named, the map in force when the dataset was requested (owner, 2026-10-26); each game goes to the reader with its book's minimum as a `[DrawMinPly "P"]` tag in the copy fed, `--min-ply` is the default |
+| `progress` | `batches` read `of` the batches selected, `games` read, `positions` written so far |
+| `nyayo`, `reader`, `reader_sha256` | `git describe` of nyayo's checkout; the reader's name and the sha256 of its binary |
+| `stats` | the reader's statistics of the draw, `--stats OUT`'s JSON as it wrote it (`"stats": 1`, elephant's indexer/README.md, Training positions): `reader`, `options`, `inputs`, `games` (read, used, skipped, unread, no_result, null_moves, own_minimum, bad_minimum_tags) and `positions` (candidates, quiet, quiet_per_game with mean, median, p5 and min, games_under_n, written, duplicates_dropped or, merged, drawn and merged, and results: white, draw, black, mixed); null for a reader that writes none |
+| `sha256`, `bytes` | of the positions, decompressed; the file's size |
+| `file`, `file_deleted_at` | the file's URL while there is one; when it was deleted |
+| `rebuild_of_sha256`, `rebuild_matched` | a rebuild's: the sha256 it had to give, and whether it did |
+| `manifest` (one dataset only) | every batch read, in order: `id`, `match`, `number`, `sha256` of the sealed file, its match's `book` and the `min_ply` it is drawn from, and `games`, each `[place, offset, length]` in the batch's decompressed PGN |
+
+The file, `positions-<id>.txt.zst` in `NYAYO_DATASETS_DIR` (next to the batches on the share by default), is zstd of
+`phant-indexer --draw`'s output: `<fen> [result]` lines, the result white's (`[1.0]`, `[0.5]`, `[0.0]`), the format
+`ElephantTuner` reads. Deleting it keeps the record; a rebuild reads the manifest's games again, each batch checked
+against its sha256, with the same settings and seed, and compares the positions' sha256 with the one recorded.
+
 ## OpenBench
 
 OpenBench (the fork, [looak/openbench_eg](https://github.com/looak/openbench_eg)) sends a test as version 1, and is

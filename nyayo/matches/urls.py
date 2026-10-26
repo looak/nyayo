@@ -1,11 +1,16 @@
 from django.urls import path
 
-from . import dashboard, gameslist, pages, views
+from . import dashboard, exports, gameslist, pages, views
 
 urlpatterns = [
     path("", dashboard.dashboard, name="dashboard"),
     path("matches", pages.matches_list, name="matches"),
     path("games", gameslist.games_list, name="games"),
+    path("exports", exports.exports_page, name="exports"),
+    path("exports/<int:dataset_id>", exports.export_page, name="export"),
+    path("exports/<int:dataset_id>/file", exports.export_file, name="export_file"),
+    path("api/exports", exports.api_exports, name="api_exports"),
+    path("api/exports/<int:dataset_id>", exports.api_export, name="api_export"),
     path("matches/<str:match_id>", pages.match_detail, name="match"),
     path("matches/<str:match_id>/games/<str:game>", pages.game_page, name="game"),
     path("matches/<str:match_id>/games/<str:game>/live", pages.game_fragment, name="game_fragment"),
