@@ -36,16 +36,16 @@
 
 {% with f=stats.found %}
 <div class="tiles">
-  <div class="tile info"><div class="inner"><h4>Positions written</h4><div class="big">{{ d.positions|thousands }}</div>
+  <div class="tile info">{% include "runs/_tile_icon.html" with icon="download" %}<div class="inner"><h4>Positions written</h4><div class="big">{{ d.positions|thousands }}</div>
     <div class="sub">{% if stats and f.quiet is not None %}of {{ f.quiet|thousands }} naturally quiet, {{ f.candidates|thousands }} candidates{% endif %}</div></div>
     {% if has_file %}<a class="foot" href="{% url 'export_file' d.pk %}">Download, {% widthratio d.file_bytes 1000000 1 %} MB ➔</a>{% else %}<span class="foot">{% if d.file_deleted_at %}file deleted{% else %}&nbsp;{% endif %}</span>{% endif %}</div>
-  <div class="tile success"><div class="inner"><h4>Games used</h4><div class="big">{% if stats and f.games_used is not None %}{{ f.games_used|thousands }}{% else %}{{ d.games|thousands }}{% endif %}</div>
+  <div class="tile success">{% include "runs/_tile_icon.html" with icon="chess-knight" %}<div class="inner"><h4>Games used</h4><div class="big">{% if stats and f.games_used is not None %}{{ f.games_used|thousands }}{% else %}{{ d.games|thousands }}{% endif %}</div>
     <div class="sub">{% if stats and f.games_read is not None %}of {{ f.games_read|thousands }} read · {{ d.batches_done|thousands }} of {{ d.batches_total|thousands }} batches{% else %}{{ d.batches_done|thousands }} of {{ d.batches_total|thousands }} batches{% endif %}</div></div>
     <span class="foot">&nbsp;</span></div>
-  <div class="tile warning"><div class="inner"><h4>Quiet positions a game</h4><div class="big">{% if stats and f.per_game_mean is not None %}{{ f.per_game_mean }}{% else %}–{% endif %}</div>
+  <div class="tile warning">{% include "runs/_tile_icon.html" with icon="filter" %}<div class="inner"><h4>Quiet positions a game</h4><div class="big">{% if stats and f.per_game_mean is not None %}{{ f.per_game_mean }}{% else %}–{% endif %}</div>
     <div class="sub">{% if stats and f.per_game_median is not None %}median {{ f.per_game_median }} · {{ f.short_games|thousands }} games gave fewer than {{ d.draw.per_game }}{% endif %}</div></div>
     <span class="foot">&nbsp;</span></div>
-  <div class="tile grey"><div class="inner"><h4>{% if d.finished_at %}Finished{% else %}Started{% endif %}</h4>
+  <div class="tile grey">{% include "runs/_tile_icon.html" with icon="clock" %}<div class="inner"><h4>{% if d.finished_at %}Finished{% else %}Started{% endif %}</h4>
     <div class="big">{% if d.finished_at %}{{ d.finished_at|date:"D H:i" }}{% elif d.started_at %}{{ d.started_at|date:"D H:i" }}{% else %}–{% endif %}</div>
     <div class="sub">{% if took is not None %}after {{ took|seconds }}{% elif not d.started_at %}waiting for the worker{% endif %}</div></div>
     {% if d.state == "done" and d.file_deleted_at %}<form class="inline foot" method="post" action="{% url 'exports' %}" style="padding: .25rem .8rem; text-align: right">{% csrf_token %}<input type="hidden" name="action" value="rebuild"><input type="hidden" name="id" value="{{ d.pk }}"><button class="act">Rebuild</button></form>{% else %}<a class="foot" href="{% url 'exports' %}">All exports ➔</a>{% endif %}</div>

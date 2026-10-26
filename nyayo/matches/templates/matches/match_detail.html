@@ -11,22 +11,22 @@
 
 {# the figures a glance needs, as Pi-hole's tiles #}
 <div class="tiles">
-  <div class="tile info"><div class="inner"><h4>Played</h4>
+  <div class="tile info">{% include "runs/_tile_icon.html" with icon="chess-board" %}<div class="inner"><h4>Played</h4>
     <div class="big">{{ timing.finished }}{% if timing.total %}<small> / {{ timing.total }}</small>{% endif %}</div>
     <div class="sub">{% if timing.playing %}{{ timing.playing }} in play{% if timing.total %} · {% endif %}{% endif %}{% if timing.total %}{{ timing.remaining }} to go{% endif %}</div></div>
     <a class="foot" href="#games">The games ➔</a></div>
   {% with o=summary.overall %}
-  <div class="tile warning"><div class="inner">
+  <div class="tile warning">{% include "runs/_tile_icon.html" with icon="chart-line" %}<div class="inner">
     {% if summary.performance is not None %}<h4>Performance</h4><div class="big">{{ summary.performance|floatformat:0 }}</div>
     <div class="sub">Elo {{ o.elo|elo }} {{ o.error|error }} against the listed ratings</div>
     {% else %}<h4>Elo</h4><div class="big">{{ o.elo|elo }}</div><div class="sub">{{ o.error|error }} against the field{% if summary.rows %}, not every opponent rated{% endif %}</div>{% endif %}</div>
     <a class="foot" href="#results">By opponent ➔</a></div>
-  <div class="tile {% if not summary.performance_games %}grey{% elif o.score >= 0.5 %}success{% else %}danger{% endif %}"><div class="inner"><h4>Score</h4>
+  <div class="tile {% if not summary.performance_games %}grey{% elif o.score >= 0.5 %}success{% else %}danger{% endif %}">{% include "runs/_tile_icon.html" with icon="trophy" %}<div class="inner"><h4>Score</h4>
     <div class="big">{{ o.score|percent }}</div>
     <div class="sub">W {{ summary.wins }} · D {{ summary.draws }} · L {{ summary.losses }}{% if excluded %} · without {{ excluded|join:", " }}{% endif %}</div></div>
     <a class="foot" href="#results">The table to copy ➔</a></div>
   {% endwith %}
-  <div class="tile grey"><div class="inner">
+  <div class="tile grey">{% include "runs/_tile_icon.html" with icon="hourglass-half" %}<div class="inner">
     {% if timing.running %}<h4>To go</h4>
     <div class="big">{% if timing.eta_seconds is not None %}~{{ timing.eta_seconds|seconds }}{% else %}–{% endif %}</div>
     <div class="sub">{% if timing.eta_at %}done around {{ timing.eta_at|date:"D H:i" }}{% else %}after the first games{% endif %}</div>

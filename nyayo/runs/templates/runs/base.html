@@ -230,8 +230,13 @@
   .pagehead { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .8rem; margin: .25rem 0 1rem; }
   .pagehead h1 { margin: 0; }
   .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin: 0 0 1rem; }
-  .tile { display: flex; flex-direction: column; border-radius: 3px; color: #fff; box-shadow: 0 1px 1px rgba(0, 0, 0, .25);
-          min-width: 0; }
+  .tile { position: relative; overflow: hidden; display: flex; flex-direction: column; border-radius: 3px; color: #fff;
+          box-shadow: 0 1px 1px rgba(0, 0, 0, .25); min-width: 0; }
+  /* a tile's icon, large and faint behind its figures, as Pi-hole's: white through the icon's shape */
+  .tile-icon { position: absolute; right: 12px; top: 10px; width: 64px; height: 64px; background: #fff; opacity: .22;
+               pointer-events: none; -webkit-mask: var(--icon) center / contain no-repeat;
+               mask: var(--icon) center / contain no-repeat; }
+  .tile .inner, .tile .foot { position: relative; }
   .tile .inner { flex: 1; padding: .7rem .8rem .5rem; }
   .tile h4 { margin: 0; font-size: .85rem; font-weight: 400; }
   .tile .big { font-size: 2.1rem; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums;

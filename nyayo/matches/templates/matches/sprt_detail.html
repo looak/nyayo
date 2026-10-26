@@ -11,19 +11,19 @@
 
 {# the figures a glance needs, as Pi-hole's tiles #}
 <div class="tiles">
-  <div class="tile info"><div class="inner"><h4>Games</h4>
+  <div class="tile info">{% include "runs/_tile_icon.html" with icon="chess-board" %}<div class="inner"><h4>Games</h4>
     <div class="big">{{ timing.finished }}</div>
     <div class="sub">{% if row %}W {{ row.wins }} · D {{ row.draws }} · L {{ row.losses }}{% endif %}{% if timing.per_hour is not None %} · {{ timing.per_hour|floatformat:0 }} an hour{% endif %}</div></div>
     <a class="foot" href="#games">The games ➔</a></div>
-  <div class="tile {% if elo is None %}grey{% elif elo >= 0 %}success{% else %}danger{% endif %}"><div class="inner"><h4>Elo <span class="muted-light">({{ elo_by }}'s)</span></h4>
+  <div class="tile {% if elo is None %}grey{% elif elo >= 0 %}success{% else %}danger{% endif %}">{% include "runs/_tile_icon.html" with icon="chart-line" %}<div class="inner"><h4>Elo <span class="muted-light">({{ elo_by }}'s)</span></h4>
     <div class="big">{{ elo_text }}</div>
     <div class="sub">{% if error is not None %}± {{ error|floatformat:1 }}, 95%{% else %}no interval yet{% endif %}</div></div>
     <a class="foot" href="#progress">How it moved ➔</a></div>
-  <div class="tile warning"><div class="inner"><h4>LLR</h4>
+  <div class="tile warning">{% include "runs/_tile_icon.html" with icon="scale-balanced" %}<div class="inner"><h4>LLR</h4>
     <div class="big">{% if sprt.llr is not None %}{{ sprt.llr|floatformat:2 }}{% else %}–{% endif %}</div>
     <div class="sub">{% if sprt.result %}{{ sprt.result }}{% if sprt.result == "passed" %} at {{ sprt.upper|floatformat:2 }}{% elif sprt.result == "failed" %} at {{ sprt.lower|floatformat:2 }}{% endif %}{% elif projection.bound %}heading for {% if projection.bound == "upper" %}{{ sprt.upper|floatformat:2 }}, passing{% else %}{{ sprt.lower|floatformat:2 }}, failing{% endif %}{% elif sprt.lower is not None %}between {{ sprt.lower|floatformat:2 }} and {{ sprt.upper|floatformat:2 }}{% endif %}</div></div>
     <a class="foot" href="#progress">Bounds ➔</a></div>
-  <div class="tile grey"><div class="inner">
+  <div class="tile grey">{% include "runs/_tile_icon.html" with icon="hourglass-half" %}<div class="inner">
     {% if timing.running %}<h4>To go</h4>
     <div class="big">{% if projection.seconds is not None %}~{{ projection.seconds|seconds }}{% else %}–{% endif %}</div>
     <div class="sub">{% if projection.bound %}~{{ projection.games|floatformat:0 }} games{% if projection.at %}, done around {{ projection.at|date:"D H:i" }}{% endif %}{% else %}{{ projection.reason }}{% endif %}</div>

@@ -90,4 +90,6 @@ GPL-3.0, see [LICENSE](LICENSE).
 Bundled with it: lichess's board, [chessground](https://github.com/lichess-org/chessground) 9.1.1 (GPL-3.0,
 `nyayo/matches/static/vendor/`), and nyayo's icon, the chess elephant
 [Chess_elt45.svg](https://commons.wikimedia.org/wiki/File:Chess_elt45.svg) by NikNaks93 (BSD 3-Clause,
-`nyayo/runs/static/img/LICENSE-elephant.txt`).
+`nyayo/runs/static/img/LICENSE-elephant.txt`), and the tiles' icons, twelve of
+[Font Awesome Free](https://fontawesome.com) 6.6.0's solid icons by Fonticons, Inc. (CC BY 4.0,
+`nyayo/runs/static/img/fa/LICENSE-fontawesome.txt`).
