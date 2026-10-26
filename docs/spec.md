@@ -232,7 +232,11 @@ the map kept with each dataset and each batch's minimum in its manifest. Until `
 (elephant's, being settled), a run passes the lowest of its batches' minimums as `--min-ply`. The Exports page (V1) is one list: every dataset, newest
 first, with its state (queued, running, done, failed), age, positions and whether its file is there or was deleted
 and needs rebuilding; a download link where the file is, a Rebuild button where it's gone; the dataset in progress on
-top with its progress, the page refreshing while one runs; and a New dataset button. No filter form yet.
+top with its progress, the page refreshing while one runs; and a New dataset button, with a merge checkbox. Each dataset shows its draw's settings (positions per game, whether merged, compact as `10/game · merged`; in
+the expanded row also the seed and the book map it used) and, once finished, its statistics, which the
+reader writes with `--stats` and the record keeps: compact in the list (the quiet share of the candidates, white
+wins, draws and black wins of the positions written), the full table when its row is expanded. The names nyayo reads
+them by are in `datasets.STATS_FIELDS`, to follow elephant's once settled. No filter form yet.
 
 ### Matches: SPRT viewer
 

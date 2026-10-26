@@ -14,6 +14,10 @@
   .current .figures b { display: block; font-size: 1.5rem; color: var(--bright); font-variant-numeric: tabular-nums; }
   .current .figures span { font-size: .75rem; color: var(--muted); }
   table.exports form { display: inline; }
+  table.exports details summary { cursor: pointer; color: var(--link); font-size: .8rem; }
+  table.exports table.stats { width: auto; margin: .3rem 0 .2rem; font-size: .82rem; }
+  table.exports table.stats td { padding: .1rem .8rem .1rem 0; border: 0; background: none; }
+  .wdl-mini { font-variant-numeric: tabular-nums; }
 </style>
 {% endblock %}
 {% block content %}
@@ -43,14 +47,20 @@
   <h3 class="box-title">Datasets <span class="right muted">newest first</span></h3>
   {% if datasets %}
   <div class="scroll"><table class="exports">
-    <thead><tr><th>Dataset</th><th>State</th><th>Age</th><th class="num">Positions</th><th>File</th><th></th></tr></thead>
+    <thead><tr><th>Dataset</th><th>State</th><th>Age</th><th class="num">Positions</th><th>Draw</th><th>File</th><th></th></tr></thead>
     <tbody>
     {% for d in datasets %}
       <tr>
-        <td><a href="{% url 'api_export' d.pk %}" title="its record and manifest">{{ d.pk }}</a>{% if d.draw.merge %} <span class="tier" title="each position once, its results averaged">merged</span>{% endif %}{% if d.note %} <span class="muted">{{ d.note|truncatechars:60 }}</span>{% endif %}</td>
+        <td><a href="{% url 'api_export' d.pk %}" title="its record and manifest">{{ d.pk }}</a>{% if d.note %} <span class="muted">{{ d.note|truncatechars:60 }}</span>{% endif %}</td>
         <td>{% if d.state == "requested" %}<span class="badge stopped">queued</span>{% elif d.state == "running" %}<span class="badge running">running</span>{% elif d.state == "done" %}<span class="badge finished">done</span>{% else %}<span class="badge error" title="{{ d.error }}">failed</span>{% endif %}</td>
         <td class="nowrap" title="requested {{ d.requested_at|date:'Y-m-d H:i' }}">{{ d.requested_at|timesince }}</td>
         <td class="num">{% if d.state == "done" %}{{ d.positions|thousands }}{% endif %}</td>
+        <td>{% with v=d.stats_view s=d.settings_view %}
+          <span class="wdl-mini" title="positions drawn per game, and whether merged; the quiet share of the candidates; white wins, draws, black wins of the positions written">{{ s.compact }}{% if v.quiet_share %} · {{ v.quiet_share }} quiet{% endif %}{% if v.wdl %} · W {{ v.wdl.0 }} D {{ v.wdl.1 }} L {{ v.wdl.2 }}{% endif %}</span>
+          <details><summary>{% if v %}settings and statistics{% else %}settings{% endif %}</summary>
+            <table class="stats">{% for label, value in s.rows %}<tr><td class="muted">{{ label }}</td><td>{{ value }}</td></tr>{% endfor %}
+            {% if v %}{% for label, value in v.rows %}<tr><td class="muted">{{ label }}</td><td class="num">{{ value|thousands }}</td></tr>{% endfor %}{% endif %}</table></details>
+        {% endwith %}</td>
         <td>{% if d.state == "done" %}{% if d.file_deleted_at %}<span class="muted">deleted, needs rebuilding</span>{% else %}{% widthratio d.file_bytes 1000000 1 %} MB{% endif %}{% elif d.state == "failed" %}<span class="worse">{{ d.error|truncatechars:80 }}</span>{% endif %}</td>
         <td class="nowrap">{% if d.state == "done" %}{% if d.file_deleted_at %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="rebuild"><input type="hidden" name="id" value="{{ d.pk }}"><button class="act small">Rebuild</button></form>{% else %}<a href="{% url 'export_file' d.pk %}">download</a>{% endif %}{% endif %}</td>
       </tr>

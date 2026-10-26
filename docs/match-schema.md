@@ -397,6 +397,7 @@ The record, as JSON:
 | `draw` | `per_game` (10), `quiet` (true), `merge` (false: each position written once, its results averaged, when true), `seed`, and `min_ply`: `books`, the first ply to take positions from by opening book, counted from where a game starts (`8moves_v3` 4, `Endgames` 0), and the `default` for a book not named, the map in force when the dataset was requested (owner, 2026-10-26) |
 | `progress` | `batches` read `of` the batches selected, `games` read, `positions` written so far |
 | `nyayo`, `reader`, `reader_sha256` | `git describe` of nyayo's checkout; the reader's name and the sha256 of its binary |
+| `stats` | the reader's statistics of the draw (`--stats FILE`), its JSON as written: candidate positions and how many were naturally quiet, quiet positions per game (mean, median, 5th percentile, minimum), games giving fewer than N, positions written, duplicates dropped or merged, the written positions' white wins, draws and black wins, games read and skipped; null for a reader that writes none |
 | `sha256`, `bytes` | of the positions, decompressed; the file's size |
 | `file`, `file_deleted_at` | the file's URL while there is one; when it was deleted |
 | `rebuild_of_sha256`, `rebuild_matched` | a rebuild's: the sha256 it had to give, and whether it did |

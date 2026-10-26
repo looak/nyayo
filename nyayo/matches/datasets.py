@@ -13,6 +13,7 @@ settings and seed, and checks the positions' sha256 against the one recorded.
 """
 
 import hashlib
+import json
 import logging
 import random
 import subprocess
@@ -160,7 +161,11 @@ class Run:
         self.dataset = dataset
         directory().mkdir(parents=True, exist_ok=True)
         self.partial = file_path(dataset).with_suffix(".zst.part")
-        self.process = subprocess.Popen([*command, *draw_arguments(dataset.draw, dataset.manifest)], stdin=subprocess.PIPE,
+        # the reader's statistics of the draw, JSON, read into the record once it's done
+        self.stats_path = directory() / f"positions-{dataset.pk}.stats.json"
+        self.stats_path.unlink(missing_ok=True)
+        flags = [*draw_arguments(dataset.draw, dataset.manifest), "--stats", str(self.stats_path)]
+        self.process = subprocess.Popen([*command, *flags], stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.out = open(self.partial, "wb")
         self.stream = zstandard.ZstdCompressor(level=ZSTD_LEVEL).stream_writer(self.out, closefd=False)
@@ -199,11 +204,21 @@ class Run:
         self.partial.replace(final)
         return final
 
+    def stats(self):
+        """The reader's statistics, None when it wrote none; the file goes once read, the record keeps them."""
+        try:
+            found = json.loads(self.stats_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        self.stats_path.unlink(missing_ok=True)
+        return found
+
     def stop(self):
         if self.process.poll() is None:
             self.process.kill()
         self.out.close()
         self.partial.unlink(missing_ok=True)
+        self.stats_path.unlink(missing_ok=True)
 
 
 # the worker's one dataset in progress; a worker restarted finds its dataset "running" and starts it over
@@ -235,6 +250,7 @@ def end(dataset):
     run, _run = _run, None
     path = run.finish()
     dataset.positions, dataset.sha256 = run.positions, run.digest.hexdigest()
+    dataset.stats = run.stats()
     dataset.file_bytes = path.stat().st_size
     if dataset.rebuild_of_sha256:
         dataset.rebuild_matched = dataset.sha256 == dataset.rebuild_of_sha256
@@ -282,3 +298,66 @@ def step(reader):
     except (DatasetError, OSError) as error:
         fail(dataset, error)
     return True
+
+
+# The reader's statistics, by the names it writes them (--stats). elephant's names are still being settled; these are
+# nyayo's reading of the brief, and the only place to change when they differ.
+STATS_FIELDS = {
+    "games_read": ("games", "read"), "games_skipped": ("games", "skipped"), "candidates": ("candidates",),
+    "quiet": ("quiet",), "per_game_mean": ("quiet_per_game", "mean"), "per_game_median": ("quiet_per_game", "median"),
+    "per_game_p5": ("quiet_per_game", "p5"), "per_game_min": ("quiet_per_game", "min"),
+    "short_games": ("short_games",), "written": ("written",), "duplicates": ("duplicates",),
+    "white_wins": ("results", "white"), "draws": ("results", "draw"), "black_wins": ("results", "black"),
+}
+STATS_LABELS = [
+    ("games_read", "games read"), ("games_skipped", "games skipped"), ("candidates", "candidate positions"),
+    ("quiet", "naturally quiet"), ("per_game_mean", "quiet per game, mean"), ("per_game_median", "median"),
+    ("per_game_p5", "5th percentile"), ("per_game_min", "minimum"), ("short_games", "games giving fewer than N"),
+    ("written", "positions written"), ("duplicates", "duplicates dropped or merged"), ("white_wins", "white wins"),
+    ("draws", "draws"), ("black_wins", "black wins"),
+]
+
+
+def stats_view(stats):
+    """A dataset's statistics as the page shows them: the compact figures (written, quiet share, W/D/L shares) and
+    the full table's rows, (label, value); None for a dataset without any."""
+    if not isinstance(stats, dict):
+        return None
+
+    def get(name):
+        value = stats
+        for part in STATS_FIELDS[name]:
+            value = value.get(part) if isinstance(value, dict) else None
+        return value
+
+    found = {name: get(name) for name in STATS_FIELDS}
+    written = found["written"] or 0
+    results = [found["white_wins"], found["draws"], found["black_wins"]]
+
+    def share(part, whole):
+        return f"{100 * part / whole:.0f}%" if isinstance(part, (int, float)) and whole else None
+
+    return {
+        "written": found["written"], "quiet_share": share(found["quiet"], found["candidates"]),
+        "wdl": [share(n, written) for n in results] if all(isinstance(n, int) for n in results) else None,
+        "rows": [(label, found[name]) for name, label in STATS_LABELS if found[name] is not None],
+    }
+
+
+def settings_view(draw):
+    """A dataset's draw settings as the page shows them: compact (`10/game · merged`) and as rows, (label, value),
+    the book map among them."""
+    draw = draw or {}
+    minimum = draw.get("min_ply")
+    if isinstance(minimum, dict):
+        books = ", ".join(f"{name} {ply}" for name, ply in sorted(minimum.get("books", {}).items()))
+        first_ply = f"{books}; any other book {minimum.get('default')}" if books else f"{minimum.get('default')}"
+    else:  # a dataset from before the map
+        first_ply = f"{minimum} for every book"
+    merge = bool(draw.get("merge"))
+    return {
+        "compact": f"{draw.get('per_game')}/game" + (" · merged" if merge else ""),
+        "rows": [("positions per game", draw.get("per_game")), ("quiet only", "yes" if draw.get("quiet") else "no"),
+                 ("merged", "yes, each position once with its results averaged" if merge else "no"),
+                 ("seed", draw.get("seed")), ("first ply, by book", first_ply)],
+    }

@@ -296,6 +296,9 @@ class Dataset(models.Model):
     reader_sha256 = models.CharField(max_length=64, blank=True)
     # every batch read, in order: its id, match, number and sha256, and each game taken (place, offset, length)
     manifest = models.JSONField(default=list)
+    # the reader's statistics of the draw (--stats), as it wrote them: candidates, quiet, per game, written,
+    # duplicates, results, games read and skipped
+    stats = models.JSONField(null=True, blank=True)
     # the positions, decompressed: what a rebuild must give again
     sha256 = models.CharField(max_length=64, blank=True)
     file_bytes = models.PositiveBigIntegerField(default=0)

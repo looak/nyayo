@@ -34,7 +34,7 @@ def described(dataset, request, manifest=False):
         "nyayo": dataset.nyayo_version, "reader": dataset.reader, "reader_sha256": dataset.reader_sha256,
         "sha256": dataset.sha256, "bytes": dataset.file_bytes, "file_deleted_at": stamp(dataset.file_deleted_at),
         "rebuild_of_sha256": dataset.rebuild_of_sha256 or None, "rebuild_matched": dataset.rebuild_matched,
-        "error": dataset.error or None,
+        "error": dataset.error or None, "stats": dataset.stats,
         "file": request.build_absolute_uri(reverse("export_file", args=[dataset.pk])) if has_file else None,
     }
     if manifest:
@@ -108,6 +108,9 @@ def exports_page(request):
                 datasets.rebuild(dataset)
         return redirect("exports")
     rows = list(Dataset.objects.all())
+    for dataset in rows:
+        dataset.stats_view = datasets.stats_view(dataset.stats)
+        dataset.settings_view = datasets.settings_view(dataset.draw)
     current = next((d for d in rows if d.state == "running"), None) or next(
         (d for d in reversed(rows) if d.state == "requested"), None)
     return render(request, "matches/exports.html", {"datasets": rows, "current": current})

@@ -223,4 +223,33 @@ class Datasets(BatchCase):
         self.draw()
         dataset.refresh_from_db()
         self.assertEqual(dataset.state, "done", dataset.error)
-        self.assertIn(">merged</span>", self.client.get("/exports").content.decode())
+        self.assertIn("10/game · merged", self.client.get("/exports").content.decode())
+        self.assertEqual(datasets.settings_view({"per_game": 10, "min_ply": 16})["rows"][-1],
+                         ("first ply, by book", "16 for every book"))
+
+    def test_the_draws_statistics_are_kept_and_shown(self):
+        dataset = datasets.request()
+        self.draw()
+        dataset.refresh_from_db()
+        stats = dataset.stats
+        self.assertEqual(stats["written"], dataset.positions)
+        self.assertEqual(stats["games"], {"read": 2, "skipped": 0})
+        self.assertEqual(sum(stats["results"].values()), dataset.positions)
+        self.assertGreaterEqual(stats["candidates"], stats["quiet"])
+        self.assertFalse(list(datasets.directory().glob("*.stats.json")))  # read into the record, then gone
+        self.assertEqual(self.client.get(f"/api/exports/{dataset.pk}").json()["stats"], stats)
+        view = datasets.stats_view(stats)
+        self.assertEqual(view["written"], dataset.positions)
+        self.assertTrue(view["quiet_share"].endswith("%"))
+        self.assertEqual(len(view["wdl"]), 3)
+        self.assertIn(("games read", 2), view["rows"])
+        page = self.client.get("/exports").content.decode()
+        self.assertIn(f"{view['quiet_share']} quiet", page)
+        self.assertIn("<summary>settings and statistics</summary>", page)
+        self.assertIn("10/game · ", page)
+        self.assertIn('<td class="muted">first ply, by book</td><td>8moves_v3 4, endgames 0; any other book 8</td>'.lower(),
+                      page.lower())
+        self.assertIn('<td class="muted">positions written</td>', page)
+        # a reader that writes none, or another shape: nothing shown, nothing broken
+        self.assertIsNone(datasets.stats_view(None))
+        self.assertEqual(datasets.stats_view({"other": 1})["rows"], [])
