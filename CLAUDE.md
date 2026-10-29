@@ -99,6 +99,14 @@ pull request that does a plan's step says `Closes looak/<repo>#<sub-issue>`. Whe
 decisions, say so in the final report. Contracts this repo owns (`docs/match-schema.md` and `docs/results-schema.md`)
 are changed only here, by agreement with the owner.
 
+## Workflow
+
+How work is tracked here (issues per repo on a release milestone, plans for cross-repo work, at most three
+issues in progress, an SPRT before a strength change merges) is in ramani's `WORKFLOW.md`. Read it before
+starting work; don't copy it. It is at `../ramani/WORKFLOW.md` in a sibling checkout; from a worktree, or if
+that is missing, read it with `gh api repos/looak/ramani/contents/WORKFLOW.md -q .content | base64 -d`. If
+neither works, say so in your report and don't guess the rules.
+
 ## Environment
 
 - **Deployment host: bobby** (172.16.100.11, user `fischer`), an Ubuntu VM with 8 GB on a Synology DS923+, the same
