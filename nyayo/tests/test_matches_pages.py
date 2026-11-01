@@ -475,10 +475,15 @@ class Detail(SimpleTestCase):
         self.assertLess(white["dots"][0]["y"], middle)
         self.assertGreater(black["dots"][0]["y"], middle)
 
-    def test_eval_is_each_engines_own_view(self):
+    def test_eval_is_from_whites_side(self):
         moves = pgnview.load(EXTRAS).moves
-        self.assertEqual([m.own_pawns for m in moves], [0.30, -0.25, 0.40])
-        self.assertEqual(moves[1].pawns, 0.25)  # white's side, as before
+        self.assertEqual([m.pawns for m in moves], [0.30, 0.25, 0.40])  # black's -0.25 is +0.25 for white
+        graph = next(g for g in pgnview.graphs(moves, 3) if g["key"] == "eval")
+        white = next(line for line in graph["lines"] if line["colour"] == "white")
+        black = next(line for line in graph["lines"] if line["colour"] == "black")
+        zero = (graph["top"] + graph["bottom"]) / 2  # the eval range is symmetric about 0
+        self.assertLess(white["dots"][0]["y"], zero)
+        self.assertLess(black["dots"][0]["y"], zero)  # both above the zero line: they agree white is better
 
 
 class GamePageLayout(GameTestCase):
