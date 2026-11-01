@@ -50,8 +50,7 @@ class Move:
     uci: str
     colour: str  # white | black
     score: str = ""  # as the engine wrote it, from its own side: +0.35, -M3
-    pawns: float | None = None  # from white's side, mates clipped; for the one-line graph
-    own_pawns: float | None = None  # from the mover's side, as the engine reported it
+    pawns: float | None = None  # from white's side, as every eval on the site is; the graph and the eval bar
     depth: int | None = None
     seconds: float | None = None
     nodes: int | None = None
@@ -154,7 +153,7 @@ def load(raw):
             score, own, depth, seconds, nodes = cutechess
         moves.append(Move(
             ply=len(moves) + 1, number=board.fullmove_number, san=board.san(move), uci=move.uci(), colour=colour,
-            score=score, pawns=None if own is None else (own if colour == "white" else -own), own_pawns=own,
+            score=score, pawns=None if own is None else (own if colour == "white" else -own),
             depth=depth, seconds=seconds, nodes=nodes, nps=nps, pv=pv_as_san(board, pv), time_left=left,
             comment=node.comment.strip()))
         board.push(move)
@@ -247,7 +246,7 @@ def last_moves(moves, ply):
 # --- graphs ---
 
 METRICS = (
-    ("eval", "Eval", lambda m: m.own_pawns, "pawns"),
+    ("eval", "Eval", lambda m: m.pawns, "pawns"),
     ("depth", "Depth", lambda m: m.depth, ""),
     ("nodes", "Nodes", lambda m: m.nodes, ""),
     ("nps", "NPS", lambda m: m.nps, ""),
