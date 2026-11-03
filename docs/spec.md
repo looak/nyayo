@@ -318,7 +318,7 @@ the pages on.
 ### Lab: the models
 
 `nyayo/lab` (app label `lab`) is where nyayo 2.0 will create, schedule and play tests itself, taking over from
-OpenBench's server (looak/ramani `plans/nyayo-2.md`). So far it holds the data, and the pages that create a test and stop, restart or approve it (below); no worker endpoint, no scheduling.
+OpenBench's server (looak/ramani `plans/nyayo-2.md`). It has the models, the worker's API and the pages that create a test and stop, restart or approve it (below); no scheduling page.
 
 - **Models** are OpenBench's (openbench_eg `da629d7`), with its names and fields, trimmed of what this lab doesn't
   use: `Test`, `Result`, `Step`, `Machine` (a worker; `runs.Machine` is a token that reports runs), `Engine` (the commit
@@ -375,6 +375,48 @@ with OpenBench's notice. Tunes and datagens come later.
   `finished`), *Restart* (clears it and calls `steps.restart_walks`) and *Approve* (superusers only, while not
   approved), as `POST /tests/<id>/<action>`, each logged and reported again. A match of an old OpenBench test, which has
   no `Test`, shows no link to OpenBench's server, and no buttons.
+### Lab: the worker's API
+
+OpenBench's Client (openbench_eg's `Client/`, the worker) runs against nyayo unchanged: every `client*` endpoint is at the
+path and with the answers it had (`nyayo/lab/worker_api.py`, from the client hook views of OpenBench's `views.py`). They are
+CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
+
+- **Sign-in.** `clientWorkerInfo` takes a Django user's name and password (an inactive user, or a wrong password, is
+  `{"error": "Bad Credentials"}`), makes a `lab.Machine` for the session and answers its `machine_id` and a secret. The
+  other calls name the machine and its secret and are refused if the client's version, or the build checksum (`ServerState`,
+  which changes when an engine config's build settings do), is not the server's: the worker then restarts itself.
+- **Settings in place of `Config/config.json`** (`nyayo/lab/config.py`): `NYAYO_CLIENT_VERSION` (54),
+  `NYAYO_CLIENT_REPO_URL` (`https://github.com/looak/openbench_eg`), `NYAYO_CLIENT_REPO_REF` (`master`),
+  `NYAYO_FASTCHESS_MIN_VERSION` (1.8.1), `NYAYO_FASTCHESS_REPO_URL` and `NYAYO_FASTCHESS_REPO_REF`, each from settings or the
+  environment. Engines and books are rows.
+- **Scheduling** (`get_workload.py`, OpenBench's `workloads/get_workload.py`, names only): a worker is handed an approved,
+  unfinished, undeleted test it can play (the engines it can build, its threads, syzygy, `--only`, `--focus`, `--noisy`, its
+  blacklist, and the tests it left after a failure nobody could place), of the highest priority, balanced by threads against
+  throughput. Handing out makes the `Result`, starts the machine's walk and reports the test.
+- **Results** (`utils.update_test`, from OpenBench's `utils.py`): the counts are added to the test and the result, an SPRT's
+  LLR is recomputed with `stats.py` and ends the test on a bound, a games test at `max_games`, a tune moves its parameters
+  within their bounds. The answer is `{}` or `{"stop": true}`.
+- **Steps and verdicts** (`steps.py`, as the fork has it): `clientReportStep` records a step of the worker's walk, and once
+  both engines have been through a stage, judges the failures (whose they are: the engine's stops the test, the worker's is
+  retried after `STEP_RETRY_SECONDS`, 300, one nobody can place gets one more try, and a test only that worker could play
+  is held). The table is in ramani's `plans/sprt-steps.md`.
+- **The match.** Every change to a test (a hand-out, a step, a result, an error) ends with `document.report_test(test)`: it
+  builds the match document (`document.py`, from the fork's reporter: the same document, `producer` included, with
+  `producer.url` null) and passes it to `ingest` in this process, in one write transaction, so two reports of a test are
+  serialised and the later is built from what the earlier left. A failure is logged and never fails the worker's call. The
+  match id is `openbench-<NYAYO_INSTANCE>-<test id>`.
+- **Games.** `clientSubmitPGN` stores the workload's `.pgn.bz2`, as the worker named and tagged it, as one of nyayo's uploads
+  named `<result id>.<book index>` (the match is reported first if nyayo has none yet; a workload that played nothing sends
+  an empty archive, which is dropped). nyayo's worker puts the games away as for any producer. Nothing is kept as OpenBench
+  kept it: the PGN tar, `api_pgns` and the watcher are not here.
+- **Not here:** the pages for tunes and datagens, the networks' upload (a network is a file `networks/<sha256>` under the data directory, served by
+  `clientGetNetwork`), `api_*` of OpenBench's own scripts.
+
+`tools/worker_rig.py` plays tests against nyayo with the real worker (WSL or Linux; see its docstring): a passing games
+test, an SPRT to a result, and each failure of the verdict table it can stage (a compile error, a wrong, slow or silent
+bench on dev; the machine's own failures; a killed compiler and a wrong bench on both, which hold the test; a bench that is
+right and then wrong). `--load` measures the writes and the waits. Step 5 of the plan moves openbench_eg's whole smoke test
+into nyayo.
 
 ### Pages
 
@@ -463,6 +505,7 @@ data. Not built: rebuilding the database from the archive alone.
 |:--|:--|:--|
 | in | runs from `results.py` on developer machines | results schema v1 ([results-schema.md](results-schema.md)) |
 | in | matches and their games from uwanja: reports (whole, or by changes with a seq), live games whole or by `PATCH` | match schema v1 ([match-schema.md](match-schema.md)) |
+| in | the worker's calls: workloads asked for, steps, results, errors, games | the `client*` endpoints of OpenBench's Client (openbench_eg), above |
 | in | SPRTs and fixed-games tests from OpenBench: the match whole, with `stats`; each workload's games as an upload | match schema v1, *OpenBench* |
 | in | the game reader, a binary nyayo runs: PGN on standard input, one JSON line per game | `phant-indexer`'s entries, format 1 or 2 (`indexer/README.md` in [looak/elephant](https://github.com/looak/elephant)) |
 | out | web pages for people | above |

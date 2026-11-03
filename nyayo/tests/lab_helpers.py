@@ -12,7 +12,7 @@ def make_test(**fields):
     values = dict(author=user, dev=dev, base=base, dev_repo=dev.source, base_repo=base.source, dev_engine="Elephant",
                   base_engine="Elephant", dev_options="Threads=1 Hash=8", base_options="Threads=1 Hash=8",
                   dev_time_control="8.0+0.08", base_time_control="8.0+0.08", book_name="8moves_v3.epd",
-                  workload_size=4, elolower=0.0, eloupper=5.0, alpha=0.05, beta=0.05, lowerllr=-2.94, upperllr=2.94,
+                  workload_size=4, throughput=100, elolower=0.0, eloupper=5.0, alpha=0.05, beta=0.05, lowerllr=-2.94, upperllr=2.94,
                   approved=True)
     values.update(fields)
     return Test.objects.create(**values)
