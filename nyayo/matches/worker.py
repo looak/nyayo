@@ -12,6 +12,8 @@ producer sends waits for it.
 - **A finished single game** (a gauntlet's, sent move by move and sealed by its final PGN) is read the same way and
   appended to its match's open batch, as it came. Its file and row stay until that batch is sealed; purge_games
   leaves it until then. Its row says which batch it is in, so it is kept once however often it is sent.
+- **A failed start** (`failed_prechecks`, no games) is deleted once its time has come, with its archive: looked for
+  once an hour, at the start and then every NYAYO_EXPIRY_EVERY seconds (expiry.py).
 - **A match that has ended** (finished, stopped or broken, nothing heard for NYAYO_SEAL_AFTER seconds, no upload
   pending and no game waiting) has its open batch sealed short.
 """
@@ -29,7 +31,7 @@ from django.utils import timezone
 
 from nyayo.runs.ingest import IngestError
 
-from . import cards, catalogue, datasets, games as single_games, reader as readers, uploads
+from . import cards, catalogue, datasets, expiry, games as single_games, reader as readers, uploads
 from .models import Batch, Game, Match, MatchResult, Upload
 
 log = logging.getLogger("nyayo.worker")
@@ -252,14 +254,26 @@ def is_running():
         return True
 
 
+def look_for_expired():
+    """Deletes the failed starts that are due; whatever goes wrong is logged, and the next look tries again."""
+    try:
+        expiry.expire()
+    except Exception:
+        log.exception("looking for expired failed starts failed, trying again at the next look")
+
+
 def run(once=False, interval=1.0, reader=None):
     """Works until stopped, or with once until there is nothing left to do. Returns how many things it did."""
     reader = reader or readers.default()
     done = 0
     with only_worker():
         log.info("worker started, reading with %s", reader.name)
+        last_look = None
         while True:
             close_old_connections()
+            if last_look is None or time.monotonic() - last_look >= settings.NYAYO_EXPIRY_EVERY:
+                last_look = time.monotonic()
+                look_for_expired()
             try:
                 did = step(reader)
             except Exception:
