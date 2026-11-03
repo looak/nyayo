@@ -7,5 +7,6 @@ urlpatterns = [
     path("healthz", views.healthz, name="healthz"),
     path("admin/", admin.site.urls),
     path("", include("nyayo.matches.urls")),
+    path("", include("nyayo.lab.urls")),
     path("", include("nyayo.runs.urls")),
 ]
