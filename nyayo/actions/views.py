@@ -13,8 +13,6 @@ from .access import action_required, may_act
 
 # name -> (page's heading, step that builds it, what will be there, gated)
 STUBS = {
-    "create_test": ("Create test", 4, "The form that starts an SPRT or a fixed-games test from a branch or a sha: presets, GitHub lookups and names, "
-                    "the bench, a check that the branch isn't behind its base, and the stop, restart and approve buttons on the test's page.", True),
     "create_tune": ("Create tune", 7, "The form that starts an SPSA tune, and the page of its parameters' history.", True),
     "create_datagen": ("Create datagen", 7, "The form that starts a data generation run. It is handed out like a test, and its page is the match page.", True),
     "upload_net": ("Upload net", 4, "Elephant has no network, so there is no upload page in 2.0. The fields and the worker's request for a network stay.", True),

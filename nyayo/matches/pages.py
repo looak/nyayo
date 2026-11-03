@@ -12,6 +12,7 @@ from django.template.loader import render_to_string
 
 from django.utils import timezone
 
+from nyayo.lab.templatetags.lab_extras import producer_link
 from nyayo.paging import paginate
 
 from . import catalogue, games, pgnview, progress, sprtview, stats, stepsview, timing
@@ -473,7 +474,7 @@ def match_detail(request, match_id):
         "groups": groups, "entries": entries, "refresh": match.state == "running", "settings": match.settings,
         "host": match.host, "subject_name": subject_name, "stored_games": stored_games(match),
         "uploads": upload_counts(match),
-        "producer_url": (match.producer or {}).get("url"),
+        "producer_url": producer_link(match),
     }
     # the games table shows one page of them, in play order (playing, cut off, scheduled, finished); what was counted
     # above, the totals and the boards in play, is of all of them

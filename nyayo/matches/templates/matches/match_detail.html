@@ -1,5 +1,5 @@
 {% extends "runs/base.html" %}
-{% load runs_extras matches_extras %}
+{% load lab_extras runs_extras matches_extras %}
 {% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
 {% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
 {% block content %}
@@ -8,6 +8,7 @@
   <span class="tier">{{ match.kind }}</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}
   <span class="muted">{% if settings.runner %}{{ settings.runner.name }} {{ settings.runner.version }}{% else %}{{ match.producer_name }}{% endif %}{% if host.name %} on {{ host.name }}{% endif %}{% if settings.concurrency %} · {{ settings.concurrency }} at a time{% endif %} · last report {{ match.updated_at|date:"H:i:s" }}</span>
 </div>
+{% test_actions match %}
 
 {# the figures a glance needs, as Pi-hole's tiles #}
 <div class="tiles">

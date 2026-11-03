@@ -318,7 +318,7 @@ the pages on.
 ### Lab: the models
 
 `nyayo/lab` (app label `lab`) is where nyayo 2.0 will create, schedule and play tests itself, taking over from
-OpenBench's server (looak/ramani `plans/nyayo-2.md`). So far it holds only data: no page, no endpoint, no scheduling.
+OpenBench's server (looak/ramani `plans/nyayo-2.md`). So far it holds the data, and the pages that create a test and stop, restart or approve it (below); no worker endpoint, no scheduling.
 
 - **Models** are OpenBench's (openbench_eg `da629d7`), with its names and fields, trimmed of what this lab doesn't
   use: `Test`, `Result`, `Step`, `Machine` (a worker; `runs.Machine` is a token that reports runs), `Engine` (the commit
@@ -338,6 +338,43 @@ OpenBench's server (looak/ramani `plans/nyayo-2.md`). So far it holds only data:
 - **Seeds** (`0002_seed`): the `Elephant` engine config with its build and presets, whose time controls are written
   with a `+` (`8.0+0.08`, `40.0+0.4`, `5.0+0.05`, `20.0+0.2`; the file Elephant came from had `8.00.08` and so on, which
   OpenBench plays with no increment), and the twelve books of the lab, by name, source and sha.
+
+### Lab: creating a test
+
+`/create/test` (staff only) makes an SPRT or a fixed-games test; the logic is OpenBench's `create_workload.py`,
+`verify_workload.py` and `modify_workload.py` (`nyayo/lab/create_test.py`, `github.py`, `modify_test.py`, `utils.py`),
+with OpenBench's notice. Tunes and datagens come later.
+
+- **The form** is filled from the chosen `EngineConfig`: its `default` preset, then the first preset; a preset's pill
+  sets time control, options, workload size and whatever else it names; the *Gain* pill takes the engine's bounds and
+  *Non-regression* `[-3.00, 1.00]`. Everything else OpenBench's form asks is under *Advanced*, filled in. A test
+  copies its values when created, so editing the engine later changes nothing running. Elephant's scaling default is
+  `BASE`, as OpenBench's page sets it for tests. A test's time controls are stored as `TimeControl.parse` gives them
+  (`8.0+0.08`).
+- **Worked out for you**: as a branch is typed the page asks `/create/test/lookup` (staff only), which asks GitHub for
+  the commit's sha, subject, bench and name, and how far the branch is behind the base. The same is asked again, and
+  decides, when the form is posted.
+- **The commit** is a branch, a tag or a full sha (`collect_github_info`). A sha is named by the branch that has it
+  as its head, else the pull request's branch, else the commit's first line (`branch_of_sha`); `Test.name` is the typed
+  name, else that first line, else empty (the match is then named from the branches). The bench is typed under
+  *Advanced*, else read from a `Bench:` / `Nodes:` line of the commit message, and a commit with neither stops the form
+  with the field marked. `NYAYO_GITHUB_TOKEN` (environment) is sent to GitHub's API when set, which lifts the rate limit
+  and reaches a private engine's repository.
+- **GitHub down** (no answer, a timeout, a 5xx) is not the same as GitHub saying no: with the full 40 character sha and
+  the bench typed on each side, the test is made from what was typed (the source is the zipball URL of the sha, the
+  name the typed one or the sha); with a branch name it says to type those, and makes nothing.
+- **The allowlist.** A repository can be tested when it is the `source` of an enabled `EngineConfig`, exactly: adding
+  an engine adds its repository, and a fork is not tested. A private engine needs the token.
+- **Behind base.** When both sides are in the same repository and the dev commit lacks commits the base has (GitHub's
+  compare), the form is not made and says how many; *Create it anyway* posts it again with `anyway`. If GitHub can't
+  say, it doesn't stop it.
+- **Creating** writes two `Engine` rows (dev and base), the `Test`, and a `LogEvent`, in one transaction, then calls
+  `nyayo.lab.document.report_test(test)` (step 2's) so the match exists as `waiting` before a worker has seen it, and
+  goes to the match page. A test made by the superuser is approved; one made by another staff user waits for approval.
+- **On a lab test's match page** (an `openbench-<instance>-<N>` match with a `Test` N), the staff see *Stop* (sets
+  `finished`), *Restart* (clears it and calls `steps.restart_walks`) and *Approve* (superusers only, while not
+  approved), as `POST /tests/<id>/<action>`, each logged and reported again. A match of an old OpenBench test, which has
+  no `Test`, shows no link to OpenBench's server, and no buttons.
 
 ### Pages
 
@@ -363,7 +400,8 @@ for the game page's polled fragment. The site has one colour scheme, dark.
 | `/matches/{id}/games/{game}` | a large board with a bar and a clock per engine, an eval bar from white's side, a card per engine (score, depth, time, nodes, nps, PV), the moves in a scrolling list, and graphs per metric with a line per engine (the eval graph from white's side too); stepping through the game by click or arrow keys. The board is lichess's chessground (9.1.1, GPL-3.0, vendored under `nyayo/matches/static/vendor/`), drawn in the browser from every position the page embeds, so a step shows at once and a move animates; the rest of the page then follows from the server. A game is read from its file, or from its batch once it is kept |
 | `/games` | Pi-hole's query log: a filter bar that opens, and every game kept as data, newest first, 64 to a page, its row tinted by a win or a loss for the engine under test: when it was played (a time only where the game has one), its id (a link to its page), white and black (from the card's colour and the match's engines), its moves, result (and win, draw or loss for the engine under test), how it ended (deduced endings marked), the book position it started from with a link to the other games from it, and the match it came from. `?match=`, `?result=` (win, draw, loss), `?ended=` (a rule such as `checkmate` or `repetition`, or another ending such as `resignation` or `time_forfeit`), `?moves_from=` and `?moves_to=` (whole moves) and `?opening=` (16 hex digits) filter it, all together; a bad `ended`, moves or opening is `400`. It reads a page of cards from the index and fills in matches and engines for those 64 rows, so it takes about 0.2 s wherever it is in the list, and it shows a game once the worker has put it away. There are no opening names: the books start 16 plies in, and lichess's table names 0.2% of the games |
 | `/sign-in`, `/sign-out` | Django's own login against the admin's users (`LOGIN_URL`), for staff users only: anyone else, or a wrong password, is refused with the form's reason. `?next=` goes back to the page that asked, and only to this site. Signing out is a `POST` from the top bar |
-| `/create/test`, `/create/tune`, `/create/datagen`, `/upload-net`, `/gauntlet`, `/engines`, `/books` | the actions and the lab's pages that change things. Today each is a **stub** saying what will be there and which step of the nyayo 2.0 plan builds it. Signed out, they redirect to the sign-in page; signed in without staff rights, `403` |
+| `/create/test`, `/create/test/lookup`, `/tests/{id}/{stop,restart,approve}` | the lab's page that creates a test, the lookup it asks as a branch is typed, and the three actions on a test: all staff only, as above |
+| `/create/tune`, `/create/datagen`, `/upload-net`, `/gauntlet`, `/engines`, `/books` | the actions and the lab's other pages that change things. Today each is a **stub** saying what will be there and which step of the nyayo 2.0 plan builds it. Signed out, they redirect to the sign-in page; signed in without staff rights, `403` |
 | `/machines` | a stub, open to read |
 | `/admin/` | machines & tokens, browsing and purging runs and matches; uploads (with the reason a refused one was refused, and a way to read it again) and batches, read-only |
 | `/healthz` | liveness |
