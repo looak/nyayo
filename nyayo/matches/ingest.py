@@ -3,7 +3,7 @@
 A match document is archived first, unchanged, as archive/matches/<id>.json, then indexed. The producer re-sends the
 whole document as the match grows and says the state every time, so nothing here decides a state on its behalf.
 
-Under one id only the state, the timestamps of progress, the counts, the producer's LLR, result and stats, the machines
+Under one id only the state, the name, the verdict, the timestamps of progress, the counts, the producer's LLR, result and stats, the machines
 that played, the pgn and the producer's link back may change, and counts only grow. Anything else is a different
 match under the same id (409).
 """
@@ -30,6 +30,11 @@ COUNTS = ("games", "wins", "draws", "losses")
 SIDES = ("timelosses", "crashes", "illegal")
 GAME_STATES = ("scheduled", "playing", "finished")
 GAME_RESULTS = ("1-0", "0-1", "1/2-1/2")
+BLAMES = ("engine", "worker", "unclear")
+STEP_STATES = ("pending", "active", "passed", "failed")
+STEP_SIDES = ("dev", "base")
+POINTS_AT = ("engine", "worker", "either")
+LOG_MAX = 4096
 STARTED_FIXED = schedule.STARTED_FIXED
 
 
@@ -188,6 +193,7 @@ def validate(document, match_id=None):
     timestamp(m, "started_at", where="match")
     timestamp(m, "updated_at", required=True, where="match")
     timestamp(m, "finished_at", where="match")
+    validate_verdict(m.get("verdict"))
 
     validate_engine(document.get("subject"), "subject")
     opponents = document.get("opponents")
@@ -222,8 +228,86 @@ def validate(document, match_id=None):
     validate_stats(document.get("stats"))
     if not isinstance(document.get("machines", []), list):
         raise invalid("machines must be a list")
+    for i, machine in enumerate(document.get("machines") or []):
+        if isinstance(machine, dict):
+            validate_machine(machine, f"machines[{i}]")
     validate_schedule(document, known)
     validate_report(document)
+
+
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def optional_text(row, name, where):
+    if row.get(name) is not None and not isinstance(row[name], str):
+        raise invalid(f"{where}.{name} must be a string or null")
+
+
+def validate_verdict(verdict):
+    """match.verdict: why a test failed or is held, in the producer's words. nyayo applies no rule of its own."""
+    if verdict is None:
+        return
+    where = "match.verdict"
+    if not isinstance(verdict, dict):
+        raise invalid(f"{where} must be an object or null")
+    if verdict.get("blame") not in BLAMES:
+        raise invalid(f"{where}.blame must be one of {', '.join(BLAMES)}, got {verdict.get('blame')!r}")
+    for name in ("summary", "detail", "where"):
+        optional_text(verdict, name, where)
+    seen_on = verdict.get("seen_on")
+    if seen_on is not None and (not isinstance(seen_on, list) or not all(isinstance(n, str) for n in seen_on)):
+        raise invalid(f"{where}.seen_on must be a list of machine names")
+
+
+def validate_machine(machine, where):
+    workloads = machine.get("workloads")
+    if workloads is not None and not is_count(workloads):
+        raise invalid(f"{where}.workloads must be a whole number, 0 or more")
+    if machine.get("active") is not None and not isinstance(machine["active"], bool):
+        raise invalid(f"{where}.active must be true or false")
+    steps = machine.get("steps")
+    if steps is None:
+        return
+    if not isinstance(steps, list):
+        raise invalid(f"{where}.steps must be a list")
+    for i, step in enumerate(steps):
+        validate_step(step, f"{where}.steps[{i}]")
+
+
+def validate_step(step, where):
+    """A step is drawn in the order sent and means nothing to nyayo, so any name is taken; the fields are checked."""
+    if not isinstance(step, dict):
+        raise invalid(f"{where} must be an object")
+    if not isinstance(step.get("step"), str) or not step["step"]:
+        raise invalid(f"{where}.step is missing")
+    if step.get("side") is not None and step["side"] not in STEP_SIDES:
+        raise invalid(f"{where}.side must be one of {', '.join(STEP_SIDES)}, got {step['side']!r}")
+    if step.get("state") not in STEP_STATES:
+        raise invalid(f"{where}.state must be one of {', '.join(STEP_STATES)}, got {step.get('state')!r}")
+    timestamp(step, "at", where=where)
+    timestamp(step, "retry_at", where=where)
+    for name in ("seconds", "nodes", "nps"):
+        if step.get(name) is not None and (not is_number(step[name]) or step[name] < 0):
+            raise invalid(f"{where}.{name} must be a number, 0 or more")
+    if step.get("tries") is not None and not is_count(step["tries"]):
+        raise invalid(f"{where}.tries must be a whole number, 0 or more")
+    if step.get("cached") is not None and not isinstance(step["cached"], bool):
+        raise invalid(f"{where}.cached must be true or false")
+    for name in ("detail", "log", "effect"):
+        optional_text(step, name, where)
+    if isinstance(step.get("log"), str) and len(step["log"].encode()) > LOG_MAX:
+        raise invalid(f"{where}.log is over {LOG_MAX} bytes, send the end of the output")
+    if step.get("blame") is not None and step["blame"] not in BLAMES:
+        raise invalid(f"{where}.blame must be one of {', '.join(BLAMES)}, got {step['blame']!r}")
+    evidence = step.get("evidence")
+    if evidence is not None:
+        if not isinstance(evidence, list):
+            raise invalid(f"{where}.evidence must be a list")
+        for j, item in enumerate(evidence):
+            if (not isinstance(item, dict) or item.get("points_at") not in POINTS_AT
+                    or not isinstance(item.get("text"), str)):
+                raise invalid(f"{where}.evidence[{j}] needs points_at ({', '.join(POINTS_AT)}) and text")
 
 
 def validate_report(document):
@@ -331,7 +415,7 @@ def fixed_part(document):
     for name in ("results", "machines", "pgn", "progress", "games", "stats", "report"):
         fixed.pop(name, None)
     m = fixed.get("match") or {}
-    for name in ("state", "updated_at", "finished_at"):
+    for name in ("state", "name", "verdict", "updated_at", "finished_at"):
         m.pop(name, None)
     if isinstance(m.get("producer"), dict):
         m["producer"].pop("url", None)
@@ -344,8 +428,8 @@ def fixed_part(document):
 def check_update(previous, document, changes=False):
     changed = first_difference(fixed_part(previous), fixed_part(document), "")
     if changed:
-        raise IngestError(409, f"{changed.lstrip('.')} changed, only the state, counts and the producer's LLR and "
-                               f"result may change on a recorded match")
+        raise IngestError(409, f"{changed.lstrip('.')} changed, only the state, name, verdict, counts and the "
+                               f"producer's LLR and result may change on a recorded match")
     if not changes:  # a report by changes is checked entry by entry against the rows, as it is applied
         check_schedule(previous.get("games"), document.get("games"))
     old = {row["opponent"]: row for row in previous.get("results") or [] if isinstance(row, dict)}
@@ -474,7 +558,7 @@ def create_match(document, machine):
     now = timezone.now()
     match = Match.objects.create(
         id=m["id"], machine=machine, kind=m["kind"], state=m["state"], producer=m["producer"],
-        producer_name=m["producer"]["name"], name=m.get("name") or "", started_at=timestamp(m, "started_at"),
+        producer_name=m["producer"]["name"], name=m.get("name") or "", verdict=m.get("verdict"), started_at=timestamp(m, "started_at"),
         finished_at=timestamp(m, "finished_at"), host_name=host.get("name") or "", host=host,
         settings=m.get("settings") or {}, subject=engine_for(document["subject"]),
         subject_info=participant_info(document["subject"], "branch", "repo", "bench", "options"),
@@ -499,6 +583,8 @@ def update_match(match, document, changes=False):
     match.stats = document.get("stats")
     match.producer = m["producer"]
     match.state = m["state"]
+    match.name = m.get("name") or ""
+    match.verdict = m.get("verdict")
     match.finished_at = timestamp(m, "finished_at")
     match.updated_at = timestamp(m, "updated_at")
     match.sprt = document.get("sprt")
@@ -510,7 +596,7 @@ def update_match(match, document, changes=False):
         schedule.apply_changes(match, document.get("games") or [])
     else:
         schedule.replace(match, document.get("games"))
-    match.save(update_fields=["producer", "state", "finished_at", "updated_at", "sprt", "stats", "machines",
+    match.save(update_fields=["producer", "state", "name", "verdict", "finished_at", "updated_at", "sprt", "stats", "machines",
                               "progress", "report_seq", "schedule_digest"])
     rows = {row["opponent"]: row for row in document["results"]}
     for result in match.results.all():

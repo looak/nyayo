@@ -3,7 +3,7 @@ from django.db import models
 from django.utils import timezone
 
 # A producer's match is `running`, ends as one of the others, and may go back to running (OpenBench restarts tests).
-STATES = ["running", "finished", "stopped", "error"]
+STATES = ["running", "finished", "stopped", "error", "waiting", "held", "failed_prechecks"]
 KINDS = ["sprt", "gauntlet", "selfplay", "games"]
 RESULTS = ["1-0", "0-1", "1/2-1/2", "*"]
 
@@ -36,7 +36,7 @@ class Match(models.Model):
     machine = models.ForeignKey("runs.Machine", null=True, blank=True, on_delete=models.SET_NULL,
                                 related_name="matches")
     kind = models.CharField(max_length=20, choices=[(k, k) for k in KINDS], db_index=True)
-    state = models.CharField(max_length=10, choices=[(s, s) for s in STATES], db_index=True)
+    state = models.CharField(max_length=20, choices=[(s, s) for s in STATES], db_index=True)
     producer = models.JSONField(default=dict)
     producer_name = models.CharField(max_length=100, blank=True)
     name = models.CharField(max_length=200, blank=True)
@@ -53,6 +53,8 @@ class Match(models.Model):
     # the producer's own Elo and error { elo, error, model }, which may change as the match goes on
     stats = models.JSONField(null=True, blank=True)
     machines = models.JSONField(default=list)
+    # why a test failed or is held, { blame, summary, detail, where, seen_on }, as the producer wrote it
+    verdict = models.JSONField(null=True, blank=True)
     # { total, played, playing }; the schedule itself is rows (ScheduleEntry)
     progress = models.JSONField(null=True, blank=True)
     # the seq of the last report that carried one, which a report by changes must name as its base, and the digest of

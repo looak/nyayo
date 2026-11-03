@@ -429,3 +429,88 @@ class Schedule(MatchTestCase):
         self.assertEqual(response.status_code, 201, response.content)
         game = Game.objects.get()
         self.assertEqual((game.opponent, game.colour), ("belette", "black"))
+
+
+STEPS = [
+    {"step": "picked_up", "state": "passed", "at": "2026-11-03T09:00:04Z"},
+    {"step": "compile", "side": "dev", "state": "passed", "at": "2026-11-03T09:00:50Z", "seconds": 41,
+     "cached": False},
+    {"step": "bench", "side": "dev", "state": "failed", "at": "2026-11-03T09:01:30Z", "seconds": 38,
+     "detail": "Wrong bench: 53681270, expected 53681269", "log": None, "tries": 1, "blame": "engine",
+     "evidence": [{"points_at": "engine", "text": "Base matched its bench on this worker."}],
+     "effect": "The test stops.", "retry_at": "2026-11-03T09:06:30Z", "nodes": 53681270, "nps": 1200000},
+    {"step": "running", "state": "pending"},
+]
+VERDICT = {"blame": "engine", "summary": "Dev doesn't compile", "detail": "Base compiled beside it.",
+           "where": "src/eval/mobility.cpp:212", "seen_on": ["hunt", "tor"]}
+
+
+class StepsAndVerdicts(MatchTestCase):
+    def test_each_new_state_is_taken(self):
+        for state in ("waiting", "held", "failed_prechecks"):
+            response = self.put_match(v1(match__state=state))
+            self.assertIn(response.status_code, (200, 201), response.content)
+            self.assertEqual(Match.objects.get().state, state)
+
+    def test_an_unknown_state_is_still_refused(self):
+        self.assertRefused(self.put_match(v1(match__state="queued")), 400, "match.state must be one of")
+
+    def test_verdict_and_steps_are_stored(self):
+        document = v1(match__state="failed_prechecks", match__verdict=VERDICT,
+                      machines=[{"name": "hunt", "games": 0, "workloads": 1, "active": True, "steps": STEPS}])
+        self.assertEqual(self.put_match(document).status_code, 201)
+        match = Match.objects.get()
+        self.assertEqual(match.verdict, VERDICT)
+        self.assertEqual(match.machines[0]["steps"], STEPS)
+
+    def test_verdict_and_steps_may_change_and_go(self):
+        self.put_match(v1(match__state="held", match__verdict=VERDICT,
+                          machines=[{"name": "hunt", "games": 0, "steps": STEPS[:1]}]))
+        later = v1(match__updated_at="2026-11-03T10:00:00Z",
+                   machines=[{"name": "hunt", "games": 0, "workloads": 2, "active": False, "steps": STEPS}])
+        self.assertEqual(self.put_match(later).status_code, 200)
+        match = Match.objects.get()
+        self.assertIsNone(match.verdict)
+        self.assertEqual((match.state, len(match.machines[0]["steps"])), ("running", 4))
+
+    def test_a_rename_is_an_update(self):
+        self.put_match(v1())
+        self.assertEqual(self.put_match(v1(match__name="Add mobility (abc123)")).status_code, 200)
+        self.assertEqual(Match.objects.get().name, "Add mobility (abc123)")
+
+    def test_other_fixed_fields_are_still_fixed(self):
+        self.put_match(v1())
+        self.assertRefused(self.put_match(v1(match__kind="games")), 409, "match.kind changed")
+
+    def test_older_documents_are_unchanged(self):
+        self.assertEqual(self.put_match(v1()).status_code, 201)
+        match = Match.objects.get()
+        self.assertEqual((match.verdict, match.machines), (None, [{"name": "hunt", "games": 20}]))
+
+    def test_malformed_additions_are_refused(self):
+        def machine(**fields):
+            return v1(machines=[{"name": "hunt", "games": 0, **fields}])
+
+        def step(**fields):
+            return machine(steps=[{"step": "compile", "state": "passed", **fields}])
+
+        cases = [
+            (v1(match__verdict="engine"), "match.verdict must be an object"),
+            (v1(match__verdict={"blame": "me"}), "match.verdict.blame"),
+            (v1(match__verdict={"blame": "engine", "seen_on": "hunt"}), "match.verdict.seen_on"),
+            (machine(workloads=-1), "machines[0].workloads"),
+            (machine(active="yes"), "machines[0].active"),
+            (machine(steps={}), "machines[0].steps must be a list"),
+            (machine(steps=["compile"]), "machines[0].steps[0] must be an object"),
+            (step(state="done"), "machines[0].steps[0].state"),
+            (step(side="both"), "machines[0].steps[0].side"),
+            (step(at="yesterday"), "machines[0].steps[0].at"),
+            (step(blame="me"), "machines[0].steps[0].blame"),
+            (step(tries=-1), "machines[0].steps[0].tries"),
+            (step(evidence=[{"text": "x"}]), "machines[0].steps[0].evidence[0]"),
+            (step(log="x" * 4097), "machines[0].steps[0].log is over"),
+        ]
+        for document, containing in cases:
+            with self.subTest(containing):
+                self.assertRefused(self.put_match(document), 400, containing)
+        self.assertEqual(Match.objects.count(), 0)

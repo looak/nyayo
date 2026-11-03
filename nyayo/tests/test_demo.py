@@ -70,8 +70,23 @@ class SeedDemo(NyayoTestCase):
         self.assertIn("mini live-board", self.client.get("/matches").content.decode())
         self.assertEqual(self.client.get("/matches/demo-gauntlet-running/games/41").status_code, 200)
 
+    def test_the_tests_that_have_not_played(self):
+        self.seed()
+        states = {m.pk: m.state for m in Match.objects.filter(pk__in=["demo-sprt-waiting", "demo-sprt-held",
+                                                                       "demo-sprt-failed-start"])}
+        self.assertEqual(states, {"demo-sprt-waiting": "waiting", "demo-sprt-held": "held",
+                                  "demo-sprt-failed-start": "failed_prechecks"})
+        failed = Match.objects.get(pk="demo-sprt-failed-start")
+        self.assertEqual(failed.verdict["blame"], "engine")
+        self.assertEqual(failed.machines[0]["steps"][2]["blame"], "engine")
+        for match_id, state in (("demo-sprt-waiting", "waiting"), ("demo-sprt-held", "held"),
+                                ("demo-sprt-failed-start", "failed_prechecks")):
+            self.assertContains(self.client.get(f"/matches/{match_id}"), f"badge {state}")
+        self.assertEqual(self.client.get("/matches").status_code, 200)
+        self.assertEqual(self.client.get("/").status_code, 200)
+
     def test_seeding_again_starts_over(self):
         self.seed()
         self.seed()
-        self.assertEqual(Match.objects.filter(pk__startswith="demo-").count(), 11)
+        self.assertEqual(Match.objects.filter(pk__startswith="demo-").count(), 14)
         self.assertEqual(Batch.objects.count(), 1)
