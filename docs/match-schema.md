@@ -205,9 +205,14 @@ the field.
 
 ### Expiry
 
-Matches don't expire, except one in `failed_prechecks` with no games, which a producer-side failed start leaves behind
-and which goes 48 hours after it ended. nyayo does not do this yet, so for now such a match stays; the rule is stated
-here so a producer can rely on it.
+Matches don't expire, except a failed start. nyayo's worker looks once an hour (not the daily `expire_runs` timer, which
+would make 48 hours up to 72) and deletes a match when all of these hold: its state is `failed_prechecks`, its
+`finished_at` is older than `NYAYO_FAILED_PRECHECKS_HOURS` (48), its results count no games, and it has no game rows,
+schedule entries, uploads or batches. It removes the match's rows and its archive (`archive/matches/<id>.json` and
+`.meta.json`), so a rebuild doesn't bring it back; the test itself stays on the producer. A match in any other state, a
+`failed_prechecks` match with no `finished_at`, and one with games in any state are never deleted. A test reported again
+returns with its old `finished_at` and goes at the next look; one restarted by hand is no longer `failed_prechecks`, and
+if it fails again its `finished_at` is new, so the 48 hours start over. A producer can rely on this.
 
 ### Reports by changes
 

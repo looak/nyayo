@@ -63,6 +63,8 @@ NYAYO_COMMITTED_DAYS = int(os.environ.get("NYAYO_COMMITTED_DAYS", 30))
 # A test that failed its start (state failed_prechecks, no games) deletes itself this many hours after it ended. The
 # match page says when; the deleting is the SPRT steps plan's step 6, which reads this too.
 NYAYO_FAILED_PRECHECKS_HOURS = int(os.environ.get("NYAYO_FAILED_PRECHECKS_HOURS", 48))
+# how often the worker looks for failed starts that are due (seconds)
+NYAYO_EXPIRY_EVERY = int(os.environ.get("NYAYO_EXPIRY_EVERY", 3600))
 
 # A git checkout (a private repository, cloned there) that manage.py backup commits the archive, the games and a dump of
 # the database to. Unset, backup only makes a local copy of the database.

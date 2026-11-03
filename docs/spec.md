@@ -100,7 +100,8 @@ bounds and result, and `stats` its Elo and error. The shape it sent before v1 is
   failure, with no games). Pages show the state as sent; a waiting, held or failed-start match is a plain match with
   no results yet. `match.verdict` (`blame`, `summary`, `detail`, `where`, `seen_on`) and each machine's `workloads`,
   `active` and `steps` are stored as sent and validated, not yet drawn (no worker cards or summary). Matches don't
-  expire, except, once built, a `failed_prechecks` match with no games, 48 hours after it ended (not built yet).
+  expire, except a `failed_prechecks` match with no games, which the worker deletes with its archive once
+  `finished_at` plus `NYAYO_FAILED_PRECHECKS_HOURS` (48) has passed (see *The worker*).
 - **No state is final**: any state may go back to `running` (OpenBench restarts tests). `finished_at` is cleared and
   set again.
 - **What may change under one id**: state, `name`, `verdict`, timestamps, the counts, the producer's LLR, result and `stats`, the machines
@@ -180,6 +181,10 @@ the same bytes again are `200`, different bytes under that name `409`, an unknow
   or lacks a `[Subject]` (white or black) or an `[Opponent]` that is one of the match's: nothing is matched by name.
   The reason, naming the game and the ply, is on the upload (the admin, *Uploads*, can read a refused one again) and
   the match page counts uploads waiting and refused. A refused upload sent again is read again.
+- **Failed starts**: at its start and then every `NYAYO_EXPIRY_EVERY` seconds (3600) the worker deletes the matches
+  that are `failed_prechecks` with a `finished_at` older than `NYAYO_FAILED_PRECHECKS_HOURS` (48), whose results count
+  no games and which have no game rows, schedule entries, uploads or batches, with their rows and their archive
+  (`matches/expiry.py`). Nothing else is deleted this way. A failure of the look is logged and tried again at the next.
 - **Batches** are nyayo's own: 64 games each (`NYAYO_BATCH_GAMES`), one match per batch, every game as it came. The
   batch being filled is a plain file, `<number>.pgn`; at 64 games, or short once its match has ended and nothing has
   been heard of it for `NYAYO_SEAL_AFTER` seconds (300), it is compressed with zstd into `<number>.pgn.zst`, which
@@ -288,7 +293,7 @@ no rule of its own: every verdict arrives written out. With no worker yet the ar
 
 `match.verdict` is the headline under the title (`Stopped:`, `Held:` or `Waiting:` and its summary, its detail, where,
 seen on, when it stopped), and for `failed_prechecks` when it deletes itself, `finished_at` plus
-`NYAYO_FAILED_PRECHECKS_HOURS` (48); the deleting is step 6 of the SPRT steps plan and reads the same setting. A test in
+`NYAYO_FAILED_PRECHECKS_HOURS` (48); the worker deletes it then, reading the same setting and the same `finished_at`. A test in
 `waiting`, `held` or `failed_prechecks` with no games shows no tiles, results or progress until it has results. With steps,
 *elapsed* and *pace* count from the first worker's `running` step, not from creation, and the card says *created* and
 *playing since*. Each engine in the head links to `<repo>/commit/<sha>` (the engine's `repo`, else `NYAYO_GITHUB_REPO`).

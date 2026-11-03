@@ -83,6 +83,18 @@ class SeedDemo(NyayoTestCase):
         self.assertEqual(self.client.get("/matches").status_code, 200)
         self.assertEqual(self.client.get("/").status_code, 200)
 
+    def test_a_failed_start_in_the_demo_is_on_its_way_out(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from nyayo.matches import expiry
+        from nyayo.matches.ingest import archive_path
+        self.seed()
+        self.assertEqual(expiry.expire(), [])
+        self.assertContains(self.client.get("/matches/demo-sprt-failed-bench"), "Deletes itself")
+        self.assertEqual(expiry.expire(now=timezone.now() + timedelta(hours=8)), ["demo-sprt-failed-bench"])
+        self.assertFalse(archive_path("demo-sprt-failed-bench").exists())
+        self.assertTrue(Match.objects.filter(pk="demo-sprt-failed-start").exists())
+
     def test_seeding_again_starts_over(self):
         self.seed()
         self.seed()
