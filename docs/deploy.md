@@ -21,7 +21,7 @@ Open http://127.0.0.1:8001/ for the site and http://127.0.0.1:8001/admin/ for th
 
 ## bobby
 
-bobby (172.16.100.11, user `fischer`) also runs OpenBench on port 8000. nyayo runs next to it as its own service on
+bobby (172.16.100.11, user `fischer`) ran OpenBench on port 8000 (stopped now, see *The lab*). nyayo runs as its own service on
 port 8001 under gunicorn, in its own conda env. They share nothing, so either can be restarted without touching the
 other.
 
@@ -117,8 +117,11 @@ activate the env first.
 ## The lab: OpenBench's workers
 
 From nyayo 2.0 nyayo is OpenBench's server: it makes the tests, hands the workers their work, and takes their results.
-The worker that plays is OpenBench's own `Client/` (looak/openbench_eg, `master`), unchanged. OpenBench itself, on port
-8000, is not needed and is not touched; it can keep running until the last of its tests has ended.
+The worker that plays is OpenBench's own `Client/` (looak/openbench_eg, `master`), unchanged. OpenBench itself is no longer
+run on bobby: its service is stopped and disabled, and its checkout has the merged code, whose `migrate` refuses its old
+database, so it cannot just be started again. Going back means nyayo goes back (see the checklist in the pull request),
+and SPRTs stay off until the 2.0 code is fixed forward. Bringing OpenBench back would take a `git reset` of its checkout
+to the commit before the merge, enabling its service again and a matching client version; that has not been tried.
 
 **What is new in the environment**
 
