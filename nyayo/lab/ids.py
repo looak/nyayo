@@ -18,14 +18,15 @@ def match_id(test_id, instance=None):
     return f"openbench-{instance if instance is not None else settings.NYAYO_INSTANCE}-{test_id}"
 
 
-def first_test_id(match_ids, instance=None):
+def first_test_id(match_ids):
     """The id the first test takes, given the ids of the matches that exist.
 
-    Above the highest N in `openbench-<instance>-<N>` rounded up to the next thousand (so 1234 and 1999 give 2000, and
-    2000 gives 3000), or 1 when there is none of that form.
+    Above the highest N in any `openbench-<instance>-<N>`, whatever the instance, rounded up to the next thousand (so
+    1234 and 1999 give 2000, and 2000 gives 3000), or 1 when there is none of that form. Any instance, because this
+    runs once in a migration: with NYAYO_INSTANCE unset or wrong at that moment, the numbering would restart below the
+    old tests and a later correction of the setting would collide.
     """
-    instance = instance if instance is not None else settings.NYAYO_INSTANCE
-    pattern = re.compile(rf"^openbench-{re.escape(instance)}-(\d+)$")
+    pattern = re.compile(r"^openbench-.+-(\d+)$")
     numbers = [int(m.group(1)) for m in map(pattern.match, match_ids) if m]
     if not numbers:
         return 1

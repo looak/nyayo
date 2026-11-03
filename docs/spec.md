@@ -327,9 +327,9 @@ OpenBench's server (looak/ramani `plans/nyayo-2.md`). So far it holds only data:
   an `EngineConfig` is saved). `Profile` is gone: `Machine.user` and `Test.author` are Django's `auth.User`. There is
   no `PGN`: an upload of games becomes one of nyayo's batches. All are registered plainly in the admin.
 - **A test and its match.** A test's match has the id `openbench-<NYAYO_INSTANCE>-<test id>` (`NYAYO_INSTANCE`, default
-  `openbench`; `nyayo.lab.ids.match_id`). `Test` has no link to `Match`: the id is a function of the test's, and the
+  `openbench`; `nyayo.lab.ids.match_id`), which must be the value OpenBench had on bobby. `Test` has no link to `Match`: the id is a function of the test's, and the
   match exists only once the first document is ingested.
-- **Test ids.** The first test's id is above the highest `N` in the existing `openbench-<instance>-<N>` match ids,
+- **Test ids.** The first test's id is above the highest `N` in the existing `openbench-<anything>-<N>` match ids (any instance, so a wrong `NYAYO_INSTANCE` can't restart the numbering),
   rounded up to the next thousand (1234 gives 2000, 2000 gives 3000; 1 when there are none). The data migration
   `0002_seed` works it out once and sets SQLite's sequence; ids count on, and are never reused.
 - **Maths.** `nyayo/lab/stats.py` (SPRT log-likelihood ratios, Elo and its interval) and `spsa_utils.py` (SPSA

@@ -30,13 +30,14 @@ class Rule(SimpleTestCase):
         self.assertEqual(ids.first_test_id(["openbench-openbench-5", "openbench-openbench-1234"]), 2000)
         self.assertEqual(ids.first_test_id(["openbench-openbench-1999"]), 2000)
 
-    def test_only_the_ids_of_this_form_and_instance_count(self):
-        self.assertEqual(ids.first_test_id(["gauntlet-7", "openbench-other-9000", "openbench-openbench-12-x",
-                                            "openbench-openbench-40"]), 1000)
-        self.assertEqual(ids.first_test_id(["gauntlet-7", "openbench-other-9000"]), 1)
+    def test_only_the_ids_of_this_form_count(self):
+        self.assertEqual(ids.first_test_id(["gauntlet-7", "openbench-openbench-12-x", "openbench-openbench-40"]), 1000)
+        self.assertEqual(ids.first_test_id(["gauntlet-7", "openbench-openbench-12-x"]), 1)
 
-    def test_the_instance_may_be_given(self):
-        self.assertEqual(ids.first_test_id(["openbench-lab-2500"], instance="lab"), 3000)
+    def test_any_instance_counts_whatever_the_setting_is(self):
+        self.assertEqual(ids.first_test_id(["openbench-bobby-2500", "openbench-openbench-40"]), 3000)
+        with override_settings(NYAYO_INSTANCE="somethingelse"):
+            self.assertEqual(ids.first_test_id(["openbench-openbench-1234"]), 2000)
 
     def test_a_match_id_is_built_from_the_instance(self):
         self.assertEqual(ids.match_id(1234), "openbench-openbench-1234")
