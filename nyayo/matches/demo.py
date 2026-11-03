@@ -53,6 +53,15 @@ GAUNTLETS = [
 ]
 
 
+# id, state, minutes since the last report: tests that have not played a game, the way OpenBench will report them
+# before and without results (docs/match-schema.md, Machines and Verdict)
+UNSTARTED = [
+    ("demo-sprt-waiting", "waiting", 2),
+    ("demo-sprt-held", "held", 30),
+    ("demo-sprt-failed-start", "failed_prechecks", 90),
+]
+
+
 def score_of(elo):
     return 1 / (1 + 10 ** (-elo / 400))
 
@@ -123,6 +132,61 @@ def document(match_id, state, now, started, counts, llr, result, stats_):
                  "lower": round(LOWER, 3), "upper": round(UPPER, 3), "result": result},
         "stats": stats_, "machines": machines(wins + draws + losses, now),
     }
+
+
+def step(name, state, at, side=None, **fields):
+    row = {"step": name, "state": state, "at": at.isoformat()}
+    if side:
+        row["side"] = side
+    return {**row, **fields}
+
+
+def walk(state, at):
+    """What the worker `hunt` has done by the time the test is `state`."""
+    done = [step("picked_up", "passed", at), step("compile", "passed", at, "dev", seconds=41, cached=False),
+            step("compile", "passed", at, "base", seconds=0, cached=True)]
+    if state == "waiting":
+        return []
+    if state == "held":
+        return done + [
+            step("bench", "failed", at, "dev", seconds=38, tries=2, detail="Wrong bench: 2301557, expected 2301556",
+                 blame="unclear", evidence=[{"points_at": "either", "text": "Base's bench is wrong here too."}],
+                 effect="The test is held."),
+            step("bench", "failed", at, "base", seconds=36, tries=2, detail="Wrong bench: 2299872, expected 2299871",
+                 blame="unclear"),
+            step("running", "pending", at)]
+    return done[:2] + [
+        step("compile", "failed", at, "dev", seconds=12, tries=1, detail="error: no member named 'mobility'",
+             log="src/eval/mobility.cpp:212:9: error: no member named 'mobility' in 'Position'", blame="engine",
+             evidence=[{"points_at": "engine", "text": "Base compiled beside it."}], effect="The test stops."),
+        step("compile", "passed", at, "base", seconds=0, cached=True),
+        step("bench", "pending", at, "dev"), step("bench", "pending", at, "base"), step("running", "pending", at)]
+
+
+VERDICTS = {
+    "held": {"blame": "unclear", "summary": "Bench is wrong on both engines",
+             "detail": "No other worker has tried, so nobody can say whose it is.", "where": None, "seen_on": ["hunt"]},
+    "failed_prechecks": {"blame": "engine", "summary": "Dev doesn't compile",
+                         "detail": "Every worker that tried gave the same error, and base compiled beside it.",
+                         "where": "src/eval/mobility.cpp:212", "seen_on": ["hunt"]},
+}
+
+
+def seed_unstarted(match_id, state, silent_minutes, now):
+    """One report of a test that has no results yet: waiting for a worker, held, or stopped on a failed start."""
+    forget(match_id)
+    at = now - timedelta(minutes=silent_minutes)
+    doc = document(match_id, state, at, at - timedelta(minutes=MINUTES_PER_REPORT), (0, 0, 0, [0] * 5), 0.0, None,
+                   None)
+    doc["match"]["finished_at"] = at.isoformat() if state == "failed_prechecks" else None
+    if state in VERDICTS:
+        doc["match"]["verdict"] = VERDICTS[state]
+    doc["stats"] = None
+    doc["machines"] = ([] if state == "waiting" else
+                       [{"name": "hunt", "user": "alex", "games": 0, "workloads": 2, "active": True,
+                         "updated_at": at.isoformat(), "steps": walk(state, at)}])
+    ingest(json.dumps(doc).encode(), None, match_id)
+    Match.objects.filter(pk=match_id).update(received_at=at)
 
 
 def forget(match_id):
@@ -335,4 +399,6 @@ def seed():
     seed_batch("demo-sprt-passed")
     for match_id, state, rating, finished, playing, silent in GAUNTLETS:
         seed_gauntlet(match_id, state, rating, finished, playing, silent, now)
-    return [s[0] for s in SCENARIOS] + [g[0] for g in GAUNTLETS]
+    for match_id, state, silent_minutes in UNSTARTED:
+        seed_unstarted(match_id, state, silent_minutes, now)
+    return [s[0] for s in SCENARIOS] + [u[0] for u in UNSTARTED] + [g[0] for g in GAUNTLETS]

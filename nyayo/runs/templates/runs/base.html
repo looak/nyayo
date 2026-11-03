@@ -222,7 +222,8 @@
   table.penta th, table.penta td { padding: .15rem .8rem; }
   .graph-title { margin: 1rem 0 .3rem; font-size: .9rem; }
   .badge.silent, .outcome.silent { color: var(--wip); background: var(--wip-bg); }
-  .badge.error { color: var(--worse); background: var(--error-bg); }
+  .badge.error, .badge.failed_prechecks { color: var(--worse); background: var(--error-bg); }
+  .badge.waiting, .badge.held, .outcome.waiting, .outcome.held { color: var(--muted); background: var(--code-bg); }
   .outcome-win { color: var(--better); font-weight: 600; }
   .outcome-loss { color: var(--worse); font-weight: 600; }
   .outcome-draw { color: var(--muted); font-weight: 600; }
@@ -257,7 +258,7 @@
   .box-title .right { margin-left: auto; font-size: .8rem; }
   .card.top-running { border-top-color: var(--accent); } .card.top-silent { border-top-color: var(--warning); }
   .card.top-finished, .card.top-passed { border-top-color: var(--success); }
-  .card.top-failed, .card.top-error { border-top-color: var(--danger); } .card.top-stopped { border-top-color: #6c757d; }
+  .card.top-failed, .card.top-error, .card.top-failed_prechecks { border-top-color: var(--danger); } .card.top-stopped { border-top-color: #6c757d; }
   .columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; align-items: start; }
   .columns.wide-left { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
   .columns > * { min-width: 0; }
@@ -376,6 +377,7 @@
   .outcome.running { color: var(--committed); background: var(--committed-bg); }
   .outcome.finished { color: var(--better); background: var(--published-bg); }
   .outcome.stopped { color: var(--wip); background: var(--wip-bg); }
+  .outcome.failed_prechecks { color: var(--worse); background: var(--error-bg); }
   .outcome.card-state { text-transform: none; font-weight: 600; letter-spacing: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: .4rem 2rem; margin: .5rem 0 0; }
   .chips dt { color: var(--muted); font-size: .8rem; }

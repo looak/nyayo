@@ -95,9 +95,15 @@ bounds and result, and `stats` its Elo and error. The shape it sent before v1 is
   what the first wrote: one answer is `201`, the other `200`.
 - **A match is a comparison in itself**: the opponents are in the document, so matches take no part in the ancestry
   rules for checks and have no wip/committed/published life. They name the engine's commit where one is known.
+- **States**: `running`, `finished`, `stopped`, `error`, and for a test reported from its creation `waiting` (no worker
+  has reached running, no games), `held` (a failure nobody can place) and `failed_prechecks` (stopped on the engine's
+  failure, with no games). Pages show the state as sent; a waiting, held or failed-start match is a plain match with
+  no results yet. `match.verdict` (`blame`, `summary`, `detail`, `where`, `seen_on`) and each machine's `workloads`,
+  `active` and `steps` are stored as sent and validated, not yet drawn (no worker cards or summary). Matches don't
+  expire, except, once built, a `failed_prechecks` match with no games, 48 hours after it ended (not built yet).
 - **No state is final**: any state may go back to `running` (OpenBench restarts tests). `finished_at` is cleared and
   set again.
-- **What may change under one id**: state, timestamps, the counts, the producer's LLR, result and `stats`, the machines
+- **What may change under one id**: state, `name`, `verdict`, timestamps, the counts, the producer's LLR, result and `stats`, the machines
   that played, `report`, and each game's state, result, termination and fault. Counts only grow, across restarts too. A
   started game's number, round, opponent and colour are fixed, and a finished game keeps its result; a scheduled game
   may be corrected and the list extended; only a whole document can drop an entry, and never a started one. Anything
@@ -272,7 +278,8 @@ An SPRT has no schedule, so its games played are the results' count.
 `/matches` shows a card for each match being played right now, above the list (games, Elo, how it is going and when
 it will be done, and the boards of up to six games in play; a silent match is left out), and colours the list's score
 and Elo; its filters, like the games list's, are in a bar that opens, open while one is set. A lone running card
-spans the list's width. Every list pages 64 to a page. `manage.py seed_demo` (debug mode only) makes six simulated SPRTs and five
+spans the list's width. Every list pages 64 to a page. `manage.py seed_demo` (debug mode only) makes nine simulated SPRTs (three of them
+without games: waiting, held, a failed start) and five
 simulated gauntlets (running, finished, stopped with games cut off, silent, just started), with their games, to polish
 the pages on.
 

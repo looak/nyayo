@@ -46,9 +46,10 @@ batch; they end up in URLs and file names. The match id `batches` is reserved (i
   "schema_version": 1,
   "match": {
     "id": "b7d855a0-3790-499a-90ab-64eab6b99ad4",   // producer-chosen and stable; a runner uses a uuid
-    "name": "elephant-1.0.0-ccrl-blitz",             // optional, shown instead of the id
+    "name": "elephant-1.0.0-ccrl-blitz",             // optional, shown instead of the id; may change
     "kind": "gauntlet",                              // sprt | gauntlet | selfplay | games
-    "state": "running",                              // running | finished | stopped | error
+    "state": "running",                              // running | finished | stopped | error, and before or without
+                                                     // games: waiting | held | failed_prechecks (see States)
     "producer": { "name": "uwanja", "version": "0.1.0", "url": null },   // url: a link back, when there is one
     "started_at": "2026-10-15T08:00:00Z",            // ISO 8601 with a timezone
     "updated_at": "2026-10-15T08:30:00Z",            // required, when the producer last had news
@@ -101,6 +102,34 @@ and `model` says how it was computed (`penta` or `tri`). nyayo shows it as the m
 and keeps its own calculation for matches without it and for each opponent on the page. It is how an SPRT's figures
 are OpenBench's, the source of truth for an SPRT, rather than a second calculation that disagrees with it.
 
+### States
+
+`running` means games are being played. Three states come before or instead of that, for a producer that reports a test
+from its creation (OpenBench, [the SPRT steps plan](https://github.com/looak/ramani/blob/main/plans/sprt-steps.md)):
+
+| State | Means |
+|:--|:--|
+| `waiting` | no worker has reached running and there are no games; the settings and engines are known, results are not |
+| `held` | a failure nobody can place, and no worker able to play; waits for a second worker or the owner |
+| `failed_prechecks` | stopped on the engine's failure, with no games; expires (*Expiry*) |
+
+A test goes `waiting` to `running`, and any state may follow any other: no state is final. nyayo shows the state as sent
+and decides nothing from it.
+
+### Verdict
+
+`match.verdict` is optional, and sent when the state comes from a failure. It is the headline of the test, in the
+producer's words; nyayo applies no rule of its own, so a producer can change how it judges without a nyayo change. It
+may change, and go (`null` or left out).
+
+```jsonc
+{ "blame": "engine",                                  // engine | worker | unclear
+  "summary": "Dev doesn't compile",
+  "detail": "Every worker that tried gave the same error, and base compiled beside it.",
+  "where": "src/eval/mobility.cpp:212",              // optional; summary, detail and where are strings or null
+  "seen_on": ["hunt", "tor"] }                       // optional, machine names
+```
+
 ### Machines
 
 `machines` lists the workers that played a test, shown as a list on an SPRT's page, busiest first. Only `name` and
@@ -119,10 +148,47 @@ are OpenBench's, the source of truth for an SPRT, rather than a second calculati
 | `os` | the operating system and its release, `Linux 6.8.0` |
 | `concurrency` | games it plays at a time |
 | `cpu_flags` | the instruction sets it has (`AVX2`, `BMI2`, `AVX512VNNI`, ...); the notable ones show beside the row, all of them under it |
+| `workloads` | how many workloads it has been handed for this match, a whole number |
+| `active` | whether it is working on this test now (`false`: on something else, or not heard from lately), `true` or `false` |
+| `steps` | its walk from pickup to games, see below |
+
+#### Steps
+
+`steps` lists a worker's walk (picked up, compile and bench on each engine, running) in the order to draw it. nyayo
+draws them as sent and knows nothing of what they mean, so a producer may send others; it applies no rule to them.
+Only `step` and `state` are needed.
+
+| Field | Meaning |
+|:--|:--|
+| `step` | its name: `picked_up`, `compile`, `bench`, `running`, or the producer's own |
+| `side` | `dev` or `base` for a step that is done per engine |
+| `state` | `pending`, `active`, `passed` or `failed` |
+| `at`, `seconds` | when it last changed (ISO 8601 with a timezone), how long it took |
+| `cached` | a compile that found its binary instead of building it |
+| `detail` | one line a person can act on |
+| `log` | the end of the compiler's output, at most 4096 bytes (`400` over that) |
+| `nodes`, `nps` | a bench's, when it has them |
+| `tries` | how many times this worker has failed this step |
+| `blame` | on a failed step: `engine`, `worker` or `unclear` |
+| `evidence` | on a failed step: the reasons, each `{ "points_at": "engine" \| "worker" \| "either", "text": "..." }` |
+| `effect` | on a failed step: what happens next, in a line |
+| `retry_at` | when the worker tries again, if it will |
+
+```jsonc
+{ "name": "hunt", "games": 0, "workloads": 1, "active": true,
+  "steps": [
+    { "step": "picked_up", "state": "passed", "at": "2026-11-03T09:00:04Z" },
+    { "step": "compile", "side": "dev", "state": "passed", "at": "2026-11-03T09:00:50Z", "seconds": 41, "cached": false },
+    { "step": "bench", "side": "dev", "state": "failed", "at": "2026-11-03T09:01:30Z", "seconds": 38,
+      "detail": "Wrong bench: 53681270, expected 53681269", "tries": 1, "blame": "engine",
+      "evidence": [ { "points_at": "engine", "text": "Base matched its bench on this worker." } ],
+      "effect": "The test stops." },
+    { "step": "running", "state": "pending" } ] }
+```
 
 ### What may change under one id
 
-`state`, `updated_at`, `finished_at`, `producer.url` (a link back, which a producer may only learn later), the counts in
+`state`, `name` (a label: a producer may rename a test, say when it learns a branch), `verdict`, `updated_at`, `finished_at`, `producer.url` (a link back, which a producer may only learn later), the counts in
 `results`, `sprt.llr` and `sprt.result`, `stats`, `machines`, `pgn`, `progress`, `report`, and each game's `state`,
 `result`, `termination` and `fault`. **Counts only grow**, across restarts too (a
 row can't disappear, `penta` and the per-side counts can't shrink). Everything else (subject, opponents, settings,
@@ -137,7 +203,11 @@ the field.
   resumed gauntlet replays what was cut off.
 - A match that isn't `running` is never shown as playing.
 
-Matches don't expire.
+### Expiry
+
+Matches don't expire, except one in `failed_prechecks` with no games, which a producer-side failed start leaves behind
+and which goes 48 hours after it ended. nyayo does not do this yet, so for now such a match stays; the rule is stated
+here so a producer can rely on it.
 
 ### Reports by changes
 
@@ -419,7 +489,7 @@ batch of results and every action by hand:
 |:--|:--|
 | `match.id` | `openbench-<instance>-<test id>` (`NYAYO_INSTANCE`; bobby's is `openbench`) |
 | `match.kind` | `sprt` for an SPRT, `games` for a fixed number of games |
-| `match.state` | finished (passed or failed), stopped (deleted, or stopped by hand), error (a bench mismatch), else running |
+| `match.state` | finished (passed or failed), stopped (deleted, or stopped by hand), error (a bench mismatch), else running; `waiting`, `held` and `failed_prechecks` once OpenBench reports a test from its creation (*States*) |
 | `match.producer` | `{ "name": "OpenBench", "version": "<instance>", "url": "<absolute test page>" }` |
 | `match.started_at`, `finished_at` | the test's creation, and its end once finished |
 | `match.settings` | `tc` (dev's time control), `book`, `runner` `{ "name": "cutechess-ob" }`, `pgn_options` `[]`; OpenBench's own (`upload_pgns`, adjudication, syzygy, scaling, base's time control) under `openbench` |

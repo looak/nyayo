@@ -56,7 +56,7 @@ cp .env.example .env
 ```
 
 `manage.py seed_demo` (debug mode only) makes six simulated SPRTs (passed, failed, stopped, running, silent, just
-started) with a history, a few games and a batch, and five simulated gauntlets (running, finished, stopped with games
+started) with a history, a few games and a batch, three tests that have not played (waiting, held, a failed start), and five simulated gauntlets (running, finished, stopped with games
 cut off, silent, just started) with every game they started, for working on the pages without a real test running.
 
 The **Games** page (`/games`) lists every game kept as data, newest first, 64 to a page: when it was played, its id,
