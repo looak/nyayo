@@ -321,9 +321,9 @@ Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar, which 
 Pi-hole's: Font Awesome Free 6.6.0's solid icons, the twelve used and no more, unchanged, under CC BY 4.0
 (`nyayo/runs/static/img/fa/`, with `LICENSE-fontawesome.txt`; `runs/_tile_icon.html` draws one). The sidebar has a status block
 (whether the worker holds its lock, the game reader, uploads waiting or refused, whether the batches' directory is
-there and how much it holds) and the links, grouped as Main (Dashboard), Testing (Matches with the number live: running and not silent, as the list's cards count them; Runs, Compare),
+there and how much it holds) and the links, grouped as Main (Dashboard), Actions (Create test, Create tune, Create datagen, Upload net, Run gauntlet), Lab (Engines, Books, Machines), Testing (Matches with the number live: running and not silent, as the list's cards count them; Runs, Compare),
 Catalogue (Games with the number kept, Exports, Uploads in the admin) and System (Admin); the page's own link is marked. The
-top bar says where the page is, names the host and the time zone the pages' times are in (`NYAYO_TIME_ZONE`, UTC by default; times are stored in UTC). The status is worked out only when a page's frame is drawn, never
+top bar says where the page is, names the host and the time zone the pages' times are in (`NYAYO_TIME_ZONE`, UTC by default; times are stored in UTC). and who is signed in, with a link to sign in or a button to sign out. Under 900 px the sidebar is one bar with a menu button: the status block goes and the links open and close with it, so the top bar's crumb keeps its room. The status is worked out only when a page's frame is drawn, never
 for the game page's polled fragment. The site has one colour scheme, dark.
 
 | URL | Shows |
@@ -338,6 +338,9 @@ for the game page's polled fragment. The site has one colour scheme, dark.
 | `/matches/{id}` | a head with the match's state and runner, Pi-hole tiles of the figures that matter (a gauntlet: played, performance, score, time to go; an SPRT: games, Elo, LLR, time to go), the settings, an opponent per card or per row of a list (the choice is remembered in a cookie): counts, score, Elo ± error, pentanomial, rating, faults; overall with the performance rating and a table to copy; an opponent can be left out of the figures from the page; a small board for every game in play, each a link to its game and drawn in the browser by chessground (`matches/minis.js`); the SPRT card when present; the games stored as data (and the uploads waiting or refused), with a link to their export; and the games, kept ones included: playing, cut off, scheduled, finished. Refreshes while the match runs. A match that isn't running never shows a game as playing |
 | `/matches/{id}/games/{game}` | a large board with a bar and a clock per engine, an eval bar from white's side, a card per engine (score, depth, time, nodes, nps, PV), the moves in a scrolling list, and graphs per metric with a line per engine (the eval graph from white's side too); stepping through the game by click or arrow keys. The board is lichess's chessground (9.1.1, GPL-3.0, vendored under `nyayo/matches/static/vendor/`), drawn in the browser from every position the page embeds, so a step shows at once and a move animates; the rest of the page then follows from the server. A game is read from its file, or from its batch once it is kept |
 | `/games` | Pi-hole's query log: a filter bar that opens, and every game kept as data, newest first, 64 to a page, its row tinted by a win or a loss for the engine under test: when it was played (a time only where the game has one), its id (a link to its page), white and black (from the card's colour and the match's engines), its moves, result (and win, draw or loss for the engine under test), how it ended (deduced endings marked), the book position it started from with a link to the other games from it, and the match it came from. `?match=`, `?result=` (win, draw, loss), `?ended=` (a rule such as `checkmate` or `repetition`, or another ending such as `resignation` or `time_forfeit`), `?moves_from=` and `?moves_to=` (whole moves) and `?opening=` (16 hex digits) filter it, all together; a bad `ended`, moves or opening is `400`. It reads a page of cards from the index and fills in matches and engines for those 64 rows, so it takes about 0.2 s wherever it is in the list, and it shows a game once the worker has put it away. There are no opening names: the books start 16 plies in, and lichess's table names 0.2% of the games |
+| `/sign-in`, `/sign-out` | Django's own login against the admin's users (`LOGIN_URL`), for staff users only: anyone else, or a wrong password, is refused with the form's reason. `?next=` goes back to the page that asked, and only to this site. Signing out is a `POST` from the top bar |
+| `/create/test`, `/create/tune`, `/create/datagen`, `/upload-net`, `/gauntlet`, `/engines`, `/books` | the actions and the lab's pages that change things. Today each is a **stub** saying what will be there and which step of the nyayo 2.0 plan builds it. Signed out, they redirect to the sign-in page; signed in without staff rights, `403` |
+| `/machines` | a stub, open to read |
 | `/admin/` | machines & tokens, browsing and purging runs and matches; uploads (with the reason a refused one was refused, and a way to read it again) and batches, read-only |
 | `/healthz` | liveness |
 
@@ -346,6 +349,15 @@ shows, and the server answers an empty `204` from a file stat and one row query,
 free. The clocks are reconstructed from the time control and each move's time (exact where a move says `tl=`) and run
 down locally between posts; polling pauses in a hidden tab. A change still redraws the page's whole game body; the
 per-ply record a `PATCH` writes is not read by the pages yet.
+
+### Who may act
+
+Reading is open on the LAN and stays so; anything that starts, changes or stops work needs a signed-in staff user (the
+admin's users, made with `createsuperuser`). `nyayo/actions/access.py` is the one gate: `action_required` wraps a
+function view and `ActionRequiredMixin` a class view, sending a signed-out visitor to `/sign-in?next=` and answering a
+signed-in user without staff rights `403`. The API routes with machine tokens don't pass through it. A page that acts
+is added to `nyayo/actions/urls.py` (or its own app's urls) wrapped in the gate; a stub there is replaced by changing
+its line, and the stubs' table in `nyayo/actions/views.py` loses its entry. There is no lock-out after failed logins.
 
 ### Deployment
 

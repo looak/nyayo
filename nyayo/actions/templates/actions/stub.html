@@ -1,0 +1,11 @@
+{% extends "runs/base.html" %}
+{% block title %}{{ heading }} · nyayo{% endblock %}
+{% block crumb %}{% if here == "engines" or here == "books" or here == "machines" %}Lab{% else %}Actions{% endif %} › {{ heading }}{% endblock %}
+{% block content %}
+<h1>{{ heading }}</h1>
+<div class="card">
+  <p>Not built yet. {{ text }}</p>
+  <p class="muted">Step {{ step }} of <a href="https://github.com/looak/ramani/blob/main/plans/nyayo-2.md">nyayo 2.0</a>.
+    {% if gated %}This page is for signed-in users; you are signed in as {{ user.get_username }}.{% else %}This page reads without a login.{% endif %}</p>
+</div>
+{% endblock %}

@@ -63,13 +63,36 @@
   .topbar .host code { background: var(--code-bg); padding: .1rem .35rem; border-radius: 3px; color: var(--bright); }
   .page { background: var(--bg); min-width: 0; }
   main { padding: 1rem; max-width: 1500px; }
+  .topbar .who { font-size: .78rem; color: var(--muted); white-space: nowrap; }
+  .topbar .who b { color: var(--bright); font-weight: 600; }
+  .topbar form { display: inline; }
+  .topbar .linkish { padding: 0; border: 0; background: none; color: var(--link); font: inherit; cursor: pointer; }
+  .topbar .linkish:hover { text-decoration: underline; }
+  .menu-toggle, #nav-toggle { display: none; }
+  /* sign in, and the forms of the actions */
+  .signin { max-width: 26rem; }
+  .field { display: flex; flex-direction: column; gap: .2rem; margin: .6rem 0; font-size: .78rem; color: var(--muted); }
+  .field input { width: 100%; padding: .32rem .45rem; border: 1px solid var(--line); border-radius: 3px; background: var(--code-bg);
+                 color: var(--fg); font-size: .9rem; }
+  .field input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  button.act { padding: .4rem 1.1rem; border: 0; border-radius: 3px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+  .actions-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-top: .9rem; }
+  .errors { margin: 0 0 .75rem; padding: .55rem .8rem; border-left: 4px solid var(--danger); border-radius: 3px; background: var(--error-bg); }
   @media (max-width: 900px) {
-    .app { grid-template-columns: minmax(0, 1fr); }
-    aside.side { position: static; height: auto; overflow: visible; }
+    .app { grid-template-columns: minmax(0, 1fr); align-content: start; }
+    /* the nav is a menu: shut, the sidebar is one bar with the brand and the button that opens it */
+    aside.side { position: relative; height: auto; overflow: visible; border-right: 0; }
     .side-status { display: none; }
-    .side nav { display: flex; flex-wrap: wrap; } .side nav h5 { display: none; }
-    .side nav a { border-left: 0; border-bottom: 3px solid transparent; padding: .5rem .7rem; }
-    .side nav a.active { border-bottom-color: var(--accent); }
+    .menu-toggle { display: flex; align-items: center; position: absolute; top: 0; right: 0; bottom: auto; height: 50px; padding: 0 1rem;
+                   color: #c2c9cf; cursor: pointer; }
+    .menu-toggle svg { width: 20px; height: 20px; }
+    #nav-toggle:focus-visible ~ aside.side .menu-toggle { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .side nav { display: none; border-top: 1px solid #111; }
+    #nav-toggle:checked ~ aside.side nav { display: block; }
+    .side nav a { padding: .5rem .9rem; }
+    .topbar { gap: .6rem; padding: 0 .75rem; }
+    .topbar .host { display: none; }
+    .topbar .crumb { flex: 1 1 auto; min-width: 0; }
   }
   h1 { font-size: 1.5rem; font-weight: 400; color: var(--bright); margin: .25rem 0 .75rem; }
   h2 { font-size: 1.05rem; margin: 1.5rem 0 .5rem; }
@@ -498,8 +521,10 @@
 <body>
 {% with here=request.resolver_match.url_name %}
 <div class="app">
+<input type="checkbox" id="nav-toggle" aria-label="Menu">
 <aside class="side">
   <a class="brand" href="{% url 'dashboard' %}"><img src="{% static 'img/elephant.svg' %}" alt="">nyayo</a>
+  <label class="menu-toggle" for="nav-toggle" title="Menu"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 3h14v2H1zm0 4h14v2H1zm0 4h14v2H1z"/></svg></label>
   <div class="side-status">
     <img class="logo" src="{% static 'img/elephant.svg' %}" alt="">
     <h4>Status</h4>
@@ -511,6 +536,16 @@
   <nav>
     <h5>Main</h5>
     <a href="{% url 'dashboard' %}"{% if here == "dashboard" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1 1 7h2v7h4v-4h2v4h4V7h2z"/></svg>Dashboard</a>
+    <h5>Actions</h5>
+    <a href="{% url 'create_test' %}"{% if here == "create_test" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7 2h2v5h5v2H9v5H7V9H2V7h5z"/></svg>Create test</a>
+    <a href="{% url 'create_tune' %}"{% if here == "create_tune" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 3h7V1.5h2V3h5v2h-5v1.5H8V5H1zm0 8h3V9.5h2V11h9v2H6v1.5H4V13H1z"/></svg>Create tune</a>
+    <a href="{% url 'create_datagen' %}"{% if here == "create_datagen" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8 1C4.7 1 2 2 2 3.5v9C2 14 4.7 15 8 15s6-1 6-2.5v-9C14 2 11.3 1 8 1zm0 1.5c2.8 0 4.5.7 4.5 1S10.8 4.5 8 4.5s-4.5-.7-4.5-1S5.2 2.5 8 2.5z"/></svg>Create datagen</a>
+    <a href="{% url 'upload_net' %}"{% if here == "upload_net" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7 12V4L4 7 2.6 5.6 8 .2l5.4 5.4L12 7 9 4v8zM2 13h12v2H2z"/></svg>Upload net</a>
+    <a href="{% url 'gauntlet' %}"{% if here == "gauntlet" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 1.5v13l11-6.5z"/></svg>Run gauntlet</a>
+    <h5>Lab</h5>
+    <a href="{% url 'engines' %}"{% if here == "engines" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 1h1.5v2h3V1H11v2h2v2h2v1.5h-2v3h2V11h-2v2h-2v2H9.5v-2h-3v2H5v-2H3v-2H1V9.5h2v-3H1V5h2V3h2zm0 4v6h6V5z"/></svg>Engines</a>
+    <a href="{% url 'books' %}"{% if here == "books" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h3v12H2zm4 0h3v12H6zm4.4.6 2.8-.8 2.6 11.4-2.8.8z"/></svg>Books</a>
+    <a href="{% url 'machines' %}"{% if here == "machines" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M1 2h14v5H1zm0 7h14v5H1zM3 4v1h2V4zm0 7v1h2v-1z"/></svg>Machines</a>
     <h5>Testing</h5>
     <a href="{% url 'matches' %}"{% if here == "matches" or here == "match" or here == "game" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h12v3H2zm0 4.5h12v3H2zM2 11h12v3H2z"/></svg>Matches{% if shell.running %}<span class="count green" title="running now">{{ shell.running }} live</span>{% endif %}</a>
     <a href="{% url 'runs' %}"{% if here == "runs" or here == "run" or here == "case" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 1h7l3 3v11H3zM9 2v3h3"/></svg>Runs</a>
@@ -524,7 +559,7 @@
   </nav>
 </aside>
 <div class="page">
-  <div class="topbar"><span class="crumb">{% block crumb %}{% if here == "dashboard" %}Dashboard{% elif here == "matches" %}Testing › Matches{% elif here == "match" %}Testing › Matches › a match{% elif here == "game" %}Testing › Matches › a game{% elif here == "runs" %}Testing › Runs{% elif here == "run" %}Testing › Runs › a run{% elif here == "case" %}Testing › Runs › a position{% elif here == "compare" %}Testing › Compare{% elif here == "games" %}Catalogue › Games{% elif here == "exports" %}Catalogue › Exports{% endif %}{% endblock %}</span><span class="host">host <code>{{ shell.host }}</code> · times in <code title="{{ time_zone }}">{% now "T" %}</code></span></div>
+  <div class="topbar"><span class="crumb">{% block crumb %}{% if here == "dashboard" %}Dashboard{% elif here == "matches" %}Testing › Matches{% elif here == "match" %}Testing › Matches › a match{% elif here == "game" %}Testing › Matches › a game{% elif here == "runs" %}Testing › Runs{% elif here == "run" %}Testing › Runs › a run{% elif here == "case" %}Testing › Runs › a position{% elif here == "compare" %}Testing › Compare{% elif here == "games" %}Catalogue › Games{% elif here == "exports" %}Catalogue › Exports{% elif here == "sign_in" %}Actions › Sign in{% endif %}{% endblock %}</span><span class="host">host <code>{{ shell.host }}</code> · times in <code title="{{ time_zone }}">{% now "T" %}</code></span><span class="who">{% if user.is_authenticated %}<b>{{ user.get_username }}</b> · <form method="post" action="{% url 'sign_out' %}">{% csrf_token %}<button class="linkish">sign out</button></form>{% else %}<a href="{% url 'sign_in' %}?next={{ request.get_full_path|urlencode }}">sign in</a>{% endif %}</span></div>
   <main>
   {% block content %}{% endblock %}
   </main>

@@ -8,4 +8,5 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("nyayo.matches.urls")),
     path("", include("nyayo.runs.urls")),
+    path("", include("nyayo.actions.urls")),
 ]
