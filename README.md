@@ -99,7 +99,8 @@ OpenBench's book list and the Elephant engine file. The worker's API (`worker_ap
 (`get_workload.py`), the results (`utils.py`) and the match document (`document.py`) are adapted from the same
 OpenBench files (`views.py`, `workloads/get_workload.py`, `utils.py`), through the owner's fork, with OpenBench's notice on
 each; `steps.py` is the fork's own, moved. The worker that plays the games is OpenBench's `Client/`, used unchanged from
-openbench_eg: nyayo serves it.
+openbench_eg: nyayo serves it. The smoke test in `tools/smoke/` (its toy engine, book and file server) is from
+openbench_eg's `Scripts/smoke`.
 
 Bundled with it: lichess's board, [chessground](https://github.com/lichess-org/chessground) 9.1.1 (GPL-3.0,
 `nyayo/matches/static/vendor/`), and nyayo's icon, the chess elephant

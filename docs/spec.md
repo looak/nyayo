@@ -412,11 +412,16 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
 - **Not here:** the pages for tunes and datagens, the networks' upload (a network is a file `networks/<sha256>` under the data directory, served by
   `clientGetNetwork`), `api_*` of OpenBench's own scripts.
 
-`tools/worker_rig.py` plays tests against nyayo with the real worker (WSL or Linux; see its docstring): a passing games
-test, an SPRT to a result, and each failure of the verdict table it can stage (a compile error, a wrong, slow or silent
-bench on dev; the machine's own failures; a killed compiler and a wrong bench on both, which hold the test; a bench that is
-right and then wrong). `--load` measures the writes and the waits. Step 5 of the plan moves openbench_eg's whole smoke test
-into nyayo.
+The smoke test, `tools/smoke/run.py` (WSL or Linux; its docstring says how to set it up), runs nyayo as deployed (gunicorn,
+4 workers of 4 threads, and `manage.py worker`) with openbench_eg's `Client/` at `da629d7` playing, unchanged but for its
+timers. A toy engine, a book and a stand-in for the part of GitHub's API that the create page asks (`NYAYO_GITHUB_API`, which
+replaces `https://api.github.com/repos`) are served from the harness, and every test is made through the real create page,
+signed in as the owner. It checks a games test (named, a base bench typed in, the walk, games put away, the pages), an SPRT to a
+result, what the page refuses, approval by the owner, stop and restart, crashes, two tests at once, and each failure of the
+verdict table it can stage (a compile error, a wrong, slow or silent bench on dev; the machine's own failures; a killed
+compiler and a wrong bench on both, which hold the test; a bench that is right and then wrong). After each, the match agrees
+with its test on everything fixed and on the counts, and no report was refused. A full run takes about two to three minutes
+and prints its time. `--load` measures the writes and the waits of `--workers` workers on a long test.
 
 ### Pages
 
