@@ -12,6 +12,7 @@ urlpatterns = [
     path("api/exports", exports.api_exports, name="api_exports"),
     path("api/exports/<int:dataset_id>", exports.api_export, name="api_export"),
     path("matches/<str:match_id>", pages.match_detail, name="match"),
+    path("matches/<str:match_id>/workers", pages.match_workers, name="match_workers"),
     path("matches/<str:match_id>/games/<str:game>", pages.game_page, name="game"),
     path("matches/<str:match_id>/games/<str:game>/live", pages.game_fragment, name="game_fragment"),
     path("api/games", views.api_games, name="api_games"),

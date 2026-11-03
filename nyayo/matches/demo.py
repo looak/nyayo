@@ -53,13 +53,18 @@ GAUNTLETS = [
 ]
 
 
-# id, state, minutes since the last report: tests that have not played a game, the way OpenBench will report them
-# before and without results (docs/match-schema.md, Machines and Verdict)
+# id, state, minutes since the last report, the walk (see walk()): tests that have not played a game, the way OpenBench
+# reports them before and without results (docs/match-schema.md, Machines and Verdict). One per page of the mockup in
+# ramani's SPRT steps plan: a failed compile, a failed bench, a worker only, a verdict nobody can place.
 UNSTARTED = [
-    ("demo-sprt-waiting", "waiting", 2),
-    ("demo-sprt-held", "held", 30),
-    ("demo-sprt-failed-start", "failed_prechecks", 90),
+    ("demo-sprt-waiting", "waiting", 2, "nobody"),
+    ("demo-sprt-waiting-trouble", "waiting", 3, "trouble"),
+    ("demo-sprt-held", "held", 30, "killed"),
+    ("demo-sprt-failed-start", "failed_prechecks", 90, "compile"),
+    ("demo-sprt-failed-bench", "failed_prechecks", 2500, "bench"),
 ]
+# a running test whose workers are at every stage (the mockup's main page): it has games, and steps
+WALKING = ("demo-sprt-walking", "running", 4.0, 12, 1)
 
 
 def score_of(elo):
@@ -134,57 +139,177 @@ def document(match_id, state, now, started, counts, llr, result, stats_):
     }
 
 
-def step(name, state, at, side=None, **fields):
-    row = {"step": name, "state": state, "at": at.isoformat()}
+def step(at, name, state, side=None, ago=0, **fields):
+    """One step of a walk, last changed `ago` seconds before `at`."""
+    row = {"step": name, "state": state, "at": (at - timedelta(seconds=ago)).isoformat()}
     if side:
         row["side"] = side
     return {**row, **fields}
 
 
-def walk(state, at):
-    """What the worker `hunt` has done by the time the test is `state`."""
-    done = [step("picked_up", "passed", at), step("compile", "passed", at, "dev", seconds=41, cached=False),
-            step("compile", "passed", at, "base", seconds=0, cached=True)]
-    if state == "waiting":
+def pending(at, *names):
+    return [step(at, n, "pending", side) for n, side in names]
+
+
+AFTER_COMPILE = [("bench", "dev"), ("bench", "base"), ("running", None)]
+NO_DISK = ("cc1plus: fatal error: error writing to /tmp/ccR2x1.s: No space left on device\n"
+           "make: *** [makefile:48: search.o] Error 1")
+MOBILITY = ("../src/eval/mobility.cpp:212:18: error: 'attacks_bb' was not declared in this scope\n"
+            "  212 |     score += attacks_bb(sq, occupied).count();\n      |              ^~~~~~~~~\n"
+            "make: *** [makefile:48: mobility.o] Error 1")
+KILLED = ("g++: fatal error: Killed signal terminated program cc1plus\ncompilation terminated.\n"
+          "make: *** [makefile:48: search.o] Error 1")
+
+
+def reason(points_at, text):
+    return {"points_at": points_at, "text": text}
+
+
+def picked(at, ago):
+    return step(at, "picked_up", "passed", ago=ago)
+
+
+def compiled(at, side, seconds=41, ago=0, cached=False):
+    return step(at, "compile", "passed", side, ago=ago, seconds=0 if cached else seconds, cached=cached)
+
+
+def benched(at, side, nps, seconds=36, ago=0):
+    return step(at, "bench", "passed", side, ago=ago, seconds=seconds, nodes=41920417, nps=nps)
+
+
+def machine(name, at, steps, games=0, workloads=1, cores=16, **fields):
+    return {"name": name, "user": "alex", "games": games, "workloads": workloads, "active": True,
+            "updated_at": at.isoformat(), "logical_cores": cores, "steps": steps, **fields}
+
+
+def walking_machines(at, games):
+    """Six workers at every stage, as the mockup's main page: playing, three on their checks, one in trouble and one
+    gone quiet."""
+    retry = (at + timedelta(minutes=3)).isoformat()
+    first = games * 8 // 10
+    return [
+        machine("hunt", at, [picked(at, 3500), compiled(at, "dev", cached=True, ago=3490),
+                             compiled(at, "base", cached=True, ago=3490), benched(at, "dev", 3_020_000, ago=3450),
+                             benched(at, "base", 2_910_000, ago=3410), step(at, "running", "active", ago=3400)],
+                games=first, workloads=7, cores=32, concurrency=32, cpu="AMD Ryzen 9 7950X 16-Core Processor"),
+        machine("tor", at, [picked(at, 100), compiled(at, "dev", ago=60), step(at, "compile", "active", "base", ago=38)]
+                + pending(at, *AFTER_COMPILE)),
+        machine("odin", at, [picked(at, 200), compiled(at, "dev", cached=True, ago=190),
+                             compiled(at, "base", cached=True, ago=190), benched(at, "dev", 3_020_000, ago=150),
+                             step(at, "bench", "active", "base", ago=12), *pending(at, ("running", None))], cores=24),
+        machine("loke", at, [picked(at, 4), step(at, "compile", "active", "dev", ago=4)]
+                + pending(at, ("compile", "base"), *AFTER_COMPILE), cores=8),
+        machine("frej", at, [
+            picked(at, 400),
+            step(at, "compile", "failed", "dev", ago=300, seconds=3, detail="No space left on device", log=NO_DISK,
+                 blame="worker", tries=3, retry_at=retry,
+                 evidence=[reason("worker", "The compiler ran out of disk, not out of ideas: no error in the source."),
+                           reason("worker", "hunt and odin compiled this same commit.")],
+                 effect="The test goes on without frej, which tries again in 5 minutes."),
+            step(at, "compile", "failed", "base", ago=298, seconds=3, detail="No space left on device", log=NO_DISK,
+                 blame="worker", tries=3, retry_at=retry,
+                 evidence=[reason("worker", "Base failed the same way, and base is known to build.")]),
+        ] + pending(at, *AFTER_COMPILE), cores=12),
+        machine("sif", at - timedelta(minutes=8), [
+            picked(at, 3000), compiled(at, "dev", cached=True, ago=2990), compiled(at, "base", cached=True, ago=2990),
+            benched(at, "dev", 2_600_000, ago=2950), benched(at, "base", 2_640_000, ago=2900),
+            step(at, "running", "active", ago=2890)], games=games - first, workloads=4),
+    ]
+
+
+def walk(scenario, at):
+    """The machines of a test that hasn't played, by scenario."""
+    if scenario == "nobody":
         return []
-    if state == "held":
-        return done + [
-            step("bench", "failed", at, "dev", seconds=38, tries=2, detail="Wrong bench: 2301557, expected 2301556",
-                 blame="unclear", evidence=[{"points_at": "either", "text": "Base's bench is wrong here too."}],
-                 effect="The test is held."),
-            step("bench", "failed", at, "base", seconds=36, tries=2, detail="Wrong bench: 2299872, expected 2299871",
-                 blame="unclear"),
-            step("running", "pending", at)]
-    return done[:2] + [
-        step("compile", "failed", at, "dev", seconds=12, tries=1, detail="error: no member named 'mobility'",
-             log="src/eval/mobility.cpp:212:9: error: no member named 'mobility' in 'Position'", blame="engine",
-             evidence=[{"points_at": "engine", "text": "Base compiled beside it."}], effect="The test stops."),
-        step("compile", "passed", at, "base", seconds=0, cached=True),
-        step("bench", "pending", at, "dev"), step("bench", "pending", at, "base"), step("running", "pending", at)]
+    if scenario == "trouble":
+        retry = (at + timedelta(minutes=8)).isoformat()
+        return [
+            machine("frej", at, [
+                picked(at, 880),
+                step(at, "compile", "failed", "dev", ago=860, seconds=3, detail="No space left on device",
+                     log=NO_DISK, blame="worker", tries=3, retry_at=retry,
+                     evidence=[reason("worker", "The compiler couldn't write its output; no error in the source."),
+                               reason("worker", "Base failed the same way, and base is known to build.")],
+                     effect="frej tries again in 5 minutes. It needs someone to free its disk."),
+                step(at, "compile", "failed", "base", ago=858, seconds=3, detail="No space left on device",
+                     blame="worker", tries=3, retry_at=retry),
+            ] + pending(at, *AFTER_COMPILE), cores=12),
+            machine("sif", at, [
+                picked(at, 700), compiled(at, "dev", seconds=112, ago=580), compiled(at, "base", seconds=107, ago=470),
+                step(at, "bench", "failed", "dev", ago=400, seconds=60, detail="Bench over its 60 seconds",
+                     blame="worker", tries=2, retry_at=(at + timedelta(minutes=5)).isoformat(),
+                     evidence=[reason("worker", "Base timed out too, and base benches in about 36 s elsewhere.")],
+                     effect="sif tries again in 5 minutes."),
+                step(at, "bench", "failed", "base", ago=330, seconds=60, detail="Bench over its 60 seconds",
+                     blame="worker", tries=2),
+                step(at, "running", "pending")]),
+        ]
+    if scenario == "killed":
+        return [machine("hunt", at, [
+            picked(at, 600),
+            step(at, "compile", "failed", "dev", ago=400, seconds=188, tries=2,
+                 detail="The compiler was killed by signal 9", blame="unclear", log=KILLED,
+                 evidence=[reason("worker", "A killed compiler isn't a compile error."),
+                           reason("engine", "Base compiled on this worker, so only dev is affected."),
+                           reason("either", "It happened on both tries, and no other worker has tried dev.")],
+                 effect="The test is held: no more tries from hunt, no verdict, and no expiry."),
+            compiled(at, "base", ago=200)] + pending(at, *AFTER_COMPILE), cores=32)]
+    if scenario == "compile":
+        def failing(name, ago, own):
+            return machine(name, at, [
+                picked(at, ago + 40),
+                step(at, "compile", "failed", "dev", ago=ago, seconds=14, tries=1, blame="engine", log=MOBILITY,
+                     detail="'attacks_bb' was not declared in this scope",
+                     evidence=[reason("engine", "A compile error in the source, with a file and a line."),
+                               reason("engine", "Base compiled on this worker, so its compiler and disk are fine."
+                                      if own else "The same error as hunt, on another machine.")],
+                     effect="The test stops. Compile base still ran, as the control." if own
+                     else "Nothing more: the test had stopped already."),
+                compiled(at, "base", cached=not own, ago=ago - 20)] + pending(at, *AFTER_COMPILE),
+                cores=32 if own else 16)
+        return [failing("hunt", 5400, True), failing("tor", 5380, False)]
+    if scenario == "bench":
+        return [machine("hunt", at, [
+            picked(at, 300), compiled(at, "dev", seconds=44, ago=250), compiled(at, "base", cached=True, ago=250),
+            step(at, "bench", "failed", "dev", ago=200, seconds=38, tries=1, blame="engine",
+                 detail="Wrong bench: 53681270, expected 53681269",
+                 evidence=[reason("engine", "All 32 copies agreed on the number, and it isn't the commit's."),
+                           reason("engine", "Base matched its bench on this worker."),
+                           reason("either", "Only one worker has tried, so a build difference on hunt isn't ruled out.")],
+                 effect="The test stops. Bench base still ran, as the control."),
+            benched(at, "base", 2_910_000, ago=160), step(at, "running", "pending")], cores=32)]
+    raise ValueError(scenario)
 
 
 VERDICTS = {
-    "held": {"blame": "unclear", "summary": "Bench is wrong on both engines",
-             "detail": "No other worker has tried, so nobody can say whose it is.", "where": None, "seen_on": ["hunt"]},
-    "failed_prechecks": {"blame": "engine", "summary": "Dev doesn't compile",
-                         "detail": "Every worker that tried gave the same error, and base compiled beside it.",
-                         "where": "src/eval/mobility.cpp:212", "seen_on": ["hunt"]},
+    "trouble": {"blame": "worker", "summary": "Nothing is known against the engines, but no worker can run this yet",
+                "detail": "Every worker that tried is in trouble of its own. The test starts by itself as soon as "
+                          "one gets through its checks.", "where": None, "seen_on": ["frej", "sif"]},
+    "killed": {"blame": "unclear", "summary": "Dev's compile was killed, and no other worker has tried it",
+               "detail": "It might be hunt short of memory, or dev having grown too big to build. A second worker's "
+                         "result settles it by itself; otherwise restart it on OpenBench once you've looked.",
+               "where": None, "seen_on": ["hunt"]},
+    "compile": {"blame": "engine", "summary": "Dev doesn't compile",
+                "detail": "Every worker that tried gave the same error, and base compiled beside it. Nothing was "
+                          "played.", "where": "src/eval/mobility.cpp:212", "seen_on": ["hunt", "tor"]},
+    "bench": {"blame": "engine", "summary": "Dev's bench doesn't match its commit",
+              "detail": "Base benched as expected on the same machine, so the worker is measuring correctly. Either "
+                        "the commit's bench line is stale, or dev isn't deterministic across builds.",
+              "where": None, "seen_on": ["hunt"]},
 }
 
 
-def seed_unstarted(match_id, state, silent_minutes, now):
+def seed_unstarted(match_id, state, silent_minutes, scenario, now):
     """One report of a test that has no results yet: waiting for a worker, held, or stopped on a failed start."""
     forget(match_id)
     at = now - timedelta(minutes=silent_minutes)
-    doc = document(match_id, state, at, at - timedelta(minutes=MINUTES_PER_REPORT), (0, 0, 0, [0] * 5), 0.0, None,
+    doc = document(match_id, state, at, at - timedelta(minutes=MINUTES_PER_REPORT + 2), (0, 0, 0, [0] * 5), 0.0, None,
                    None)
     doc["match"]["finished_at"] = at.isoformat() if state == "failed_prechecks" else None
-    if state in VERDICTS:
-        doc["match"]["verdict"] = VERDICTS[state]
+    if scenario in VERDICTS:
+        doc["match"]["verdict"] = VERDICTS[scenario]
     doc["stats"] = None
-    doc["machines"] = ([] if state == "waiting" else
-                       [{"name": "hunt", "user": "alex", "games": 0, "workloads": 2, "active": True,
-                         "updated_at": at.isoformat(), "steps": walk(state, at)}])
+    doc["machines"] = walk(scenario, at)
     ingest(json.dumps(doc).encode(), None, match_id)
     Match.objects.filter(pk=match_id).update(received_at=at)
 
@@ -198,7 +323,7 @@ def forget(match_id):
         match.delete()
 
 
-def seed_one(match_id, state, elo, reports, silent_minutes, result, now):
+def seed_one(match_id, state, elo, reports, silent_minutes, result, now, walking=False):
     """Reports a test to nyayo as OpenBench would, one workload at a time, ending `silent_minutes` ago. A test with
     no report count runs to its bound (or, with a result, ends at it)."""
     rng = random.Random(match_id)
@@ -227,6 +352,8 @@ def seed_one(match_id, state, elo, reports, silent_minutes, result, now):
         last = i == len(steps) - 1
         doc = document(match_id, state if last else "running", at, started, (w, d, l, p), llr,
                        result if last else None, stats_of(w, d, l, p))
+        if walking and last:
+            doc["machines"] = walking_machines(at, w + d + l)
         ingest(json.dumps(doc).encode(), None, match_id)
         snap = MatchSnapshot.objects.filter(match_id=match_id).order_by("-pk").first()
         if snap is not None and snap.received_at != at:
@@ -394,11 +521,12 @@ def seed():
     now = timezone.now()
     for match_id, state, elo, reports, silent, result in SCENARIOS:
         seed_one(match_id, state, elo, reports, silent, result, now)
+    seed_one(*WALKING[:2], WALKING[2], WALKING[3], WALKING[4], None, now, walking=True)
     seed_games("demo-sprt-running", "running")
     seed_games("demo-sprt-passed", "finished")
     seed_batch("demo-sprt-passed")
     for match_id, state, rating, finished, playing, silent in GAUNTLETS:
         seed_gauntlet(match_id, state, rating, finished, playing, silent, now)
-    for match_id, state, silent_minutes in UNSTARTED:
-        seed_unstarted(match_id, state, silent_minutes, now)
-    return [s[0] for s in SCENARIOS] + [u[0] for u in UNSTARTED] + [g[0] for g in GAUNTLETS]
+    for match_id, state, silent_minutes, scenario in UNSTARTED:
+        seed_unstarted(match_id, state, silent_minutes, scenario, now)
+    return [s[0] for s in SCENARIOS] + [u[0] for u in UNSTARTED] + [WALKING[0]] + [g[0] for g in GAUNTLETS]

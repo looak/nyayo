@@ -1,0 +1,90 @@
+{% load runs_extras matches_extras %}
+{# the Workers area: with steps, a summary and a card per worker; without, the table it has always been. Redrawn by workers.js #}
+{% if show_workers %}
+{% if has_steps and tally.any %}
+<section class="card top-{{ tally.health.look }} walk-summary">
+  <div>
+    <h3>The engines</h3>
+    <p><span class="pill st-{{ tally.health.look }}">{{ tally.health.text }}</span></p>
+    {% for e in tally.engines %}<p class="muted"><strong>{{ e.side }}</strong> {{ e.text }}</p>{% endfor %}
+  </div>
+  <div>
+    <h3>The workers</h3>
+    <p>{% for p in tally.workers %}<span class="pill st-{{ p.kind }}">{{ p.text }}</span> {% empty %}<span class="muted">none yet</span>{% endfor %}</p>
+  </div>
+</section>
+{% endif %}
+<h2>Workers</h2>
+{% if has_steps %}
+<div class="walk-grid">
+{% for w in workers %}
+<section class="card wcard top-{{ w.kind|default:'none' }}">
+  <div class="wcard-head">
+    <strong>{{ w.name }}</strong>{% if w.user %} <span class="muted">{{ w.user }}</span>{% endif %}
+    {% if w.workloads and w.workloads > 1 and w.kind != "running" %}<span class="muted">workload {{ w.workloads }}</span>{% endif %}
+    {% if w.has_steps %}<span class="pill st-{{ w.kind }}">{{ w.status }}</span>{% endif %}
+  </div>
+  <dl class="chips wfacts">
+    <div><dt>Games</dt><dd>{{ w.games }}{% if w.share %} <span class="muted">{{ w.share }}</span>{% endif %}</dd></div>
+    <div><dt>Crashes</dt><dd{% if w.crashes %} class="worse"{% endif %}>{{ w.crashes }}</dd></div>
+    <div><dt>Time losses</dt><dd{% if w.timelosses %} class="worse"{% endif %}>{{ w.timelosses }}</dd></div>
+    <div><dt>Last report</dt><dd>{% if w.updated %}{{ w.updated|date:"D j M H:i" }}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
+  </dl>
+  {% if w.columns %}
+  <div class="walk-scroll"><div class="walk">
+  {% for col in w.columns %}
+    {% if not forloop.first %}<span class="walk-chev"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.5 9.5 7 5 11.5"/></svg></span>{% endif %}
+    <div class="walk-col">
+      <div class="walk-head">{{ col.head }}</div>
+      <div class="walk-nodes">
+      {% for n in col.nodes %}
+        <div class="node st-{{ n.look }}" title="{{ n.title }}">{% include "matches/_step_icon.html" with look=n.look %}<span><b>{{ n.label }}</b><small>{{ n.sub }}</small></span></div>
+      {% endfor %}
+      </div>
+    </div>
+  {% endfor %}
+  </div></div>
+  {% endif %}
+  {% if w.kind == "quiet" and w.quiet_since %}<p class="wnote">Not heard from since {{ w.quiet_since|date:"H:i" }}.</p>
+  {% elif w.kind == "elsewhere" %}<p class="wnote">Working on another test now. Its steps and games stay here.</p>{% endif %}
+  {% for f in w.failures %}
+  <div class="fail">
+    <div class="fail-head"><span class="pill st-{{ f.look }}">{{ f.blame }}</span> <span class="muted">{{ f.where }}</span> <span class="fail-detail">{{ f.detail }}</span>{% if f.tries and f.tries > 1 %} <span class="muted">· {{ f.tries }} tries</span>{% endif %}</div>
+    {% for e in f.evidence %}<div class="evidence"><span class="toward st-{{ e.toward }}">{{ e.toward }}</span><span>{{ e.text }}</span></div>{% endfor %}
+    {% if f.effect %}<div class="effect"><b>What happens:</b> {{ f.effect }}{% if f.retry_at %} <span class="muted">Next try {{ f.retry_at|date:"H:i:s" }}.</span>{% endif %}</div>{% endif %}
+    {% if f.log %}<details data-key="{{ w.name }}-{{ f.key }}"{% if forloop.first and forloop.parentloop.first %} open{% endif %}><summary>The compiler's output</summary><pre>{{ f.log }}</pre></details>{% endif %}
+  </div>
+  {% endfor %}
+  {% if w.specs or w.flags %}<p class="muted wspecs">{{ w.specs|join:" · " }}{% if w.flags %} {% for f in w.flags %}<span class="tier">{{ f }}</span> {% endfor %}{% endif %}
+    {% if w.all_flags %}<details class="flags"><summary>all {{ w.all_flags|length }} CPU flags</summary>{{ w.all_flags|join:" " }}</details>{% endif %}</p>{% endif %}
+</section>
+{% endfor %}
+</div>
+{% elif workers %}
+<div class="scroll">
+<table class="workers">
+  <thead><tr><th>Machine</th><th class="num">Games</th><th class="num">Share</th><th class="num">Crashes</th><th class="num">Time losses</th><th>Last report</th></tr></thead>
+  <tbody>
+  {% for w in workers %}
+    <tr>
+      <td><strong>{{ w.name }}</strong>{% if w.user %} <span class="muted">{{ w.user }}</span>{% endif %}</td>
+      <td class="num">{{ w.games }}</td>
+      <td class="num muted">{{ w.share }}</td>
+      <td class="num{% if w.crashes %} worse{% endif %}">{{ w.crashes }}</td>
+      <td class="num{% if w.timelosses %} worse{% endif %}">{{ w.timelosses }}</td>
+      <td class="nowrap">{% if w.updated %}{{ w.updated|date:"D j M H:i" }}{% else %}<span class="muted">–</span>{% endif %}</td>
+    </tr>
+    {% if w.specs or w.flags %}
+    <tr class="spec-row">
+      <td colspan="6" class="muted">{{ w.specs|join:" · " }}{% if w.flags %} {% for f in w.flags %}<span class="tier">{{ f }}</span> {% endfor %}{% endif %}
+        {% if w.all_flags %}<details class="flags"><summary>all {{ w.all_flags|length }} CPU flags</summary>{{ w.all_flags|join:" " }}</details>{% endif %}</td>
+    </tr>
+    {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">No worker has picked it up yet.</p>
+{% endif %}
+{% endif %}

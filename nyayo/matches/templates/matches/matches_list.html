@@ -1,7 +1,7 @@
 {% extends "runs/base.html" %}
 {% load runs_extras matches_extras %}
 {% block title %}Matches · nyayo{% endblock %}
-{% block head %}{% if running %}<meta http-equiv="refresh" content="10">{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
+{% block head %}{% if running or unstarted.refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
 {% block content %}
 <h1>Matches</h1>
 {% if running %}<div class="columns">{% endif %}
@@ -9,6 +9,7 @@
 {% include "matches/_running_card.html" %}
 {% endfor %}
 {% if running %}</div>{% endif %}
+{% include "matches/_unstarted_cards.html" %}
 <details class="filterbar"{% if kind or state or engine %} open{% endif %}>
   <summary>Filter matches</summary>
   <form class="query" method="get">
@@ -21,7 +22,7 @@
   <label>State
     <select name="state" onchange="this.form.submit()">
       <option value="">all states</option>
-      {% for s in states %}<option value="{{ s }}"{% if s == state %} selected{% endif %}>{{ s }}</option>{% endfor %}
+      {% for s in states %}<option value="{{ s }}"{% if s == state %} selected{% endif %}>{{ s|statename }}</option>{% endfor %}
     </select>
   </label>
   <label>Engine under test
@@ -47,7 +48,7 @@
       <td class="nowrap">{{ match.updated_at|date:"Y-m-d H:i" }}</td>
       <td class="clip" title="{{ match.name|default:match.pk }}"><a href="{% url 'match' match.pk %}">{{ match.name|default:match.pk }}</a></td>
       <td><span class="tier">{{ match.kind }}</span></td>
-      <td>{% if match.silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}</td>
+      <td>{% if match.silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state|statename }}</span>{% endif %}</td>
       <td>{{ match.subject }}</td>
       <td class="num">{{ match.summary.overall.games }}{% if match.progress.total %}<span class="muted">/{{ match.progress.total }}</span>{% endif %}</td>
       <td class="num {% if match.summary.overall.score > 0.5 %}better{% elif match.summary.overall.score < 0.5 %}worse{% endif %}">{{ match.summary.overall.score|percent }}</td>

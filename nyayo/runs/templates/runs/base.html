@@ -223,7 +223,8 @@
   .graph-title { margin: 1rem 0 .3rem; font-size: .9rem; }
   .badge.silent, .outcome.silent { color: var(--wip); background: var(--wip-bg); }
   .badge.error, .badge.failed_prechecks { color: var(--worse); background: var(--error-bg); }
-  .badge.waiting, .badge.held, .outcome.waiting, .outcome.held { color: var(--muted); background: var(--code-bg); }
+  .badge.waiting, .outcome.waiting { color: var(--wip); background: var(--wip-bg); }
+  .badge.held, .outcome.held { color: var(--smoke); background: var(--smoke-bg); }
   .outcome-win { color: var(--better); font-weight: 600; }
   .outcome-loss { color: var(--worse); font-weight: 600; }
   .outcome-draw { color: var(--muted); font-weight: 600; }
@@ -416,6 +417,79 @@
   .copy-box.multi .copy-box-head { margin-bottom: .45rem; }
   .copy-box.multi .copy-field { resize: vertical; min-height: 10rem; background: var(--card); }
   /* a class that sets display would otherwise beat the browser's own rule for the hidden attribute */
+  /* a test's walk: a card per worker, a node per step, coloured by state or by the failure's blame (matches/_workers.html) */
+  .st-passed, .st-running { --st-fg: var(--published); --st-bg: var(--published-bg); --st-bd: #2b6b4e; }
+  .st-active, .st-checks { --st-fg: var(--committed); --st-bg: var(--committed-bg); --st-bd: var(--accent); }
+  .st-pending, .st-none, .st-elsewhere, .st-either { --st-fg: #a3adb5; --st-bg: transparent; --st-bd: #55606a; }
+  .st-engine, .st-failed { --st-fg: var(--worse); --st-bg: var(--error-bg); --st-bd: var(--danger); }
+  .st-worker, .st-quiet { --st-fg: var(--wip); --st-bg: var(--wip-bg); --st-bd: var(--warning); }
+  .st-unclear { --st-fg: var(--smoke); --st-bg: var(--smoke-bg); --st-bd: #7b5ea7; }
+  .pill { display: inline-block; padding: 0 .5rem; border-radius: 4px; font-size: .78rem; font-weight: 700;
+          color: var(--st-fg); background: var(--st-bg); white-space: nowrap; }
+  .pill.st-pending, .pill.st-none, .pill.st-elsewhere { background: var(--code-bg); }
+  .card.top-engine, .card.top-failed { border-top-color: var(--danger); } .card.top-worker, .card.top-quiet, .card.top-waiting { border-top-color: var(--warning); }
+  .card.top-unclear, .card.top-held { border-top-color: #7b5ea7; } .card.top-checks, .card.top-active { border-top-color: var(--accent); }
+  .card.top-none, .card.top-elsewhere, .card.top-pending { border-top-color: #55606a; }
+  .walk-summary { display: flex; flex-wrap: wrap; gap: .5rem 2.5rem; }
+  .walk-summary > div { flex: 1 1 18rem; min-width: 0; }
+  .walk-summary h3, .verdict h2 { margin: 0 0 .35rem; font-size: .95rem; font-weight: 600; color: var(--bright); }
+  .walk-summary p { margin: .25rem 0; font-size: .85rem; }
+  .walk-summary .pill { margin: 0 .3rem .2rem 0; }
+  .verdict { margin: 0 0 1rem; }
+  .verdict-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .7rem; }
+  .verdict-head h2 { margin: 0; font-size: 1.1rem; }
+  .verdict p { margin: .5rem 0; }
+  .verdict-facts { display: flex; flex-wrap: wrap; gap: .4rem 2rem; margin: .5rem 0 0; }
+  .verdict-facts dt { color: var(--muted); font-size: .78rem; }
+  .verdict-facts dd { margin: 0; font-weight: 600; }
+  .verdict-facts dd .muted { font-weight: 400; }
+  .walk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr)); gap: 1rem;
+               align-items: start; margin: 0 0 1rem; }
+  .walk-grid > .card { margin: 0; min-width: 0; }
+  .wcard-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem .7rem; }
+  .wcard-head strong { color: var(--bright); font-size: 1rem; }
+  .wcard-head .pill { margin-left: auto; }
+  .wfacts { margin: .4rem 0 .7rem; gap: .2rem 1.5rem; }
+  .wfacts dd { font-size: .9rem; }
+  .walk-scroll { overflow-x: auto; }
+  .walk { display: flex; gap: 4px; align-items: stretch; min-width: 29rem; }
+  .walk-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .walk-head { font-size: .72rem; line-height: 1rem; color: #a3adb5; white-space: nowrap; }
+  .walk-nodes { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+  .walk-chev { display: flex; align-items: center; padding-top: 20px; flex: none; color: #6f7a83; }
+  .node { display: flex; align-items: center; gap: 6px; box-sizing: border-box; min-height: 34px; padding: 3px 7px;
+          border-radius: 4px; border: 1px solid var(--st-bd); background: var(--st-bg); color: var(--st-fg); line-height: 1.2; }
+  .node.st-pending { border-style: dashed; }
+  .node svg { flex: none; }
+  .node > span { min-width: 0; }
+  .node b { display: block; font-size: .75rem; font-weight: 600; }
+  .node small { display: block; font-size: .7rem; opacity: .9; white-space: nowrap; overflow: hidden;
+                text-overflow: ellipsis; }
+  .step-spin { animation: step-spin 1.1s linear infinite; }
+  @keyframes step-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .step-spin { animation: none; } }
+  .fail { margin-top: .7rem; padding-top: .6rem; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: .35rem; }
+  .fail-head { display: flex; flex-wrap: wrap; gap: .1rem .5rem; align-items: baseline; }
+  .fail-detail { color: var(--bright); }
+  .evidence { display: flex; gap: .5rem; align-items: baseline; font-size: .85rem; }
+  .toward { flex: none; width: 3.8rem; font-size: .7rem; font-weight: 600; color: var(--st-fg); }
+  .effect { font-size: .85rem; color: var(--bright); }
+  .fail details { font-size: .85rem; }
+  .fail summary { cursor: pointer; color: var(--link); }
+  .fail pre { margin: .4rem 0 0; padding: .5rem .65rem; background: var(--code-bg); border-radius: 3px; overflow-x: auto;
+              font: .75rem/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  .wnote, .wspecs { margin: .6rem 0 0; font-size: .85rem; }
+  .unstarted-title { margin: 1rem 0 .4rem; font-size: 1rem; font-weight: 400; color: var(--muted); }
+  .unstarted-card { margin: 0 0 1rem; }
+  .unstarted .reason { margin: .4rem 0; }
+  .walk-line { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem .6rem; margin: .35rem 0; font-size: .85rem; }
+  .walk-line .marks { display: inline-flex; align-items: center; gap: 2px; }
+  .walk-line .gap { width: 6px; }
+  .mark-step { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+               border-radius: 4px; border: 1px solid var(--st-bd); background: var(--st-bg); color: var(--st-fg); }
+  .mark-step.st-pending { border-style: dashed; }
+  .mark-step svg { width: 12px; height: 12px; }
+  .walk-line .pill { margin-left: auto; }
   [hidden] { display: none !important; }
   .chart .dot-white { fill: var(--series-white); }
   .chart .dot-black { fill: var(--series-black); }

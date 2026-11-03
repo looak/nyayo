@@ -89,6 +89,9 @@ It fills in the units in `deploy/` for this checkout, user and conda env (found 
 The pages show times in `NYAYO_TIME_ZONE` (an IANA name, UTC when unset), and the top bar says which; on bobby set
 `NYAYO_TIME_ZONE=America/Vancouver` in `.env`. Times are stored in UTC whatever it is, so it can change at any time.
 
+A test in `failed_prechecks` shows that it deletes itself `NYAYO_FAILED_PRECHECKS_HOURS` (48 by default, in `.env`) hours
+after it ended; the page only says so until the expiry (SPRT steps plan, step 6) lands, and reads the same setting.
+
 A running match with no report for `NYAYO_SILENT_AFTER` minutes (30 by default, in `.env`) is shown as *silent* on
 `/matches` and its page; nothing is stored, and its next report clears it.
 

@@ -7,13 +7,14 @@ import chess
 from django.conf import settings
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.template.loader import render_to_string
 
 from django.utils import timezone
 
 from nyayo.paging import paginate
 
-from . import catalogue, games, pgnview, progress, sprtview, stats, timing
+from . import catalogue, games, pgnview, progress, sprtview, stats, stepsview, timing
 from .models import KINDS, STATES, Engine, Game, Match
 
 OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): "loss", ("1-0", "black"): "loss",
@@ -21,6 +22,10 @@ OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): 
 RESULT_VIEWS = ("cards", "list")
 VIEW_COOKIE = "nyayo_results_view"
 STATE_ORDER = {"playing": 0, "unfinished": 1, "scheduled": 2, "finished": 3}
+# the states of a test that has no games yet, which the list shows apart from the running ones
+UNSTARTED = ("waiting", "held", "failed_prechecks")
+UNSTARTED_CARDS = 12
+WALKS_ON_A_CARD = 3
 
 
 def match_queryset():
@@ -71,6 +76,14 @@ def summary_clipboard_text(match, subject_name, summary, settings):
     return "\n".join(lines)
 
 
+def timing_start(match):
+    """When a test's clock starts: its creation, or for a test with steps the first `running` step, so the time spent
+    waiting for a worker and on its checks isn't in *elapsed* and *pace*. None before any worker is playing."""
+    if stepsview.has_steps(match.machines):
+        return stepsview.running_since(match.machines)
+    return match.started_at or match.received_at
+
+
 def silent_cutoff(now=None):
     """Running matches last reported before this are silent."""
     return (now or timezone.now()) - timedelta(minutes=settings.NYAYO_SILENT_AFTER)
@@ -119,7 +132,7 @@ def sprt_view(match):
     }
 
 
-def sprt_page(match, sprt, projection):
+def sprt_page(match, sprt, projection, now=None):
     """What the SPRT page adds: the figures at the top, the test's settings, both engines and the block to paste."""
     row = match.results.first()
     elo, error, whose = sprtview.elo_figures(match, row)
@@ -132,8 +145,67 @@ def sprt_page(match, sprt, projection):
         "clipboard": sprtview.clipboard(match, row, sprt, tc, options),
         "subject_line": sprtview.engine_line(match.subject.name, match.subject_info, match.subject.commit),
         "base_line": sprtview.engine_line(base["name"], base["info"], base["commit"]) if base else "",
+        "subject_link": sprtview.commit_link(match.subject_info, match.subject.commit),
+        "base_link": sprtview.commit_link(base["info"], base["commit"]) if base else None,
         "projection": projection, "penta_rows": penta_rows(row), "faults": faults(row),
-        "workers": sprtview.workers(match.machines, row.games if row else 0),
+        **workers_context(match, row, now),
+    }
+
+
+def workers_context(match, row, now=None):
+    """The Workers area: the cards with their summary when the producer sends steps, else the table; also what the
+    page's poll redraws."""
+    now = now or timezone.now()
+    workers = sprtview.workers(match.machines, row.games if row else 0, now, match.state)
+    walked = stepsview.has_steps(match.machines)
+    return {
+        "workers": workers, "has_steps": walked, "tally": stepsview.tally(workers) if walked else None,
+        "unstarted": match.state in UNSTARTED and not (row and row.games),
+        # a card with a step open is redrawn every 2 seconds; a test that can still change is looked at less often
+        "steps_open": any(w["open"] for w in workers), "watch": match.state in ("waiting", "held", "running"),
+        "workers_url": reverse("match_workers", args=[match.pk]),
+        "show_workers": bool(workers) or match.state in UNSTARTED,
+        "headline": headline(match, workers, now), "state": match.state,
+    }
+
+
+HEADLINE_PREFIX = {"waiting": "Waiting", "held": "Held", "failed_prechecks": "Stopped", "error": "Stopped"}
+HEADLINES = {
+    "waiting": ("Waiting for a worker", "The test is open and doesn't expire. It starts by itself as soon as a worker "
+                                        "gets through its checks."),
+    "held": ("Held", "Nobody has said whose failure it is. The test is open and doesn't expire."),
+    "failed_prechecks": ("Stopped before it started", "The test failed its checks and played nothing."),
+}
+
+
+def headline(match, workers, now):
+    """What sits under the page's title when the test has a state with no games: the producer's verdict word for
+    word, else a plain line of what the state means. None for a test that is being played or is over."""
+    verdict = match.verdict if isinstance(match.verdict, dict) else None
+    if verdict is None and match.state not in UNSTARTED:
+        return None
+    verdict = verdict or {}
+    plain = HEADLINES.get(match.state, ("", ""))
+    summary, detail = verdict.get("summary") or plain[0], verdict.get("detail") or plain[1]
+    prefix = HEADLINE_PREFIX.get(match.state)
+    retries = sorted((s["retry_at"], w["name"]) for w in workers for s in w["failures"]
+                     if s["retry_at"] and s["retry_at"] > now)
+    stopped = match.finished_at if match.state in ("failed_prechecks", "error") else None
+    return {
+        "blame": verdict.get("blame"), "blame_word": stepsview.BLAME_WORDS.get(verdict["blame"]) if verdict.get("blame") else "",
+        "look": verdict.get("blame") or "pending",
+        "title": f"{prefix}: {summary[:1].lower() + summary[1:]}" if prefix and verdict.get("summary") else summary,
+        "detail": detail, "where": verdict.get("where"),
+        "seen_on": ", ".join(n for n in verdict.get("seen_on") or [] if isinstance(n, str)),
+        "created": match.started_at, "stopped": stopped,
+        "stopped_after": (stopped - match.started_at).total_seconds() if stopped and match.started_at else None,
+        "waiting_for": (now - match.started_at).total_seconds() if match.state == "waiting" and match.started_at
+        else None,
+        "next_try": ", ".join(f"{name} {'in ' + stepsview.length((at - now).total_seconds())}" for at, name in retries),
+        "last_report": match.updated_at,
+        "goes_in": stepsview.goes_in(match, now), "goes_at": stepsview.goes_at(match),
+        "stays": {"held": "No, not until it has a verdict", "waiting": "No, it stays open until a worker plays it"}.get(
+            match.state),
     }
 
 
@@ -225,7 +297,7 @@ def running_cards(cutoff, now):
         if played is None:
             played = summary.overall.games
         playing = progress_info.get("playing") or 0
-        run = timing.summarize(match.state, match.started_at or match.received_at, match.finished_at,
+        run = timing.summarize(match.state, timing_start(match), match.finished_at,
                                match.updated_at, total, played, playing, [], (match.settings or {}).get("concurrency"),
                                now)
         card = {"match": match, "total": total, "played": played, "playing": playing, "timing": run,
@@ -237,6 +309,25 @@ def running_cards(cutoff, now):
             card.update(elo=summary.overall.elo, error=summary.overall.error, projection=None)
         cards.append(card)
     return cards
+
+
+def unstarted_cards(now):
+    """The tests that haven't played a game, for the top of the list and the dashboard: waiting, held (apart) and
+    failed starts, each with a compact walk of its first workers, its reason and, for a failed start, when it goes."""
+    found = {}
+    for state in UNSTARTED:
+        cards = []
+        for match in match_queryset().filter(state=state).order_by("-updated_at")[:UNSTARTED_CARDS]:
+            workers = sprtview.workers(match.machines, 0, now, match.state)
+            walking = [w for w in workers if w["has_steps"]]
+            cards.append({"match": match, "workers": walking[:WALKS_ON_A_CARD],
+                          "more": max(0, len(walking) - WALKS_ON_A_CARD), "idle": not workers,
+                          "headline": headline(match, workers, now), "tc": (match.settings or {}).get("tc")})
+        found[state] = cards
+    titles = (("waiting", "Waiting for a worker"), ("failed_prechecks", "Failed their start"),
+              ("held", "Held, they need a look"))
+    return {"groups": [({"cards": found[state]}, title) for state, title in titles], "any": any(found.values()),
+            "refresh": bool(found["waiting"] or found["held"])}
 
 
 def sprt_card(match, sprt, now):
@@ -259,7 +350,9 @@ def matches_list(request):
     if engine.isdigit():
         matches = matches.filter(subject_id=int(engine))
     page = paginate(matches, request)
-    running = running_cards(cutoff, timezone.now())
+    now = timezone.now()
+    running = running_cards(cutoff, now)
+    unstarted = unstarted_cards(now)
     for match in page.object_list:
         match.summary = stats.summarize(match.results.all())
         match.silent = is_silent(match, cutoff)
@@ -269,7 +362,7 @@ def matches_list(request):
         match.elo_error = produced.get("error") if produced else match.summary.overall.error
     return render(request, "matches/matches_list.html", {
         "page": page, "kind": kind, "kinds": KINDS, "state": state, "states": STATES + ["silent"], "engine": engine,
-        "running": running,
+        "running": running, "unstarted": unstarted,
         "engines": Engine.objects.filter(matches_as_subject__isnull=False).distinct(),
     })
 
@@ -338,6 +431,16 @@ def build_entry(match, number, entry, row, names):
     }
 
 
+def match_workers(request, match_id):
+    """The Workers area alone, for the match page to poll while a step is open and redraw."""
+    match = get_object_or_404(match_queryset(), pk=match_id)
+    context = workers_context(match, match.results.first())
+    context.update(match=match, polled=True)
+    html = render_to_string("matches/_workers.html", context, request=request)
+    return JsonResponse({"html": html, "open": context["steps_open"], "live": context["watch"],
+                         "state": match.state})
+
+
 def match_detail(request, match_id):
     match = get_object_or_404(match_queryset(), pk=match_id)
     excluded = {o for o in request.GET.getlist("exclude") if o}
@@ -363,9 +466,10 @@ def match_detail(request, match_id):
         "summary_clipboard": summary_clipboard_text(match, subject_name, summary, match.settings or {}),
         "sprt": sprt_view(match), **sprt_progress(match),
         "timing": timing.summarize(
-            match.state, match.started_at or match.received_at, match.finished_at, match.updated_at, total,
+            match.state, timing_start(match), match.finished_at, match.updated_at, total,
             played, len(groups["playing"]), durations, (match.settings or {}).get("concurrency"),
             timezone.now()),
+        "steps_start": stepsview.running_since(match.machines) if stepsview.has_steps(match.machines) else None,
         "groups": groups, "entries": entries, "refresh": match.state == "running", "settings": match.settings,
         "host": match.host, "subject_name": subject_name, "stored_games": stored_games(match),
         "uploads": upload_counts(match),
