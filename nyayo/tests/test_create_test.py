@@ -276,3 +276,27 @@ class Acting(Reports):
         page = self.client.get("/matches/openbench-openbench-12").content.decode()
         self.assertNotIn("https://old/test/12", page)
         self.assertNotIn("test-actions", page)
+
+
+class Landing(TestCase):
+    """With step 2's real document and steps: a test made on the page is a match, waiting, with the page's buttons."""
+
+    def test_a_test_from_a_branch_and_from_a_sha_land_as_waiting_matches(self):
+        from nyayo.matches.models import Match
+        owner = User.objects.create_user("owner", password="pw", is_staff=True, is_superuser=True)
+        self.client.force_login(owner)
+        for ref in ("feature-x", SHA):
+            with mock.patch.object(github, "api_get", fake_github()):
+                values = self.client.get(reverse("create_test")).context["values"]
+                response = self.client.post(reverse("create_test"), {**values, **form(dev_branch=ref)})
+            test = Test.objects.latest("pk")
+            self.assertRedirects(response, f"/matches/{test.match_id()}", fetch_redirect_response=False)
+            match = Match.objects.get(pk=test.match_id())
+            self.assertEqual(match.state, "waiting")
+            page = self.client.get(f"/matches/{test.match_id()}").content.decode()
+            self.assertIn(reverse("test_action", args=[test.pk, "stop"]), page)
+        self.assertEqual(Match.objects.count(), 2)
+        self.client.post(reverse("test_action", args=[test.pk, "stop"]))
+        self.assertEqual(Match.objects.get(pk=test.match_id()).state, "stopped")
+        self.client.post(reverse("test_action", args=[test.pk, "restart"]))
+        self.assertEqual(Match.objects.get(pk=test.match_id()).state, "waiting")
