@@ -1,0 +1,27 @@
+{% load runs_extras matches_extras %}
+{# the tests that haven't played a game: waiting, held (apart) and failed starts (the match list and the dashboard) #}
+{% for group, title in unstarted.groups %}
+{% if group.cards %}
+<h2 class="unstarted-title">{{ title }}</h2>
+<div class="columns unstarted">
+{% for c in group.cards %}
+<div class="card unstarted-card top-{{ c.match.state }}">
+  <div class="card-head">
+    <h3 title="{{ c.match.name|default:c.match.pk }}"><a href="{% url 'match' c.match.pk %}">{{ c.match.name|default:c.match.pk }}</a></h3>
+    <span class="tier">{{ c.match.kind }}</span>
+    {% if c.tc %}<span class="muted">{{ c.tc }}</span>{% endif %}
+    <span class="outcome {{ c.match.state }} card-state">{{ c.match.state|statename:"long" }}</span>
+  </div>
+  {% if c.headline.blame_word %}<p class="reason"><span class="pill st-{{ c.headline.look }}">{{ c.headline.blame_word }}</span> {{ c.headline.title }}</p>
+  {% elif c.match.state != "waiting" %}<p class="reason">{{ c.headline.title }}</p>{% endif %}
+  {% for w in c.workers %}{% include "matches/_walk_compact.html" %}
+  {% empty %}<p class="muted">{% if c.idle %}No worker has picked it up yet{% if c.headline.waiting_for is not None %} · waiting {{ c.headline.waiting_for|seconds }}{% endif %}.{% else %}No steps reported.{% endif %}</p>
+  {% endfor %}
+  {% if c.more %}<p class="muted">and {{ c.more }} more worker{{ c.more|pluralize }}</p>{% endif %}
+  {% if c.match.state == "failed_prechecks" %}<p class="muted">Deletes itself {% if c.headline.goes_in %}{{ c.headline.goes_in }}{% endif %}{% if c.headline.goes_at %} · {{ c.headline.goes_at|date:"D j M H:i" }}{% endif %}</p>
+  {% elif c.match.state == "held" %}<p class="muted">Doesn't delete itself until it has a verdict.</p>{% endif %}
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% endfor %}

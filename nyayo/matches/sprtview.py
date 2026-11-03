@@ -11,7 +11,10 @@ The block is the layout testers share (fishtest, OpenBench's own pages):
 Elo and its error are the producer's (`stats`) when it sent them, nyayo's own from the counts otherwise.
 """
 
-from . import pgnview, stats
+from django.conf import settings
+from django.utils import timezone
+
+from . import pgnview, stats, stepsview
 
 # the options a tester wants first, in this order
 FIRST_OPTIONS = ("Threads", "Hash")
@@ -84,6 +87,16 @@ def engine_line(name, info, commit):
     return " · ".join(parts)
 
 
+def commit_link(info, commit):
+    """`<repo>/commit/<sha>` for an engine of the test: the repo it named, else NYAYO_GITHUB_REPO. None when either is
+    missing."""
+    repo = ((info or {}).get("repo") or settings.NYAYO_GITHUB_REPO or "").strip().rstrip("/")
+    if not repo or not commit:
+        return None
+    base = repo if repo.startswith(("http://", "https://")) else f"https://github.com/{repo.strip('/')}"
+    return f"{base.removesuffix('.git')}/commit/{commit}"
+
+
 # the CPU features worth a glance, best first; the full list is under the row
 NOTABLE_FLAGS = ("AVX512VNNI", "AVX512F", "AVX2", "BMI2", "POPCNT")
 
@@ -94,11 +107,13 @@ def size(megabytes):
     return f"{megabytes / 1024:.0f} GB" if megabytes >= 1024 else f"{megabytes:.0f} MB"
 
 
-def workers(machines, games):
+def workers(machines, games, now=None, state=""):
     """The machines that played a test as rows for a list, busiest first. Only `name` and `games` are required of a
-    machine; the CPU, cores, memory, system and the rest are shown when it reported them."""
+    machine; the CPU, cores, memory, system and the rest are shown when it reported them. A machine with `steps` also
+    gets its walk (stepsview.card)."""
     from django.utils.dateparse import parse_datetime
 
+    now = now or timezone.now()
     rows = []
     for machine in machines if isinstance(machines, list) else []:
         if not isinstance(machine, dict):
@@ -116,5 +131,6 @@ def workers(machines, games):
             "crashes": machine.get("crashes") or 0, "timelosses": machine.get("timeloss") or 0,
             "updated": parse_datetime(machine["updated_at"]) if isinstance(machine.get("updated_at"), str) else None,
             "specs": specs, "flags": [f for f in NOTABLE_FLAGS if f in flags], "all_flags": flags,
+            "steps": machine.get("steps"), **stepsview.card(machine, now, state),
         })
     return sorted(rows, key=lambda r: -r["games"])

@@ -1,15 +1,43 @@
 {% extends "runs/base.html" %}
-{% load runs_extras matches_extras %}
+{% load static runs_extras matches_extras %}
 {% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
-{% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% if show_workers %}<script defer src="{% static 'matches/workers.js' %}"></script>{% endif %}{% endblock %}
 {% block content %}
 <div class="pagehead">
   <h1>{{ match.name|default:match.pk }}</h1>
-  <span class="tier">sprt</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}
-  <span class="muted">{{ subject_line }} <span class="vs">against</span> {{ base_line }}{% if producer_url %} · <a href="{{ producer_url }}">{{ match.producer_name }}</a>{% endif %}</span>
+  <span class="tier">sprt</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state|statename:"long" }}</span>{% endif %}
+  <span class="muted">{% if subject_link %}<a href="{{ subject_link }}">{{ subject_line }}</a>{% else %}{{ subject_line }}{% endif %} <span class="vs">against</span> {% if base_link %}<a href="{{ base_link }}">{{ base_line }}</a>{% else %}{{ base_line }}{% endif %}{% if producer_url %} · <a href="{{ producer_url }}">{{ match.producer_name }}</a>{% endif %}</span>
 </div>
 
-{# the figures a glance needs, as Pi-hole's tiles #}
+{% if headline %}
+<section class="card verdict top-{{ headline.look }}">
+  <div class="verdict-head">
+    {% if headline.blame_word %}<span class="pill st-{{ headline.look }}">{{ headline.blame_word }}</span>{% endif %}
+    <h2>{{ headline.title }}</h2>
+  </div>
+  {% if headline.detail %}<p>{{ headline.detail }}</p>{% endif %}
+  <dl class="verdict-facts">
+    {% if headline.where %}<div><dt>Where</dt><dd>{{ headline.where }}</dd></div>{% endif %}
+    {% if headline.seen_on %}<div><dt>Seen on</dt><dd>{{ headline.seen_on }}</dd></div>{% endif %}
+    {% if match.state == "waiting" %}
+      {% if headline.created %}<div><dt>Created</dt><dd>{{ headline.created|date:"D j M H:i" }}</dd></div>{% endif %}
+      {% if headline.waiting_for is not None %}<div><dt>Waiting for</dt><dd>{{ headline.waiting_for|seconds }}</dd></div>{% endif %}
+      {% if headline.next_try %}<div><dt>Next try</dt><dd>{{ headline.next_try }}</dd></div>{% endif %}
+    {% elif headline.stopped %}
+      <div><dt>Stopped</dt><dd>{{ headline.stopped|date:"D j M H:i" }}{% if headline.stopped_after is not None %}<span class="muted">, {{ headline.stopped_after|seconds }} after it was created</span>{% endif %}</dd></div>
+    {% elif match.state == "held" %}
+      <div><dt>Last report</dt><dd>{{ headline.last_report|date:"D j M H:i" }}</dd></div>
+    {% endif %}
+    {% if headline.goes_in %}<div><dt>Deletes itself</dt><dd>{{ headline.goes_in }}<span class="muted"> · {{ headline.goes_at|date:"D j M H:i" }}</span></dd></div>
+    {% elif headline.stays %}<div><dt>Deletes itself</dt><dd>{{ headline.stays }}</dd></div>{% endif %}
+  </dl>
+</section>
+{% endif %}
+{% if unstarted %}<div id="workers" data-url="{{ workers_url }}" data-state="{{ state }}" data-live="{% if watch %}1{% endif %}" data-open="{% if steps_open %}1{% endif %}">{% include "matches/_workers.html" %}</div>
+{% endif %}
+
+{# the figures a glance needs, as Pi-hole's tiles; they wait until there are results #}
+{% if not unstarted %}
 <div class="tiles">
   <div class="tile info">{% include "runs/_tile_icon.html" with icon="chess-board" %}<div class="inner"><h4>Games</h4>
     <div class="big">{{ timing.finished }}</div>
@@ -30,8 +58,9 @@
     {% else %}<h4>{% if match.state == "finished" %}Ended{% else %}{{ match.state|capfirst }}{% endif %}</h4>
     <div class="big">{{ match.finished_at|default:match.updated_at|date:"D H:i" }}</div>
     <div class="sub">{% if timing.elapsed is not None %}after {{ timing.elapsed|seconds }}{% endif %}</div>{% endif %}</div>
-    <span class="foot">{% if match.started_at %}started {{ match.started_at|date:"Y-m-d H:i" }}{% else %}&nbsp;{% endif %}</span></div>
+    <span class="foot">{% if steps_start %}playing since {{ steps_start|date:"Y-m-d H:i" }}{% elif match.started_at %}{% if has_steps %}created{% else %}started{% endif %} {{ match.started_at|date:"Y-m-d H:i" }}{% else %}&nbsp;{% endif %}</span></div>
 </div>
+{% endif %}
 
 <div class="card top-{% if sprt.result %}{{ sprt.result }}{% elif silent %}silent{% else %}{{ match.state }}{% endif %}">
   <div class="card-head">
@@ -40,9 +69,10 @@
     {% if sprt.result == "passed" %}<span class="outcome pass card-state">passed</span>
     {% elif sprt.result %}<span class="outcome fail card-state">{{ sprt.result }}</span>
     {% elif silent %}<span class="outcome silent card-state">silent</span>
-    {% else %}<span class="outcome {{ match.state }} card-state">{{ match.state }}</span>{% endif %}
+    {% else %}<span class="outcome {{ match.state }} card-state">{{ match.state|statename }}</span>{% endif %}
   </div>
 
+  {% if not unstarted %}
   <div class="score-row sprt-figures">
     <div class="score-figure">
       <span class="score-value">{{ timing.finished }}</span>
@@ -76,11 +106,14 @@
   </div>
   {% endif %}
 
+  {% endif %}
+
   <div class="chip-groups">
     <section>
       <h4>Time</h4>
       <dl class="chips">
-        {% if match.started_at %}<div><dt>Started</dt><dd>{{ match.started_at|date:"D j M H:i" }}</dd></div>{% endif %}
+        {% if match.started_at %}<div><dt>{% if has_steps %}Created{% else %}Started{% endif %}</dt><dd>{{ match.started_at|date:"D j M H:i" }}</dd></div>{% endif %}
+        {% if steps_start %}<div><dt>Playing since</dt><dd>{{ steps_start|date:"D j M H:i" }}</dd></div>{% endif %}
         {% if timing.running %}
           {% if timing.elapsed is not None %}<div><dt>Elapsed</dt><dd>{{ timing.elapsed|seconds }}</dd></div>{% endif %}
           <div><dt>Last report</dt><dd{% if silent or timing.stale_seconds %} class="worse"{% endif %}>{{ match.updated_at|date:"H:i:s" }}{% if timing.stale_seconds %} <span class="muted">{{ timing.stale_seconds|seconds }} ago</span>{% endif %}</dd></div>
@@ -123,6 +156,7 @@
 </div>
 {% endif %}
 
+{% if not unstarted %}
 <h2 id="progress">Progress</h2>
 {% if graphs %}
 {% include "matches/_sprt_progress.html" %}
@@ -185,31 +219,10 @@
   </div>
 </div>
 
-{% if workers %}
-<h2>Workers</h2>
-<div class="scroll">
-<table class="workers">
-  <thead><tr><th>Machine</th><th class="num">Games</th><th class="num">Share</th><th class="num">Crashes</th><th class="num">Time losses</th><th>Last report</th></tr></thead>
-  <tbody>
-  {% for w in workers %}
-    <tr>
-      <td><strong>{{ w.name }}</strong>{% if w.user %} <span class="muted">{{ w.user }}</span>{% endif %}</td>
-      <td class="num">{{ w.games }}</td>
-      <td class="num muted">{{ w.share }}</td>
-      <td class="num{% if w.crashes %} worse{% endif %}">{{ w.crashes }}</td>
-      <td class="num{% if w.timelosses %} worse{% endif %}">{{ w.timelosses }}</td>
-      <td class="nowrap">{% if w.updated %}{{ w.updated|date:"D j M H:i" }}{% else %}<span class="muted">–</span>{% endif %}</td>
-    </tr>
-    {% if w.specs or w.flags %}
-    <tr class="spec-row">
-      <td colspan="6" class="muted">{{ w.specs|join:" · " }}{% if w.flags %} {% for f in w.flags %}<span class="tier">{{ f }}</span> {% endfor %}{% endif %}
-        {% if w.all_flags %}<details class="flags"><summary>all {{ w.all_flags|length }} CPU flags</summary>{{ w.all_flags|join:" " }}</details>{% endif %}</td>
-    </tr>
-    {% endif %}
-  {% endfor %}
-  </tbody>
-</table>
-</div>
+{% endif %}
+
+{% if not unstarted %}
+<div id="workers" data-url="{{ workers_url }}" data-state="{{ state }}" data-live="{% if watch %}1{% endif %}" data-open="{% if steps_open %}1{% endif %}">{% include "matches/_workers.html" %}</div>
 {% endif %}
 
 {% if entries %}

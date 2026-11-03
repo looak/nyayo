@@ -275,11 +275,38 @@ page, and `/matches?state=silent` lists them. It's derived when the page is draw
 says the state, and its next report clears the mark. The 2 minute "stale" note on a match page stays as the early hint.
 An SPRT has no schedule, so its games played are the results' count.
 
+**Steps** (match schema, *Machines*). A producer that sends `steps` gets the Workers area as **cards**, in place of the
+table (a match with no steps keeps the table, unchanged). Each worker is a card: its games, share, crashes, time losses,
+last report, workload, specs and flags, and its walk drawn left to right from `steps` in the order sent, a column per step
+and the engines one over the other where a step has a `side`. A node is passed, active (spinning, with how long it has
+been open), pending (`not reached` after a failure) or failed, a failure coloured by its `blame` (`engine` red, `worker`
+amber, `unclear` purple); under the walk each failed step shows its `detail`, `evidence`, `effect` and, in a `details`,
+its `log`. A card's status (playing, on its checks, worker trouble, needs a look, gone quiet after 5 minutes unheard of,
+on something else) is read from its steps and `active`. Above the cards is a **summary**: per engine, how many workers
+compiled and benched it and how many failed, and the workers by status; it is a tally of what was sent, and nyayo applies
+no rule of its own: every verdict arrives written out. With no worker yet the area says none has picked the test up.
+
+`match.verdict` is the headline under the title (`Stopped:`, `Held:` or `Waiting:` and its summary, its detail, where,
+seen on, when it stopped), and for `failed_prechecks` when it deletes itself, `finished_at` plus
+`NYAYO_FAILED_PRECHECKS_HOURS` (48); the deleting is step 6 of the SPRT steps plan and reads the same setting. A test in
+`waiting`, `held` or `failed_prechecks` with no games shows no tiles, results or progress until it has results. With steps,
+*elapsed* and *pace* count from the first worker's `running` step, not from creation, and the card says *created* and
+*playing since*. Each engine in the head links to `<repo>/commit/<sha>` (the engine's `repo`, else `NYAYO_GITHUB_REPO`).
+The area is redrawn by `matches/workers.js` from `/matches/{id}/workers` (JSON: `html`, `open`, `live`, `state`) every 2
+seconds while a step is open and every 15 seconds while the test is waiting, held or running; a change of state reloads the
+page.
+
+`/matches` and the dashboard also show the tests with no games, apart from the running cards: waiting (with a compact walk
+per worker, up to three), failed starts (red, with the reason and when each goes) and held (apart). The state filter takes
+all three, and the sidebar's live count leaves them out. `manage.py seed_demo` makes one test per page of the plan's mockup
+(waiting with no worker, waiting with workers in trouble, held, a failed compile, a failed bench, and a running test
+with workers at every stage).
+
 `/matches` shows a card for each match being played right now, above the list (games, Elo, how it is going and when
 it will be done, and the boards of up to six games in play; a silent match is left out), and colours the list's score
 and Elo; its filters, like the games list's, are in a bar that opens, open while one is set. A lone running card
-spans the list's width. Every list pages 64 to a page. `manage.py seed_demo` (debug mode only) makes nine simulated SPRTs (three of them
-without games: waiting, held, a failed start) and five
+spans the list's width. Every list pages 64 to a page. `manage.py seed_demo` (debug mode only) makes seventeen simulated tests: eleven SPRTs (five of them
+without games: two waiting, held, two failed starts; one running with workers at every stage) and five
 simulated gauntlets (running, finished, stopped with games cut off, silent, just started), with their games, to polish
 the pages on.
 
@@ -302,6 +329,7 @@ for the game page's polled fragment. The site has one colour scheme, dark.
 | `/compare` | any two runs, or a run against its baselines or its branch's previous run; incomparable checks listed as such |
 | `/case/{check_id}/{case_id}` | one position on a board with expected & avoided moves, a lichess analysis link, and every attempt along a branch's history |
 | `/matches` | matches, newest first, filtered by kind, state (or silent) and engine; games, score and Elo (an SPRT's is its producer's) |
+| `/matches/{id}/workers` | the SPRT page's Workers area alone, as JSON, for its poll |
 | `/matches/{id}` | a head with the match's state and runner, Pi-hole tiles of the figures that matter (a gauntlet: played, performance, score, time to go; an SPRT: games, Elo, LLR, time to go), the settings, an opponent per card or per row of a list (the choice is remembered in a cookie): counts, score, Elo ± error, pentanomial, rating, faults; overall with the performance rating and a table to copy; an opponent can be left out of the figures from the page; a small board for every game in play, each a link to its game and drawn in the browser by chessground (`matches/minis.js`); the SPRT card when present; the games stored as data (and the uploads waiting or refused), with a link to their export; and the games, kept ones included: playing, cut off, scheduled, finished. Refreshes while the match runs. A match that isn't running never shows a game as playing |
 | `/matches/{id}/games/{game}` | a large board with a bar and a clock per engine, an eval bar from white's side, a card per engine (score, depth, time, nodes, nps, PV), the moves in a scrolling list, and graphs per metric with a line per engine (the eval graph from white's side too); stepping through the game by click or arrow keys. The board is lichess's chessground (9.1.1, GPL-3.0, vendored under `nyayo/matches/static/vendor/`), drawn in the browser from every position the page embeds, so a step shows at once and a move animates; the rest of the page then follows from the server. A game is read from its file, or from its batch once it is kept |
 | `/games` | Pi-hole's query log: a filter bar that opens, and every game kept as data, newest first, 64 to a page, its row tinted by a win or a loss for the engine under test: when it was played (a time only where the game has one), its id (a link to its page), white and black (from the card's colour and the match's engines), its moves, result (and win, draw or loss for the engine under test), how it ended (deduced endings marked), the book position it started from with a link to the other games from it, and the match it came from. `?match=`, `?result=` (win, draw, loss), `?ended=` (a rule such as `checkmate` or `repetition`, or another ending such as `resignation` or `time_forfeit`), `?moves_from=` and `?moves_to=` (whole moves) and `?opening=` (16 hex digits) filter it, all together; a bad `ended`, moves or opening is `400`. It reads a page of cards from the index and fills in matches and engines for those 64 rows, so it takes about 0.2 s wherever it is in the list, and it shows a game once the worker has put it away. There are no opening names: the books start 16 plies in, and lichess's table names 0.2% of the games |

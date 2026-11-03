@@ -19,7 +19,7 @@ from nyayo.runs.models import Run
 from . import cards, catalogue, sprtview, stats
 from .gameslist import STARTPOS, hex_key, signed
 from .models import Batch, Game, Match, Upload
-from .pages import is_silent, match_queryset, running_cards, silent_cutoff
+from .pages import is_silent, match_queryset, running_cards, silent_cutoff, unstarted_cards
 from .selection import ENDINGS, LOST, RULES, WON
 
 WEEKS = 53
@@ -227,5 +227,5 @@ def dashboard(request):
     running = running_cards(cutoff, now)
     return render(request, "matches/dashboard.html", {
         "tiles": figures(now), "calendar": calendar(now), "endings": endings(), "outcomes": outcomes(),
-        "running": running, "recent": recent_matches(cutoff), "openings": openings(),
+        "running": running, "unstarted": unstarted_cards(now), "recent": recent_matches(cutoff), "openings": openings(),
     })

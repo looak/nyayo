@@ -1,0 +1,6 @@
+{# a worker's walk in a line, for a card on a list: one small mark per step, a gap between the steps #}
+<div class="walk-line">
+  <strong>{{ w.name }}</strong>
+  <span class="marks" role="img" aria-label="{{ w.status }}">{% for col in w.columns %}{% if not forloop.first %}<i class="gap"></i>{% endif %}{% for n in col.nodes %}<i class="mark-step st-{{ n.look }}" title="{{ n.title }}{% if n.sub %} · {{ n.sub }}{% endif %}">{% include "matches/_step_icon.html" with look=n.look %}</i>{% endfor %}{% endfor %}</span>
+  <span class="pill st-{{ w.kind }}">{{ w.status }}</span>
+</div>

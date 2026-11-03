@@ -83,3 +83,14 @@ def evalbar_share(pawns):
         return 50
     chances = 2 / (1 + math.exp(-0.00368208 * pawns * 100)) - 1
     return round(50 + 50 * chances, 1)
+
+
+STATE_NAMES = {"waiting": "waiting", "held": "held", "failed_prechecks": "failed prechecks"}
+STATE_PILLS = {"waiting": "waiting for a worker", "held": "needs a look", "failed_prechecks": "failed prechecks"}
+
+
+@register.filter
+def statename(state, long=""):
+    """A state as a person says it: `failed prechecks`, not `failed_prechecks`; with "long", the head of a page's
+    wording (`waiting for a worker`, `needs a look`)."""
+    return (STATE_PILLS if long else STATE_NAMES).get(state, state)
