@@ -93,8 +93,11 @@ came from it was repurposed, and keeps OpenBench's notice at the top of each fil
 Elo maths, taken from Fishtest by OpenBench) is copied unchanged; `nyayo/lab/spsa_utils.py` is copied with one import
 line pointed at nyayo's models; `nyayo/lab/models.py` is OpenBench's `models.py` trimmed and adapted (`Profile` and `PGN`
 gone, users and the author of a test are Django's); and the seed data of `nyayo/lab/migrations/0002_seed.py` is
-OpenBench's book list and the Elephant engine file. The worker that plays the games is OpenBench's `Client/`, used
-unchanged from openbench_eg. Files that come to nyayo from OpenBench later are listed here when they do.
+OpenBench's book list and the Elephant engine file. The worker's API (`worker_api.py`), the scheduling
+(`get_workload.py`), the results (`utils.py`) and the match document (`document.py`) are adapted from the same
+OpenBench files (`views.py`, `workloads/get_workload.py`, `utils.py`), through the owner's fork, with OpenBench's notice on
+each; `steps.py` is the fork's own, moved. The worker that plays the games is OpenBench's `Client/`, used unchanged from
+openbench_eg: nyayo serves it.
 
 Bundled with it: lichess's board, [chessground](https://github.com/lichess-org/chessground) 9.1.1 (GPL-3.0,
 `nyayo/matches/static/vendor/`), and nyayo's icon, the chess elephant

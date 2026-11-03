@@ -1,0 +1,361 @@
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#                                                                             #
+#   OpenBench is a chess engine testing framework authored by Andrew Grant.   #
+#   <https://github.com/AndyGrant/OpenBench>           <andrew@grantnet.us>   #
+#                                                                             #
+#   OpenBench is free software: you can redistribute it and/or modify         #
+#   it under the terms of the GNU General Public License as published by      #
+#   the Free Software Foundation, either version 3 of the License, or         #
+#   (at your option) any later version.                                       #
+#                                                                             #
+#   OpenBench is distributed in the hope that it will be useful,              #
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of            #
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the             #
+#   GNU General Public License for more details.                              #
+#                                                                             #
+#   You should have received a copy of the GNU General Public License         #
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.     #
+#                                                                             #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+# Adapted for nyayo from OpenBench's OpenBench/workloads/get_workload.py (openbench_eg da629d7): names only.
+#
+# Module serves a singular purpose, to invoke:
+# >>> get_workload(Machine)
+#
+# Refer to: https://github.com/AndyGrant/OpenBench/wiki/Workload-Assignment
+
+import math
+import random
+import re
+import sys
+
+from nyayo.lab import config, steps, utils
+from nyayo.lab.document import report_test
+from nyayo.lab.models import Book, EngineConfig, Result, Test
+from nyayo.lab.spsa_utils import spsa_workload_assignment_dict
+
+from django.db import transaction
+from django.db import IntegrityError
+
+def get_workload(request, machine):
+
+    # Select a workload from the possible ones, if we can
+    if not (test := select_workload(request, machine)):
+        return {}
+
+    # Avoid creating duplicate Result objects
+    try:
+        result, created = Result.objects.get_or_create(test=test, machine=machine)
+    except IntegrityError:
+        result = Result.objects.filter(test=test, machine=machine).order_by('-id').first()
+        if result is None:
+            raise
+
+    # Update the Machine's status. Only the touched columns are written back,
+    # to avoid re-serializing the (large) info blob on every workload request
+    machine.workload = test.id;
+    machine.mnps = machine.dev_mnps = machine.base_mnps = 0.00
+    machine.save(update_fields=['workload', 'mnps', 'dev_mnps', 'base_mnps', 'updated'])
+    result.workloads += 1; result.save(update_fields=['workloads'])
+    steps.start_walk(result)
+
+    workload = workload_to_dictionary(test, result, machine)
+
+    # The machine is on the test now: nyayo is told once all of it is committed
+    transaction.on_commit(lambda: report_test(test.id))
+
+    return { 'workload' : workload }
+
+def select_workload(request, machine):
+
+    # Step 1: Refine active workloads to the candidate assignments
+    candidates, has_focus = filter_valid_workloads(request, machine)
+    if not candidates:
+        return None
+
+    # Step 2: Count relevant threads on each candidate test
+    worker_dist, engine_freq = compute_resource_distribution(candidates, machine, has_focus)
+
+    # Step 3: Determine the effective-throughput for each workload
+    if config.balance_engine_throughputs():
+        for id, data in worker_dist.items():
+            data['throughput'] = data['throughput'] / engine_freq[data['engine']]
+
+    # Step 4: Compute the Resource Ratios for each of the workloads, if we were assigned
+    for id, data in worker_dist.items():
+        data['ratio'] = (data['threads'] + machine.info['concurrency']) / data['throughput']
+
+    # Step 5: Compute the idealized "Fair-Ratio" once our machine is added
+    min_ratio      = min(x['ratio'] for x in worker_dist.values())
+    thread_sum     = sum(x['threads'] for x in worker_dist.values()) + machine.info['concurrency']
+    throughput_sum = sum(x['throughput'] for x in worker_dist.values())
+    fair_ratio     = thread_sum / throughput_sum
+
+    # The candidates are already in memory, so the winner never needs a re-fetch
+    by_id = { workload.id : workload for workload in candidates }
+
+    # Step 6: Repeat the same machine, if we are still within +- 25% fairness
+    if machine.workload in worker_dist.keys():
+        this_ratio = worker_dist[machine.workload]['ratio']
+        if min_ratio / fair_ratio > 0.75 and this_ratio / fair_ratio < 1.25:
+            return by_id[machine.workload]
+
+    # Step 7: Pick a random test, amongst those who share the min_ratio, weighted by throughput
+    choices = [id for id, data in worker_dist.items() if data['ratio'] == min_ratio]
+    weights = [data['throughput'] for id, data in worker_dist.items() if data['ratio'] == min_ratio]
+    return by_id[random.choices(choices, weights=weights)[0]]
+
+def filter_valid_workloads(request, machine):
+
+    # The ordering of get_active_tests() is for the GUI. It costs a sort that we
+    # do not need, since the priority refinement below is done in Python anyway
+    workloads = utils.get_active_tests().order_by()
+
+    # Skip engines that the Machine cannot handle. Expressed as a whitelist, so
+    # the query carries two IN() clauses instead of one NOT for every engine
+    supported = machine.info['supported']
+    workloads = workloads.filter(dev_engine__in=supported, base_engine__in=supported)
+
+    # Skip every engine but our own, for --only machines
+    if only := machine.info.get('only', []):
+        workloads = workloads.filter(dev_engine__in=only)
+
+    # Skip workloads that are blacklisted on the machine
+    if blacklisted := request.POST.getlist('blacklist'):
+        workloads = workloads.exclude(id__in=blacklisted)
+
+    # Skip the tests this machine has left: a failure nobody could place, until the test is restarted by hand
+    workloads = workloads.exclude(id__in=steps.left_tests(machine))
+
+    # Skip workloads with unmet Syzygy requirements
+    if unmet := ['%d-MAN' % (K) for K in range(machine.info['syzygy_max'] + 1, 10)]:
+        workloads = workloads.exclude(syzygy_adj__in=unmet)
+        workloads = workloads.exclude(syzygy_wdl__in=unmet)
+
+    # Skip any workload using, or measuring, Time, for --noisy workers
+    if machine.info.get('noisy'):
+        workloads = [x for x in workloads if not utils.workload_uses_time_based_tc(x)]
+
+    # Skip workloads that we have insufficient threads to play
+    options = [x for x in workloads if valid_hardware_assignment(x, machine)]
+
+    # Possible that no work exists for the machine
+    if not options:
+        return [], False
+
+    # Refine to workloads of the highest priority
+    priorities = [x.priority for x in options]
+    candidates = [x for x in options if x.priority == max(priorities)]
+
+    # Refine to workloads that match our focus, if applicable
+    focuses    = machine_focuses(machine)
+    has_focus  = any(x.dev_engine in focuses for x in candidates)
+
+    if has_focus:
+        candidates = list(filter(lambda x: x.dev_engine in focuses, candidates))
+
+    return candidates, has_focus
+
+def machine_focuses(machine):
+
+    # --only is a hard restriction, whereas --focus is merely a preference.
+    # A Machine using --only is at least as dedicated as one using --focus,
+    # therefore --only implies --focus for the purposes of the assignment
+
+    return machine.info.get('only', []) + machine.info.get('focus', [])
+
+def valid_hardware_assignment(workload, machine):
+
+    # Extract thread requirements from the workload itself
+    dev_threads  = int(utils.extract_option(workload.dev_options,  'Threads'))
+    base_threads = int(utils.extract_option(workload.base_options, 'Threads'))
+
+    # Extract the information from our machine
+    threads      = machine.info['concurrency']
+    hyperthreads = machine.info['physical_cores'] < threads
+
+    # For core-odds tests, disable hyperthreads, by halving the thread count
+    if hyperthreads and dev_threads != base_threads:
+        threads = threads // 2
+
+    # SPSA plays a pair at a time, not a game at a time
+    is_spsa = workload.test_mode == 'SPSA'
+
+    # Refuse if there are not enough threads for the test
+    if (1 + is_spsa) * max(dev_threads, base_threads) > threads:
+        return False
+
+    # All Criteria have been met
+    return True
+
+def compute_resource_distribution(workloads, machine, has_focus):
+
+    # Return a thread count, and engine name for each workload, as well as the throughput.
+    # The throughput may be scaled down later, due to balance_engine_throughputs
+
+    worker_dist = {
+        workload.id : { 'threads' : 0, 'engine' : workload.dev_engine, 'throughput' : workload.throughput }
+            for workload in workloads
+    }
+
+    # Ignore our own machine;
+    # Ignore machines working on non-candidates;
+    # Ignore focus-assigned and only-assigned machines when has_focus is false
+
+    # The first two are done in the database, so that we never pay to deserialize
+    # the info blob of a machine that cannot contribute to any of the candidates
+
+    others = utils.getRecentMachines() \
+        .filter(workload__in=list(worker_dist.keys())).exclude(id=machine.id)
+
+    for x in others:
+        if has_focus or worker_dist[x.workload]['engine'] not in machine_focuses(x):
+            worker_dist[x.workload]['threads'] += x.info['concurrency']
+
+    # Count of tests that exist for a particular dev_engine
+
+    engine_freq = {}
+    for workload in workloads:
+        engine_freq[workload.dev_engine] = engine_freq.get(workload.dev_engine, 0) + 1
+
+    return worker_dist, engine_freq
+
+def workload_to_dictionary(test, result, machine):
+
+    # Every game is kept (nyayo's game database), including those of tests made before that
+    if test.upload_pgns == 'FALSE':
+        test.upload_pgns = utils.always_upload(test.upload_pgns)
+        test.save(update_fields=['upload_pgns'])
+
+    workload = {}
+
+    workload['result'] = {
+        'id'  : result.id,
+    }
+
+    workload['test'] = {
+        'id'            : test.id,
+        'type'          : test.test_mode,
+        'syzygy_wdl'    : test.syzygy_wdl,
+        'syzygy_adj'    : test.syzygy_adj,
+        'win_adj'       : test.win_adj,
+        'draw_adj'      : test.draw_adj,
+        'workload_size' : test.workload_size,
+        'upload_pgns'   : test.upload_pgns,
+        'genfens_args'  : test.genfens_args,
+        'play_reverses' : test.play_reverses,
+        'scale_method'  : test.scale_method,
+        'scale_nps'     : test.scale_nps,
+    }
+
+    # Book could have been deleted after this workload was created
+    book = Book.objects.filter(name=test.book_name).first()
+
+    workload['test']['book'] = {
+        'name'   : test.book_name,
+        'sha'    : book.sha    if book else None,
+        'source' : book.source if book else None,
+    }
+
+    # Looked up by name without regard for the enabled flag, so that disabling
+    # an Engine does not strand the Workloads already running against it
+    dev_config  = EngineConfig.objects.get(name=test.dev_engine)
+    base_config = EngineConfig.objects.get(name=test.base_engine)
+
+    workload['test']['dev'] = {
+        'id'           : test.dev.id,
+        'name'         : test.dev.name,
+        'source'       : test.dev.source,
+        'sha'          : test.dev.sha,
+        'bench'        : test.dev.bench,
+        'engine'       : test.dev_engine,
+        'options'      : test.dev_options,
+        'network'      : test.dev_network,
+        'netname'      : test.dev_netname,
+        'time_control' : test.dev_time_control,
+        'build'        : dev_config.build(),
+        'private'      : dev_config.private,
+    }
+
+    workload['test']['base'] = {
+        'id'           : test.base.id,
+        'name'         : test.base.name,
+        'source'       : test.base.source,
+        'sha'          : test.base.sha,
+        'bench'        : test.base.bench,
+        'engine'       : test.base_engine,
+        'options'      : test.base_options,
+        'network'      : test.base_network,
+        'netname'      : test.base_netname,
+        'time_control' : test.base_time_control,
+        'build'        : base_config.build(),
+        'private'      : base_config.private,
+    }
+
+    workload['distribution']   = game_distribution(test, machine)
+    workload['spsa']           = spsa_workload_assignment_dict(test, workload['distribution']['runner-count'])
+    workload['reporting_type'] = test.spsa_run.reporting_type if test.test_mode == 'SPSA' else ''
+
+    with transaction.atomic():
+
+        test = Test.objects.select_for_update().get(id=test.id)
+        workload['test']['book_seed' ] = test.id
+        workload['test']['book_index'] = test.book_index
+
+        runner_cnt    = workload['distribution']['runner-count']
+        pairs_per_cnt = workload['distribution']['rounds-per-runner'] // 2
+        per_opening   = 2 if (test.test_mode == 'DATAGEN' and not test.play_reverses) else 1
+
+        test.book_index += runner_cnt * pairs_per_cnt * per_opening
+
+        if test.test_mode == 'DATAGEN':
+            workload['test']['genfens_seeds'] = [
+                random.randint(0, 2**31 - 1) for x in range(machine.info['concurrency'])]
+
+        # Only book_index changed. Avoid holding the lock for longer than needed
+        test.save(update_fields=['book_index', 'updated'])
+
+    return workload
+
+def extract_option(options, option):
+
+    if (match := re.search('(?<=%s=")[^"]*' % (option), options)):
+        return match.group()
+
+    if (match := re.search('(?<=%s=\')[^\']*' % (option), options)):
+        return match.group()
+
+    if (match := re.search('(?<=%s=)[^ ]*' % (option), options)):
+        return match.group()
+
+def game_distribution(test, machine):
+
+    dev_threads  = int(extract_option(test.dev_options, 'Threads'))
+    base_threads = int(extract_option(test.base_options, 'Threads'))
+
+    worker_threads = machine.info['concurrency']
+    worker_sockets = machine.info['sockets']
+
+    # For core-odds tests, disable hyperthreads, by halving the thread count
+    if machine.info['physical_cores'] < worker_threads and dev_threads != base_threads:
+        worker_threads = worker_threads // 2
+
+    # Ignore sockets for concurrent match runners, when playing with more than one thread
+    if max(dev_threads, base_threads) > 1:
+        worker_sockets = 1
+
+    # Max possible concurrent engine games, per copy of match runner
+    max_concurrency = (worker_threads // worker_sockets) // max(dev_threads, base_threads)
+
+    # Number of params being evaluated at a single time, if doing SPSA in SINGLE mode
+    spsa_count = (worker_threads // max(dev_threads, base_threads)) // 2
+
+    # SPSA is treated specially, if we are distributing many parameter sets at once
+    is_multiple_spsa = test.test_mode == 'SPSA' and test.spsa_run.distribution_type == 'MULTIPLE'
+
+    return {
+        'runner-count'      : spsa_count if is_multiple_spsa else worker_sockets,
+        'concurrency-per'   : 2 if is_multiple_spsa else max_concurrency,
+        'rounds-per-runner' : 2 * test.workload_size * (1 if is_multiple_spsa else max_concurrency),
+    }
