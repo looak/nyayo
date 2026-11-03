@@ -359,7 +359,8 @@ with OpenBench's notice. Tunes and datagens come later.
   name, else that first line, else empty (the match is then named from the branches). The bench is typed under
   *Advanced*, else read from a `Bench:` / `Nodes:` line of the commit message, and a commit with neither stops the form
   with the field marked. `NYAYO_GITHUB_TOKEN` (environment) is sent to GitHub's API when set, which lifts the rate limit
-  and reaches a private engine's repository.
+  and reaches a private engine's repository. `NYAYO_GITHUB_API`, when set, replaces `https://api.github.com/repos` in every
+  address the page builds from a repository, the archives the workers fetch included; only the smoke test sets it.
 - **GitHub down** (no answer, a timeout, a 5xx) is not the same as GitHub saying no: with the full 40 character sha and
   the bench typed on each side, the test is made from what was typed (the source is the zipball URL of the sha, the
   name the typed one or the sha); with a branch name it says to type those, and makes nothing.
