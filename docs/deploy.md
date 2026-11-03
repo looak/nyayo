@@ -114,6 +114,79 @@ deploy/update.sh
 It pulls, reinstalls the package, migrates the database, collects static files and restarts the service. No need to
 activate the env first.
 
+## The lab: OpenBench's workers
+
+From nyayo 2.0 nyayo is OpenBench's server: it makes the tests, hands the workers their work, and takes their results.
+The worker that plays is OpenBench's own `Client/` (looak/openbench_eg, `master`), unchanged. OpenBench itself, on port
+8000, is not needed and is not touched; it can keep running until the last of its tests has ended.
+
+**What is new in the environment**
+
+- Python 3.12 or later in the env (`pyproject.toml` says `>=3.12`; the first install above makes the env with 3.13). Check
+  with `python --version` in the env: an older one makes `pip install -e .` fail with "requires a different Python".
+- `deploy/update.sh` runs `pip install -e .`, which brings `scipy` and `numpy` (the SPRT maths), both with wheels for Linux.
+- `NYAYO_INSTANCE` in `.env`: the name in the ids of the matches tests make, `openbench-<instance>-<test id>`. **It must be
+  what OpenBench had on bobby**, or new tests are named differently from the old and the ids do not carry on from them. The
+  ids of the matches nyayo already has show it:
+
+  ```bash
+  python manage.py shell --no-imports -c "from nyayo.matches.models import Match; print(list(Match.objects.filter(id__startswith='openbench-').order_by('-started_at').values_list('id', flat=True)[:3]))"
+  ```
+
+  gives `['openbench-<instance>-2345', ...]`. `deploy/update.sh` ends by printing the id the next test will have and the
+  instance it was made with. The first migration of the lab also starts test ids at the next thousand above the highest
+  `openbench-<anything>-<N>` there, so a test of nyayo's can never take a number OpenBench used.
+- The rest, all optional, is in `.env.example`: `NYAYO_GITHUB_TOKEN` for the create page's lookups, and what the workers
+  are told to fetch (`NYAYO_CLIENT_*`, `NYAYO_FASTCHESS_*`; the defaults are right).
+
+**The workers must reach nyayo.** A worker talks to `http://172.16.100.11:8001/` (the paths `clientGetWorkload/`,
+`clientReportStep/` and so on, at the root), so port 8001 must be open to hunt and `NYAYO_ALLOWED_HOSTS` must name the
+address the worker uses. From the worker's machine:
+
+```bash
+curl -s -X POST -d username=<worker user> -d password=<its password> http://172.16.100.11:8001/clientVersionRef/
+```
+
+answers `{"client_version": 54, "client_repo_url": "https://github.com/looak/openbench_eg", "client_repo_ref": "master"}`.
+There is no path prefix for a worker to get wrong: with `NYAYO_SCRIPT_NAME` set it would have to be part of `-S`.
+
+**People.** The owner is the superuser (`python manage.py createsuperuser`): the one who signs in to `/sign-in`, makes and
+approves tests, and uses `/admin/`. A worker signs in as a user too: in the admin, Authentication and Authorization, Users,
+add one for the workers (a username and a password; not staff, not superuser). Nothing else is needed on the user; a
+worker is a machine that the user's name and password let in, and each time one starts it is a new row under Lab, Machines.
+
+**What it seeds.** The first migration of the lab adds the Elephant engine (source `https://github.com/looak/elephant`,
+built with `ob_build`, compilers `g` and `clang`, presets STC, LTC, SMP STC and SMP LTC with time controls such as
+`8.0+0.08`) and OpenBench's twelve books. They are under Lab, Engine configs and Books in the admin (the Engines and Books
+pages in the sidebar are not built yet).
+
+**What a worker needs** (hunt): Python 3 with the packages in `Client/requirements.txt` (`requests`, `psutil`,
+`py-cpuinfo`, `zstandard`); `make` and a C++ compiler, `g++` or `clang++` (it builds fastchess with whichever it finds, the
+first time and when nyayo asks for a newer one); and access to `github.com` and `raw.githubusercontent.com`, from where it
+downloads its own client, fastchess, the engine's source as an archive and the books. To build Elephant it also needs one of
+the compilers in the engine's configuration, `g` or `clang`: the worker runs `<name> --version` for each in turn and uses the
+first that answers. There is no program called `g`, so it is `clang` that has to answer; the worker's start-up output says
+which it found (`Elephant | clang (18.1.3)`), or `Missing ['g', 'clang']` when neither did, and then it cannot play Elephant:
+nyayo hands a worker only the tests of engines it can build, which also needs the CPU flag `POPCNT` and the operating system
+to be Linux or Windows. A test no worker can play stays *waiting for a worker*.
+(The names are as OpenBench's `Engines/elephant.json` had them; they are editable under Lab, Engine configs.) It starts with
+
+```bash
+python3 client.py -U <worker user> -P <its password> -S http://172.16.100.11:8001 -T <threads> -N <sockets> -I hunt
+```
+
+(`-S` is the whole address, no path; the username, password and server may instead be in `OPENBENCH_USERNAME`,
+`OPENBENCH_PASSWORD` and `OPENBENCH_SERVER`). If the worker's start is automatic, only `-S` and the credentials change
+from what was run against OpenBench. A worker plays for one server at a time: stop it before it is pointed elsewhere.
+
+**Elephant's `main` has no `Bench:` line** in its commit message, which the create page needs to know a commit's bench.
+Under *Advanced* on Create test, type the base's bench (and the dev's, if its commit has none either) in *Base bench*:
+the node count `bench` prints for that commit. The page says "Unable to parse a Bench" until it is.
+
+**The smoke test** (`tools/smoke/run.py`; its docstring has the setup) is how to see all of this work before a real test:
+nyayo as deployed, openbench_eg's worker at the commit `master` is at, a toy engine and a GitHub of its own, tests made
+through the real create page, the engine's failures staged. Linux or WSL, `make` and `g++`, about two to three minutes.
+
 ## Game threads
 
 Producers send games far more often than anything else: uwanja PUTs a live game after every move, OpenBench a batch
