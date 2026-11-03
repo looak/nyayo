@@ -87,6 +87,15 @@ service in a conda env) and connecting Elephant are described in [docs/deploy.md
 
 GPL-3.0, see [LICENSE](LICENSE).
 
+**From OpenBench.** nyayo 2.0 moves the server of [OpenBench](https://github.com/AndyGrant/OpenBench), authored by
+Andrew Grant (GPL-3.0), into nyayo, through the owner's fork [openbench_eg](https://github.com/looak/openbench_eg). What
+came from it was repurposed, and keeps OpenBench's notice at the top of each file: `nyayo/lab/stats.py` (the SPRT and
+Elo maths, taken from Fishtest by OpenBench) is copied unchanged; `nyayo/lab/spsa_utils.py` is copied with one import
+line pointed at nyayo's models; `nyayo/lab/models.py` is OpenBench's `models.py` trimmed and adapted (`Profile` and `PGN`
+gone, users and the author of a test are Django's); and the seed data of `nyayo/lab/migrations/0002_seed.py` is
+OpenBench's book list and the Elephant engine file. The worker that plays the games is OpenBench's `Client/`, used
+unchanged from openbench_eg. Files that come to nyayo from OpenBench later are listed here when they do.
+
 Bundled with it: lichess's board, [chessground](https://github.com/lichess-org/chessground) 9.1.1 (GPL-3.0,
 `nyayo/matches/static/vendor/`), and nyayo's icon, the chess elephant
 [Chess_elt45.svg](https://commons.wikimedia.org/wiki/File:Chess_elt45.svg) by NikNaks93 (BSD 3-Clause,

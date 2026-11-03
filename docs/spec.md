@@ -315,6 +315,30 @@ without games: two waiting, held, two failed starts; one running with workers at
 simulated gauntlets (running, finished, stopped with games cut off, silent, just started), with their games, to polish
 the pages on.
 
+### Lab: the models
+
+`nyayo/lab` (app label `lab`) is where nyayo 2.0 will create, schedule and play tests itself, taking over from
+OpenBench's server (looak/ramani `plans/nyayo-2.md`). So far it holds only data: no page, no endpoint, no scheduling.
+
+- **Models** are OpenBench's (openbench_eg `da629d7`), with its names and fields, trimmed of what this lab doesn't
+  use: `Test`, `Result`, `Step`, `Machine` (a worker; `runs.Machine` is a token that reports runs), `Engine` (the commit
+  under test; `matches.Engine` is a build as it names itself), `EngineConfig`, `Book`, `Network`, `SPSARun`,
+  `SPSAParameter`, `LogEvent`, and `ServerState` (one row, the build checksum a worker restarts on, refreshed whenever
+  an `EngineConfig` is saved). `Profile` is gone: `Machine.user` and `Test.author` are Django's `auth.User`. There is
+  no `PGN`: an upload of games becomes one of nyayo's batches. All are registered plainly in the admin.
+- **A test and its match.** A test's match has the id `openbench-<NYAYO_INSTANCE>-<test id>` (`NYAYO_INSTANCE`, default
+  `openbench`; `nyayo.lab.ids.match_id`), which must be the value OpenBench had on bobby. `Test` has no link to `Match`: the id is a function of the test's, and the
+  match exists only once the first document is ingested.
+- **Test ids.** The first test's id is above the highest `N` in the existing `openbench-<anything>-<N>` match ids (any instance, so a wrong `NYAYO_INSTANCE` can't restart the numbering),
+  rounded up to the next thousand (1234 gives 2000, 2000 gives 3000; 1 when there are none). The data migration
+  `0002_seed` works it out once and sets SQLite's sequence; ids count on, and are never reused.
+- **Maths.** `nyayo/lab/stats.py` (SPRT log-likelihood ratios, Elo and its interval) and `spsa_utils.py` (SPSA
+  parameters and a workload's perturbations) are OpenBench's, with its notice (README, *License*); `scipy` and `numpy`
+  are dependencies.
+- **Seeds** (`0002_seed`): the `Elephant` engine config with its build and presets, whose time controls are written
+  with a `+` (`8.0+0.08`, `40.0+0.4`, `5.0+0.05`, `20.0+0.2`; the file Elephant came from had `8.00.08` and so on, which
+  OpenBench plays with no increment), and the twelve books of the lab, by name, source and sha.
+
 ### Pages
 
 Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar, which stays in place while the page scrolls, and a top bar. nyayo's icon, in the sidebar and as the favicon (SVG, a 32 px PNG and a 180 px apple-touch-icon), is the chess elephant from Wikimedia Commons (Chess_elt45.svg by NikNaks93), bundled under `nyayo/runs/static/img/` and used under the BSD 3-Clause License (`LICENSE-elephant.txt`). Every page's coloured tiles carry an icon, large and faint behind the figures as
