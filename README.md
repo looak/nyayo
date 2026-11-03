@@ -55,6 +55,8 @@ cp .env.example .env
 .venv/Scripts/python manage.py test nyayo
 ```
 
+Every page reads without a login. The Actions and Lab links in the sidebar change things, so they need one: sign in at `/sign-in` with the user `createsuperuser` made. Today they are stubs for the nyayo 2.0 pages.
+
 `manage.py seed_demo` (debug mode only) makes six simulated SPRTs (passed, failed, stopped, running, silent, just
 started) with a history, a few games and a batch, a running one with workers at every stage, five tests that have not played (two waiting, held, two failed starts), and five simulated gauntlets (running, finished, stopped with games
 cut off, silent, just started) with every game they started, for working on the pages without a real test running.

@@ -1,5 +1,5 @@
 {% extends "runs/base.html" %}
-{% load static runs_extras matches_extras %}
+{% load lab_extras static runs_extras matches_extras %}
 {% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
 {% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% if show_workers %}<script defer src="{% static 'matches/workers.js' %}"></script>{% endif %}{% endblock %}
 {% block content %}
@@ -8,6 +8,7 @@
   <span class="tier">sprt</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state|statename:"long" }}</span>{% endif %}
   <span class="muted">{% if subject_link %}<a href="{{ subject_link }}">{{ subject_line }}</a>{% else %}{{ subject_line }}{% endif %} <span class="vs">against</span> {% if base_link %}<a href="{{ base_link }}">{{ base_line }}</a>{% else %}{{ base_line }}{% endif %}{% if producer_url %} · <a href="{{ producer_url }}">{{ match.producer_name }}</a>{% endif %}</span>
 </div>
+{% test_actions match %}
 
 {% if headline %}
 <section class="card verdict top-{{ headline.look }}">

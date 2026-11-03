@@ -9,4 +9,5 @@ urlpatterns = [
     path("", include("nyayo.matches.urls")),
     path("", include("nyayo.lab.urls")),
     path("", include("nyayo.runs.urls")),
+    path("", include("nyayo.actions.urls")),
 ]

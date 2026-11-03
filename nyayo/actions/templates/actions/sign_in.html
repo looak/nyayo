@@ -1,0 +1,16 @@
+{% extends "runs/base.html" %}
+{% block title %}Sign in · nyayo{% endblock %}
+{% block crumb %}Actions › Sign in{% endblock %}
+{% block content %}
+<div class="card signin">
+  <h3 class="box-title">Sign in to start work</h3>
+  <p>Actions build and run code on the test machines, so they need a login. Every other page reads without one.</p>
+  <form method="post">{% csrf_token %}
+    {% if form.non_field_errors %}<div class="errors" role="alert">{% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}</div>{% endif %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <label class="field">Username <input name="username" autocomplete="username" autofocus required value="{{ form.username.value|default:'' }}"></label>
+    <label class="field">Password <input type="password" name="password" autocomplete="current-password" required></label>
+    <div class="actions-row"><button class="act">Sign in</button></div>
+  </form>
+</div>
+{% endblock %}

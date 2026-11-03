@@ -19,10 +19,11 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# Adapted for nyayo from OpenBench's OpenBench/utils.py (openbench_eg da629d7): the time control, the active tests, the
-# machines heard from lately and update_test, which applies a workload's results. What the pages, the networks, books
-# and engines administration of that file did comes with the pages in later steps. Profile is gone, and a report to
-# nyayo is report_test, in this process.
+# Adapted for nyayo from OpenBench's OpenBench/utils.py (openbench_eg da629d7): the time control, the active tests,
+# the machines heard from lately, update_test (which applies a workload's results), and the helpers the workload
+# pages use. The logic is OpenBench's; what read OpenBench's config files (git credentials) reads nyayo's settings.
+# What the pages, the networks, books and engines administration of that file did comes with the pages in later
+# steps. Profile is gone, and a report to nyayo is report_test, in this process.
 
 import datetime
 import json
@@ -122,6 +123,9 @@ def workload_uses_time_based_tc(workload):
        or (dev_type  != TimeControl.FIXED_NODES and dev_type  != TimeControl.FIXED_DEPTH) \
        or (base_type != TimeControl.FIXED_NODES and base_type != TimeControl.FIXED_DEPTH)
 
+def path_join(*args):
+    return "/".join([f.lstrip("/").rstrip("/") for f in args]).rstrip('/')
+
 def always_upload(upload_pgns):
     # The fork keeps every game for training, so FALSE (upstream's default) becomes COMPACT
     return 'COMPACT' if upload_pgns == 'FALSE' else upload_pgns
@@ -136,6 +140,44 @@ def extract_option(options, option):
 
     match = re.search(r'(?<={0}=)[^ ]*'.format(option), options)
     if match: return match.group()
+
+def determine_bench(typed, message):
+
+    # Use the provided bench if possible
+    try: return int(typed)
+    except: pass
+
+    # Fallback to try to parse the Bench from the commit
+    try:
+        benches = re.findall('(?:BENCH|NODES)[ :=]+([0-9,]+)', message, re.IGNORECASE)
+        return int(benches[-1].replace(',', ''))
+    except: return None
+
+def determine_info(typed, message, dev_engine, base_engine, dev_branch, base_branch):
+
+    # Use the provided info if possible
+    if typed:
+        return typed
+
+    # Do not auto populate when comparing different engines, or the same branch
+    if dev_engine != base_engine:
+        return ''
+
+    if dev_branch == base_branch:
+        return ''
+
+    # Strip the bench from the commit message, and tidy the whitespace
+    lines = message.strip().split("\n")
+    bench_search = re.compile(r"(^|\s)[Bb]ench[ :]+([1-9]\d{5,7})(?!\d)")
+    for i, line in enumerate(reversed(lines)):
+        new_line, n = bench_search.subn("", line)
+        if n:
+            lines[-i - 1] = new_line
+            break
+    s = "\n".join(lines)
+    s = re.sub(r"[ \t]+", " ", s)
+    s = re.sub(r"\n+", r"\n", s)
+    return s.rstrip()
 
 
 def get_active_tests():

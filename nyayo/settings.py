@@ -132,6 +132,7 @@ INSTALLED_APPS = [
     "nyayo",
     "nyayo.runs",
     "nyayo.matches",
+    "nyayo.actions",
     "nyayo.lab",
 ]
 
@@ -146,6 +147,11 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# Actions need a signed-in admin user (nyayo/actions); reading stays open
+LOGIN_URL = "sign_in"
+LOGIN_REDIRECT_URL = "dashboard"
+LOGOUT_REDIRECT_URL = "dashboard"
 
 ROOT_URLCONF = "nyayo.urls"
 WSGI_APPLICATION = "nyayo.wsgi.application"
