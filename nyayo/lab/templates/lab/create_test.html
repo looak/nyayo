@@ -8,7 +8,6 @@
   .fields .field { margin: 0; }
   .fields .wide { grid-column: 1 / -1; }
   .field { min-width: 0; }
-  .field select { width: 100%; padding: .32rem .45rem; border: 1px solid var(--line); border-radius: 3px; background: var(--code-bg); color: var(--fg); font-size: .9rem; }
   .field.bad input, .field.bad select { border-color: var(--danger); }
   .field .err { color: var(--worse); }
   .field .hint { color: var(--muted); font-size: .74rem; }
@@ -33,19 +32,6 @@
   details.advanced[open] summary::after { content: "－"; }
   details.advanced h4 { margin: 1rem 0 .4rem; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
   .warned { margin: 0 0 .75rem; padding: .55rem .8rem; border-left: 4px solid var(--warning); border-radius: 3px; background: var(--wip-bg); }
-  .combo { position: relative; display: block; }
-  .combo input { padding-right: 2.2rem; }
-  .combo-arrow { position: absolute; top: 0; right: 0; bottom: 0; width: 2rem; padding: 0; border: 0; border-left: 1px solid var(--line);
-                 border-radius: 0 3px 3px 0; background: none; color: var(--muted); font-size: .85rem; cursor: pointer; }
-  .combo-arrow:hover { color: var(--bright); }
-  .combo-list { position: absolute; z-index: 20; top: 100%; right: 0; left: 0; max-height: min(16rem, 45vh); overflow-y: auto;
-                margin: 2px 0 0; padding: .2rem 0; list-style: none; border: 1px solid var(--line); border-radius: 3px;
-                background: var(--page); box-shadow: 0 6px 16px rgba(0, 0, 0, .45); }
-  .combo-list li { padding: .35rem .6rem; color: var(--fg); font-size: .88rem; cursor: pointer; overflow-wrap: anywhere; }
-  .combo-list li:hover, .combo-list li.active { background: var(--committed-bg); color: var(--bright); }
-  .combo-list li.current { color: var(--committed); }
-  .combo-list li.combo-note { color: var(--muted); cursor: default; font-size: .8rem; }
-  .combo-list li.combo-note:hover { background: none; color: var(--muted); }
   .resolved dd.none { color: var(--muted); }
   .resolved dd.bad { color: var(--worse); }
   .resolved dd.warn { color: var(--wip); }

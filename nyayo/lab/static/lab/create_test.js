@@ -83,7 +83,7 @@
     var wrap = document.createElement("span"), list = document.createElement("ul"), arrow = document.createElement("button");
     wrap.className = "combo";
     list.className = "combo-list"; list.id = input.id + "-list"; list.setAttribute("role", "listbox"); list.hidden = true;
-    arrow.type = "button"; arrow.className = "combo-arrow"; arrow.tabIndex = -1; arrow.textContent = "▾";
+    arrow.type = "button"; arrow.className = "combo-arrow"; arrow.tabIndex = -1;
     arrow.setAttribute("aria-label", "Show the branches");
     input.parentNode.insertBefore(wrap, input);
     wrap.appendChild(input); wrap.appendChild(arrow); wrap.appendChild(list);

@@ -72,9 +72,38 @@
   /* sign in, and the forms of the actions */
   .signin { max-width: 26rem; }
   .field { display: flex; flex-direction: column; gap: .2rem; margin: .6rem 0; font-size: .78rem; color: var(--muted); }
-  .field input { width: 100%; padding: .32rem .45rem; border: 1px solid var(--line); border-radius: 3px; background: var(--code-bg);
-                 color: var(--fg); font-size: .9rem; }
-  .field input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  /* One look for the form controls: a text input, a select and a combobox share a box, an arrow and a list. The list of a
+     select (Chromium's customizable select) and of a combobox read the same --pick-* values. */
+  .field { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a949c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+           --chevron-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23eef2f5' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+           --pick-bg: var(--page); --pick-line: var(--line); --pick-radius: 3px; --pick-font: .88rem; --pick-pad: .35rem .6rem;
+           --pick-hover-bg: var(--committed-bg); --pick-hover-fg: var(--bright); --pick-current: var(--committed); }
+  .field input, .field select { box-sizing: border-box; width: 100%; margin: 0; padding: .32rem .45rem; border: 1px solid var(--line); border-radius: 3px;
+                                background-color: var(--code-bg); color: var(--fg); font: inherit; font-size: .9rem; line-height: 1.35; }
+  .field select, .combo input { padding-right: 2rem; background-image: var(--chevron); background-repeat: no-repeat; background-position: right .7rem center; background-size: 10px 6px; }
+  .field select { appearance: none; cursor: pointer; }
+  .field select:hover, .combo:hover input { background-image: var(--chevron-hover); }
+  .field input:focus, .field select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  .combo { position: relative; display: block; }
+  .combo-arrow { position: absolute; top: 0; right: 0; bottom: 0; width: 2rem; padding: 0; border: 0; background: none; cursor: pointer; }
+  .combo-list { position: absolute; z-index: 20; top: 100%; right: 0; left: 0; max-height: min(16rem, 45vh); overflow-y: auto;
+                margin: 2px 0 0; padding: .2rem 0; list-style: none; border: 1px solid var(--pick-line); border-radius: var(--pick-radius);
+                background: var(--pick-bg); box-shadow: 0 6px 16px rgba(0, 0, 0, .45); }
+  .combo-list li { padding: var(--pick-pad); color: var(--fg); font-size: var(--pick-font); line-height: 1.3; cursor: pointer; overflow-wrap: anywhere; }
+  .combo-list li:hover, .combo-list li.active { background: var(--pick-hover-bg); color: var(--pick-hover-fg); }
+  .combo-list li.current { color: var(--pick-current); }
+  .combo-list li.combo-note { color: var(--muted); cursor: default; font-size: .8rem; }
+  .combo-list li.combo-note:hover { background: none; color: var(--muted); }
+  @supports (appearance: base-select) {
+    .field select, .field select::picker(select) { appearance: base-select; }
+    .field select::picker-icon { display: none; }
+    .field select::picker(select) { margin: 2px 0 0; padding: .2rem 0; border: 1px solid var(--pick-line); border-radius: var(--pick-radius);
+                                    background: var(--pick-bg); box-shadow: 0 6px 16px rgba(0, 0, 0, .45); max-height: min(16rem, 45vh); }
+    .field select option { display: block; padding: var(--pick-pad); background: none; color: var(--fg); font-size: var(--pick-font); line-height: 1.3; cursor: pointer; }
+    .field select option::checkmark { display: none; }
+    .field select option:hover, .field select option:focus-visible { background: var(--pick-hover-bg); color: var(--pick-hover-fg); outline: 0; }
+    .field select option:checked { color: var(--pick-current); }
+  }
   button.act { padding: .4rem 1.1rem; border: 0; border-radius: 3px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
   .actions-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-top: .9rem; }
   .errors { margin: 0 0 .75rem; padding: .55rem .8rem; border-left: 4px solid var(--danger); border-radius: 3px; background: var(--error-bg); }
