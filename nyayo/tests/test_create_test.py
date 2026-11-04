@@ -370,3 +370,10 @@ class BranchList(Reports):
     def test_signed_out_goes_to_sign_in(self):
         self.client.logout()
         self.assertEqual(self.client.get(reverse("create_test_branches"), {"repo": REPO}).status_code, 302)
+
+
+class GithubAddress(TestCase):
+    def test_the_api_is_githubs_unless_the_environment_says_otherwise(self):
+        self.assertEqual(github.api_base(REPO), "https://api.github.com/repos/looak/elephant")
+        with mock.patch.dict("os.environ", {"NYAYO_GITHUB_API": "http://127.0.0.1:9/repos/"}):
+            self.assertEqual(github.api_base(REPO + "/"), "http://127.0.0.1:9/repos/looak/elephant/")

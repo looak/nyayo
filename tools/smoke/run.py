@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
-"""A small rig that plays tests against nyayo with OpenBench's real worker, and measures what that costs.
+"""The smoke test: nyayo as it will run, OpenBench's own worker playing its tests, and every verdict the toy engine can stage.
 
-Linux or WSL only. It starts nyayo as it will run (gunicorn, 4 workers of 4 threads, SQLite in WAL, and the worker that
-puts games away) on a port and a data directory of its own, serves a toy engine and a book the way GitHub serves
-archives, starts one or more copies of openbench_eg's Client/ (the unchanged files of a given commit, extracted by
-`git archive`; only the worker's timers are shortened in the copy, as the smoke test does), makes tests in the shell and
-checks what nyayo ends up holding: the test, its steps and verdict, the match, its games and its pages.
+Linux or WSL only. One server, no recorder or second app between: gunicorn (4 workers of 4 threads, SQLite in WAL) and the
+worker that puts games away, on a port and a data directory of their own. A toy engine and a book are served the way GitHub
+serves archives, with a stand-in for the part of GitHub's API that the create page asks (NYAYO_GITHUB_API), so a test is
+made through the real create page, signed in as the owner. openbench_eg's Client/ at a given commit is extracted by
+`git archive` and run unchanged, except that its timers are shortened in the copy so a scenario takes seconds.
 
-    git -C ../openbench_eg archive da629d7 Client Scripts/smoke | tar -x -C ~/harness/ob
-    ~/.venvs/nyayo-smoke/bin/pip install -r requirements.txt gunicorn scipy numpy requests   (or pyproject's)
-    ~/.venvs/nyayo-smoke/bin/python tools/worker_rig.py --ob ~/harness/ob [--only NAME ...] [--load]
+    python3 -m venv ~/.venvs/nyayo-smoke && ~/.venvs/nyayo-smoke/bin/pip install -e . gunicorn requests psutil py-cpuinfo
+    ~/.venvs/nyayo-smoke/bin/python tools/smoke/run.py [--only NAME ...] [--ob ../openbench_eg] [--load]
 
-Step 5 of the nyayo 2.0 plan moves openbench_eg's whole smoke test (Scripts/smoke) to nyayo; this is the part of it that
-step 2 needs, and it uses that directory's engine and book.
+It needs make and g++ (the worker builds the toy engine, and fastchess when it has none: keep a built one at
+~/.cache/openbench-smoke/fastchess-ob), and prints how long a full run took. The toy engine, the book and the file
+server come from openbench_eg's Scripts/smoke (da629d7), which is OpenBench's, GPL-3.0 as the rest of it.
 """
 
 import argparse
-import json
+import collections
+import hashlib
+import math
 import os
+import platform
 import re
 import shutil
 import signal
@@ -28,18 +31,23 @@ import sys
 import tempfile
 import threading
 import time
-import urllib.request
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
+import requests
 
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import files  # noqa: E402
+
+CLIENT_REF = 'da629d7'    # the commit of openbench_eg whose Client/ plays
 ENGINE_NAME, ENGINE_NPS, ENGINE_BENCH = 'smoke', 1000000, 1000000
-USERNAME, PASSWORD = 'worker', 'rig-password'
-INSTANCE = 'rig'
+SOURCE = 'https://github.com/smoke/engine'
+INSTANCE = 'smoke'
+OWNER, HELPER, WORKER, PASSWORD = 'owner', 'helper', 'worker', 'smoke-password'
 CLIENT_TIMERS = { 'TIMEOUT_ERROR' : 1, 'TIMEOUT_WORKLOAD' : 1, 'REPORT_INTERVAL' : 2 }
 RETRY = 2          # seconds a worker waits before it tries a test again after a verdict that isn't the engine's
 BENCH_LIMIT = 3    # seconds before a bench is over its time (Client/bench.py's 60)
-SPRT_OPEN = { 'test_mode' : 'SPRT', 'elolower' : 0.0, 'eloupper' : 5.0, 'alpha' : 1e-6, 'beta' : 1e-6 }
+SPRT_OPEN = { 'test_mode' : 'SPRT', 'bounds' : '[0.00, 5.00]', 'confidence' : '[0.000001, 0.000001]' }
 
 RIG_SETTINGS = '''
 import os, time
@@ -99,25 +107,57 @@ def stop(proc):
         os.killpg(proc.pid, signal.SIGKILL)
 
 
+def preflight():
+    missing = [what for what, found in (('Linux (run it in WSL)', platform.system() == 'Linux'), ('make', shutil.which('make')),
+                                        ('g++', shutil.which('g++')), ('git', shutil.which('git'))) if not found]
+    if missing:
+        raise Failure('the smoke test needs: %s' % (', '.join(missing)))
+
+
+class Person:
+
+    # Someone signed in to the pages over HTTP, as a browser is
+    def __init__(self, url, username):
+        self.url, self.session = url, requests.Session()
+        self.session.get(url + '/sign-in', timeout=10)
+        reply = self.session.post(url + '/sign-in', data={ 'username' : username, 'password' : PASSWORD, 'next' : '/',
+                                  'csrfmiddlewaretoken' : self.session.cookies['csrftoken'] }, allow_redirects=False, timeout=10)
+        check(reply.status_code == 302, '%s could not sign in: %d' % (username, reply.status_code))
+
+    def post(self, path, **data):
+        data['csrfmiddlewaretoken'] = self.session.cookies['csrftoken']
+        return self.session.post(self.url + path, data=data, allow_redirects=False, timeout=30)
+
+    def create(self, **form):
+        # (test id, None), or (None, what the page said) when it refused
+        reply = self.post('/create/test', **form)
+        if reply.status_code == 302:
+            return int(reply.headers['Location'].rsplit('-', 1)[1]), None
+        said = re.findall(r'<li>([^<]+)</li>', (re.search(r'(?s)<div class="errors">.*?</div>', reply.text) or [''])[0])
+        return None, '%d: %s' % (reply.status_code, ' | '.join(said) or 'no error shown')
+
+    def act(self, test_id, action):
+        return self.post('/tests/%d/%s' % (test_id, action)).status_code
+
+
 class Rig:
 
     def __init__(self, args):
         self.args = args
         self.ob = Path(args.ob).resolve()
-        sys.path.insert(0, str(self.ob / 'Scripts'))
-        from smoke import files
-        self.files = files
-        self.temp = Path(tempfile.mkdtemp(prefix='nyayo-rig-'))
+        check((self.ob / '.git').exists(), '%s is not a checkout of openbench_eg (--ob)' % (self.ob))
+        self.temp = Path(tempfile.mkdtemp(prefix='nyayo-smoke-'))
         self.port = free_port()
         self.url = 'http://127.0.0.1:%d' % (self.port)
-        self.procs, self.clients, self.nonce = [], [], str(time.time())
+        self.procs, self.clients, self.nonce, self.branches = [], [], str(time.time()), 0
+        self.file_server = files.FileServer().__enter__()
         (self.temp / 'rigsettings.py').write_text(RIG_SETTINGS % { 'retry' : RETRY })
         self.env = { k : v for k, v in os.environ.items() if not k.startswith('NYAYO_') }
         self.env.update(
             DJANGO_SETTINGS_MODULE='rigsettings', PYTHONPATH=os.pathsep.join([str(self.temp), str(REPO)]),
-            NYAYO_DATA_DIR=str(self.temp / 'data'), NYAYO_SECRET_KEY='rig', NYAYO_INSTANCE=INSTANCE,
+            NYAYO_DATA_DIR=str(self.temp / 'data'), NYAYO_SECRET_KEY='smoke', NYAYO_INSTANCE=INSTANCE,
+            NYAYO_GITHUB_API=self.file_server.url + '/repos', NYAYO_ALLOWED_HOSTS='127.0.0.1,localhost',
             RIG_WRITES=str(self.temp / 'writes.log'), PYTHONUNBUFFERED='1', PYTHONDONTWRITEBYTECODE='1')
-        self.file_server = files.FileServer().__enter__()
 
     # nyayo
 
@@ -130,8 +170,6 @@ class Rig:
         sys.path[:0] = [str(self.temp), str(REPO)]
         import django
         django.setup()
-        from django.contrib.auth.models import User
-        User.objects.create_user(USERNAME, password=PASSWORD)
         self.seed()
         for name, argv in (
                 ('server', ['-m', 'gunicorn', 'nyayo.wsgi', '--workers', '4', '--worker-class', 'gthread', '--threads', '4',
@@ -142,39 +180,49 @@ class Rig:
             self.procs.append(subprocess.Popen([sys.executable, *argv], cwd=REPO, env=self.env, stdout=log,
                                                stderr=subprocess.STDOUT, start_new_session=True))
         self.wait_for(lambda: self.get('/healthz') == 200, 30, 'nyayo to answer')
+        self.owner, self.helper = Person(self.url, OWNER), Person(self.url, HELPER)
 
     def seed(self):
+        # What the deploy checklist does by hand: the people, the engine and the book
+        from django.contrib.auth.models import User
         from nyayo.lab.models import Book, EngineConfig
+        User.objects.create_superuser(OWNER, password=PASSWORD)
+        User.objects.create_user(HELPER, password=PASSWORD, is_staff=True)
+        User.objects.create_user(WORKER, password=PASSWORD)
         EngineConfig.objects.all().delete()
         EngineConfig.objects.create(
-            name=ENGINE_NAME, nps=ENGINE_NPS, source=self.file_server.url + '/engines', build_path='.',
-            build_compilers='g++', build_cpuflags='', build_systems='Linux', presets={ 'test_presets' : { 'default' : {} } })
+            name=ENGINE_NAME, nps=ENGINE_NPS, source=SOURCE, build_path='.', build_compilers='g++', build_cpuflags='',
+            build_systems='Linux', presets={ 'test_presets' : { 'default' : {} } })
         Book.objects.all().delete()
-        Book.objects.create(name=self.files.BOOK_NAME, sha=self.files.book_sha(),
-                            source=self.file_server.add('/books/smoke.zip', self.files.book_zip()))
+        Book.objects.create(name=files.BOOK_NAME, sha=files.book_sha(), source=self.file_server.add('/books/smoke.zip', files.book_zip()))
 
     def get(self, path, timeout=10):
         try:
-            with urllib.request.urlopen(self.url + path, timeout=timeout) as response:
-                response.read()
-                return response.status
-        except urllib.error.HTTPError as error:
-            return error.code
-        except OSError:
+            return requests.get(self.url + path, timeout=timeout).status_code
+        except requests.RequestException:
             return 0
 
     def page(self, path):
-        with urllib.request.urlopen(self.url + path, timeout=10) as response:
-            return response.read().decode('utf-8', 'replace')
+        reply = requests.get(self.url + path, timeout=10)
+        check(reply.status_code == 200, '%s answered %d' % (path, reply.status_code))
+        return reply.text
+
+    def logged(self, what):
+        # How many times the server's logs say what
+        return sum(1 for log in ('server.log', 'worker.log') for line in (self.temp / log).read_text(errors='replace').splitlines() if what in line)
 
     # the worker
 
     def start_clients(self, one_at_a_time_for=None):
         # one_at_a_time_for: a test id; each worker is started once the last has passed its walk on it, as the
         # first workloads of several workers at once make the toy engine fail to execute (a race in the machine)
+        source = self.temp / 'ob'
+        source.mkdir()
+        archive = subprocess.run(['git', '-C', str(self.ob), 'archive', CLIENT_REF, 'Client'], check=True, capture_output=True).stdout
+        subprocess.run(['tar', '-x', '-C', str(source)], input=archive, check=True)
         for number in range(self.args.workers):
             client = self.temp / ('Client%d' % (number))
-            shutil.copytree(self.ob / 'Client', client, ignore=shutil.ignore_patterns('__pycache__', 'PGNs', 'Engines', 'Networks', 'Books'))
+            shutil.copytree(source / 'Client', client, ignore=shutil.ignore_patterns('__pycache__', 'PGNs', 'Engines', 'Networks', 'Books'))
             worker = (client / 'worker.py').read_text()
             for name, value in CLIENT_TIMERS.items():
                 worker, count = re.subn(r'^(%s\s*=\s*)\d+' % (name), r'\g<1>%d' % (value), worker, flags=re.M)
@@ -193,8 +241,8 @@ class Rig:
                        PATH=os.path.dirname(sys.executable) + os.pathsep + os.environ['PATH'])
             log = open(self.temp / ('client%d.log' % (number)), 'w')
             self.clients.append(subprocess.Popen(
-                [sys.executable, '-u', str(client / 'client.py'), '-U', USERNAME, '-P', PASSWORD, '-S', self.url,
-                 '-T', '1', '-N', '1', '-I', 'rig-%d' % (number), '--no-client-downloads'],
+                [sys.executable, '-u', str(client / 'client.py'), '-U', WORKER, '-P', PASSWORD, '-S', self.url,
+                 '-T', '1', '-N', '1', '-I', 'smoke-%d' % (number), '--no-client-downloads'],
                 cwd=client, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True))
             if one_at_a_time_for:
                 from nyayo.lab.models import Step
@@ -214,33 +262,33 @@ class Rig:
 
     # tests
 
-    def engine(self, label, bench=ENGINE_BENCH, broken=False, bench_mode=''):
-        import hashlib
-        sha = hashlib.sha1(('%s %s %s' % (self.nonce, label, time.time())).encode()).hexdigest()
-        source = self.file_server.add('/engines/%s.zip' % (sha), self.files.engine_zip('smoke-%s' % (sha), broken, bench_mode))
-        return { 'name' : label, 'source' : source, 'sha' : sha, 'bench' : bench }
+    def engine(self, label, bench=ENGINE_BENCH, broken=False, bench_mode='', typed=False):
+        # A branch of the stand-in GitHub. Its commit message says what the bench is, unless typed: the page is
+        # then told, as it has to be for a commit without a Bench: line
+        self.branches += 1
+        name = '%s-%d' % (label, self.branches)
+        sha = hashlib.sha1(('%s %s' % (self.nonce, name)).encode()).hexdigest()
+        message = 'Smoke %s' % (name) if typed else 'Smoke %s\n\nBench: %d' % (name, bench)
+        self.file_server.add_branch('smoke/engine', name, sha, message, files.engine_zip('smoke-%s' % (sha), broken, bench_mode))
+        return { 'branch' : name, 'sha' : sha, 'bench' : bench, 'typed' : typed }
 
-    def create_test(self, dev=None, base=None, **overrides):
-        # As the create page will: the test and its engines, reported at once, then opened to workers
-        import math
-        from django.contrib.auth.models import User
-        from nyayo.lab.document import report_test
-        from nyayo.lab.models import Engine, Test
+    def form(self, dev=None, base=None, **overrides):
         dev, base = dev or self.engine('dev'), base or self.engine('base')
-        fields = dict(
-            author=User.objects.get(username=USERNAME), book_name=self.files.BOOK_NAME,
-            dev_repo=self.file_server.url + '/engines', dev_engine=ENGINE_NAME, dev_options='Threads=1 Hash=16',
-            dev_time_control='N=1000', base_repo=self.file_server.url + '/engines', base_engine=ENGINE_NAME,
-            base_options='Threads=1 Hash=16', base_time_control='N=1000', workload_size=2, priority=1, throughput=100,
-            scale_nps=ENGINE_NPS, test_mode='GAMES', max_games=8)
-        fields.update(overrides)
-        if fields['test_mode'] == 'SPRT':
-            fields['lowerllr'] = math.log(fields['beta'] / (1.0 - fields['alpha']))
-            fields['upperllr'] = math.log((1.0 - fields['beta']) / fields['alpha'])
-        test = Test.objects.create(dev=Engine.objects.create(**dev), base=Engine.objects.create(**base), approved=False, **fields)
-        check(report_test(test) is not None, 'the new test could not be reported')
-        Test.objects.filter(id=test.id).update(approved=True)
-        return test.id
+        form = {
+            'engine' : ENGINE_NAME, 'dev_branch' : dev['branch'], 'base_branch' : base['branch'],
+            'dev_bench' : str(dev['bench']) if dev['typed'] else '', 'base_bench' : str(base['bench']) if base['typed'] else '',
+            'dev_options' : 'Threads=1 Hash=16', 'base_options' : 'Threads=1 Hash=16', 'dev_tc' : 'N=1000', 'base_tc' : 'N=1000',
+            'test_mode' : 'GAMES', 'max_games' : '8', 'workload_size' : '2', 'priority' : '1', 'throughput' : '100',
+            'book' : files.BOOK_NAME,
+        }
+        form.update(overrides)
+        return form
+
+    def create_test(self, who=None, dev=None, base=None, **overrides):
+        # Through the create page; the test is reported from it and opened to the workers if its author may approve
+        test_id, said = (who or self.owner).create(**self.form(dev, base, **overrides))
+        check(test_id, 'the create page refused: %s' % (said))
+        return test_id
 
     def test(self, test_id):
         from nyayo.lab.models import Test
@@ -256,12 +304,7 @@ class Rig:
         return Step.objects.filter(result__test_id=test_id, step=step, side=side).first()
 
     def stop_test(self, test_id):
-        # What the stop button will do: finish it with an event, so the worker is told to stop
-        from nyayo.lab.document import report_test
-        from nyayo.lab.models import LogEvent, Test
-        Test.objects.filter(id=test_id).update(finished=True)
-        LogEvent.objects.create(author=USERNAME, summary='STOP', log_file='', machine_id=0, test_id=test_id)
-        report_test(test_id)
+        check(self.owner.act(test_id, 'stop') == 302, 'the stop button did not redirect')
         time.sleep(RETRY + 3)
 
     def settled(self, test_id, state, timeout=15):
@@ -277,6 +320,20 @@ class Rig:
             list(Upload.objects.filter(match=match, state='refused').values_list('reason', flat=True))))
         return Upload.objects.filter(match=match).aggregate(total=Sum('appended'))['total'] or 0
 
+    def agrees(self, test_id):
+        # nyayo's match and the test it was reported from say the same of everything fixed, and of the counts
+        from nyayo.lab.document import build_document
+        document, match = build_document(self.test(test_id)), self.match(test_id)
+        fixed = document['match']
+        problems = [name for name in ('name', 'kind') if getattr(match, name) != fixed[name]]
+        problems += ['settings'] if match.settings != fixed['settings'] else []
+        problems += ['subject'] if match.subject.commit != document['subject']['commit'] else []
+        result = match.results.get()
+        problems += ['%s: %s, not %s' % (name, getattr(result, name), document['results'][0][name]) for name in ('games', 'wins', 'draws', 'losses')
+                     if getattr(result, name) != document['results'][0][name]]
+        problems += ['the sprt'] if document['sprt'] and (not match.sprt or abs(match.sprt['llr'] - document['sprt']['llr']) > 1e-9) else []
+        check(not problems, 'nyayo disagrees with test %d on %s' % (test_id, ', '.join(problems)))
+
     def close(self, keep):
         for client in self.clients:
             stop(client)
@@ -289,18 +346,21 @@ class Rig:
             shutil.rmtree(self.temp, ignore_errors=True)
 
 
-# Scenarios: each makes a test, waits for what a real worker does with it, and checks nyayo's rows and pages
+# Scenarios: each makes a test through the page, waits for what a real worker does with it, and checks nyayo's rows and pages
 
 def passing_games(r):
-    test_id = r.create_test(test_mode='GAMES', max_games=8, workload_size=1)
+    base = r.engine('base', typed=True)     # a commit without a Bench: line, as Elephant's main is: its bench is typed in
+    test_id = r.create_test(base=base, name='Smoke: eight games', workload_size=1)
+    check(r.match(test_id), 'the match is not there as the page returns')
     r.wait_for(lambda: r.test(test_id).finished, 90, 'test %d to finish' % (test_id))
     test = r.test(test_id)
     check(test.games == 8 and test.wins + test.draws + test.losses == 8, 'games: %s' % (test.games))
     check(test.LL + test.LD + test.DD + test.DW + test.WW == 4, 'the pentanomial is not half the games')
+    check(test.base.bench == ENGINE_BENCH, 'the typed bench is %s' % (test.base.bench))
     r.settled(test_id, 'finished')
+    r.agrees(test_id)
     match = r.match(test_id)
-    result = match.results.get()
-    check(result.games == 8, 'the match counts %d games' % (result.games))
+    check(match.name == 'Smoke: eight games', 'the match is called %r' % (match.name))
     from nyayo.lab.models import Step
     states = {(s.step, s.side): s.state for s in Step.objects.filter(result__test_id=test_id)}
     check(len(states) == 6 and set(states.values()) == { 'passed' }, 'the walk: %s' % (states))
@@ -308,25 +368,95 @@ def passing_games(r):
     check(kept == 8, 'nyayo holds %d games, expected 8' % (kept))
     pages = [r.get(path) for path in ('/matches', '/matches/%s' % (match.pk), '/games')]
     check(pages == [200, 200, 200], 'pages answer %s' % (pages))
-    check('openbench-%s-%d' % (INSTANCE, test_id) in r.page('/matches'), 'the match is not on the list')
-    return 'test %d: 8 games, the walk passed, %d games put away, pages answer' % (test_id, kept)
+    page = r.page('/matches/%s' % (match.pk))
+    check('Smoke: eight games' in page and '<dt>Ended</dt>' in page, 'the match page lacks its name or its end: %s' % (
+        re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', re.sub(r'(?s)<style.*?</style>', '', page)))[:1200]))
+    check(match.pk in r.page('/matches'), 'the match is not on the list')
+    return 'test %d: 8 games, named, base bench typed, the walk passed, %d games put away, pages answer' % (test_id, kept)
 
 
 def sprt_to_result(r):
-    test_id = r.create_test(test_mode='SPRT', elolower=0.0, eloupper=200.0, alpha=0.05, beta=0.05, base_options='Threads=1 Hash=16 Strength=0')
+    test_id = r.create_test(test_mode='SPRT', bounds='[0.00, 200.00]', confidence='[0.05, 0.05]', base_options='Threads=1 Hash=16 Strength=0')
     r.wait_for(lambda: r.test(test_id).finished, 120, 'SPRT test %d to finish' % (test_id))
     test = r.test(test_id)
     check(test.passed or test.failed, 'finished with neither a pass nor a fail')
     r.settled(test_id, 'finished')
+    r.agrees(test_id)
     match = r.match(test_id)
     check(match.sprt['result'] == ('passed' if test.passed else 'failed'), 'sprt %s' % (match.sprt))
-    check(abs(match.sprt['llr'] - test.currentllr) < 1e-9, 'the LLR differs')
     return 'test %d: %s, LLR %.2f, %d games' % (test_id, 'passed' if test.passed else 'failed', test.currentllr, test.games)
 
 
-def engine_fails(dev, step, summary, **extra):
+def page_refuses(r):
+    from nyayo.lab.models import Test
+    before = Test.objects.count()
+    for what, form, wanted in (
+            ('a commit without a Bench: line', r.form(base=r.engine('base', typed=True), base_bench=''), 'Bench'),
+            ('a branch GitHub has not got', r.form(dev_branch='nowhere'), 'could not be found'),
+            ('a time control nobody can read', r.form(dev_tc='fast'), 'Time Control')):
+        test_id, said = r.owner.create(**form)
+        check(test_id is None and wanted in said, '%s: %s' % (what, said))
+    check(Test.objects.count() == before, 'a refused form made a test')
+    return 'the page refused a missing bench, an unknown branch and a bad time control, and made no test'
+
+
+def approval(r):
+    test_id = r.create_test(who=r.helper, max_games=4)
+    match = r.match(test_id)
+    check(match.state == 'waiting' and not r.test(test_id).approved, 'a helper\'s test is %s' % (match.state))
+    time.sleep(RETRY + 3)
+    check(r.test(test_id).games == 0, 'a test nobody approved was played')
+    check(r.helper.act(test_id, 'approve') == 403, 'a helper may approve')
+    check(r.owner.act(test_id, 'approve') == 302, 'the owner could not approve')
+    r.wait_for(lambda: r.test(test_id).finished, 90, 'test %d to be played' % (test_id))
+    r.settled(test_id, 'finished')
+    r.agrees(test_id)
+    return 'test %d: waiting for approval, refused to the helper, approved by the owner, played' % (test_id)
+
+
+def stop_and_restart(r):
+    test_id = r.create_test(max_games=400, workload_size=2)
+    r.wait_for(lambda: r.test(test_id).games > 0, 90, 'test %d to play' % (test_id))
+    r.stop_test(test_id)
+    r.settled(test_id, 'stopped')
+    games = r.test(test_id).games
+    time.sleep(RETRY + 2)
+    check(r.test(test_id).games == games, 'the worker played on after the stop')
+    check(r.owner.act(test_id, 'restart') == 302, 'restart did not redirect')
+    r.wait_for(lambda: r.test(test_id).games > games, 90, 'test %d to play again' % (test_id))
+    r.stop_test(test_id)
+    r.settled(test_id, 'stopped')
+    r.agrees(test_id)
+    return 'test %d: stopped at %d games, the worker stopped, restarted and played to %d, stopped' % (test_id, games, r.test(test_id).games)
+
+
+def crash_then_stop(r):
+    from nyayo.lab.models import Result
+    test_id = r.create_test(dev=r.engine('dev'), dev_options='Threads=1 Hash=16 CrashAfter=6', max_games=400)
+    crashes = lambda: sum(Result.objects.filter(test_id=test_id).values_list('crashes', flat=True))
+    r.wait_for(lambda: crashes() > 0, 90, 'test %d to crash' % (test_id))
+    r.stop_test(test_id)
+    r.settled(test_id, 'stopped')
+    r.agrees(test_id)
+    kept = r.match(test_id).results.get().crashes
+    check(kept.get('subject', 0) > 0, 'nyayo has no crash: %s' % (kept))
+    return 'test %d: %d crashes of the engine, the match counts them, stopped' % (test_id, crashes())
+
+
+def two_tests(r):
+    first = r.create_test(max_games=6, workload_size=1, priority=2)
+    second = r.create_test(max_games=6, workload_size=1, priority=1)
+    r.wait_for(lambda: r.test(first).finished and r.test(second).finished, 120, 'both tests to finish')
+    for test_id in (first, second):
+        r.settled(test_id, 'finished')
+        r.agrees(test_id)
+        check(r.match(test_id).results.get().games == 6 and r.test(test_id).games == 6, 'test %d has %d games' % (test_id, r.test(test_id).games))
+    return 'tests %d and %d: 6 games each, on the right matches' % (first, second)
+
+
+def engine_fails(dev, step, summary):
     def run(r):
-        test_id = r.create_test(dev=dev(r), **SPRT_OPEN, **extra)
+        test_id = r.create_test(dev=dev(r), **SPRT_OPEN)
         r.wait_for(lambda: r.test(test_id).finished, 60, 'the verdict to stop test %d' % (test_id))
         row = r.step(test_id, step, 'dev')
         check(row.blame == 'engine', 'blame %r' % (row.blame))
@@ -335,7 +465,8 @@ def engine_fails(dev, step, summary, **extra):
         r.settled(test_id, 'failed_prechecks')
         verdict = r.match(test_id).verdict
         check(verdict['blame'] == 'engine' and verdict['summary'] == summary, 'verdict %s' % (verdict))
-        check(r.page('/matches/%s' % (r.match(test_id).pk)), 'the page does not draw')
+        r.agrees(test_id)
+        check('Stopped' in r.page('/matches/%s' % (r.match(test_id).pk)), 'the page does not say it stopped')
         return 'test %d: %s' % (test_id, summary)
     return run
 
@@ -346,15 +477,18 @@ def judged_twice(r, test_id, step):
     return bool(row and row.tries >= 2 and row.blame)
 
 
-def worker_trouble(dev, base, step):
+def worker_trouble(dev, base, step, log=None):
     def run(r):
         test_id = r.create_test(dev=dev(r), base=base(r), **SPRT_OPEN)
         r.wait_for(lambda: judged_twice(r, test_id, step), 60, 'the worker to try test %d twice' % (test_id))
-        check(r.step(test_id, step, 'dev').blame == 'worker', 'blame %r' % (r.step(test_id, step, 'dev').blame))
+        row = r.step(test_id, step, 'dev')
+        check(row.blame == 'worker', 'blame %r' % (row.blame))
+        check(log is None or log in row.log, 'the step\'s log lacks %r: %s' % (log, row.log[-200:]))
         check(not r.test(test_id).finished and r.test(test_id).games == 0, 'the test stopped or played')
         r.settled(test_id, 'waiting')
         verdict = r.match(test_id).verdict
         check(verdict and verdict['blame'] == 'worker', 'verdict %s' % (verdict))
+        r.agrees(test_id)
         r.stop_test(test_id)
         return 'test %d: the worker\'s failure, two tries, the test went on' % (test_id)
     return run
@@ -363,7 +497,6 @@ def worker_trouble(dev, base, step):
 def unclear(dev, base, step, summary, restart=False):
     def run(r):
         from nyayo.lab import steps
-        from nyayo.lab.document import report_test
         test_id = r.create_test(dev=dev(r), base=base(r), **SPRT_OPEN)
         held = lambda: judged_twice(r, test_id, step)
         r.wait_for(held, 60, 'the worker to try test %d twice' % (test_id))
@@ -372,13 +505,16 @@ def unclear(dev, base, step, summary, restart=False):
         r.settled(test_id, 'held')
         verdict = r.match(test_id).verdict
         check(verdict['summary'] == summary, 'verdict %s' % (verdict))
+        check('Last report' in r.page('/matches/%s' % (r.match(test_id).pk)) and '<dt>Stopped</dt>' not in r.page('/matches/%s' % (r.match(test_id).pk)),
+              'the time card of a held test')
         if restart:
-            steps.restart_walks(r.test(test_id))
-            report_test(test_id)
+            # What the restart button does: every worker's walk starts over, and the hold is let go
+            check(r.owner.act(test_id, 'restart') == 302, 'restart did not redirect')
             r.wait_for(held, 60, 'the worker to try test %d twice again' % (test_id))
             r.settled(test_id, 'held')
+        r.agrees(test_id)
         r.stop_test(test_id)
-        return 'test %d: nobody could place it, one more try, held%s' % (test_id, ', restarted and held again' if restart else '')
+        return 'test %d: nobody could place it, held%s' % (test_id, ', restarted by hand and held again' if restart else '')
     return run
 
 
@@ -387,6 +523,7 @@ def later_workload(r):
     r.wait_for(lambda: r.test(test_id).finished, 90, 'the verdict to stop test %d' % (test_id))
     check(r.step(test_id, 'bench', 'dev').blame == 'engine' and r.test(test_id).games > 0, 'verdict or games')
     r.settled(test_id, 'error')
+    r.agrees(test_id)
     return 'test %d: bench right, then wrong on a later workload, %d games kept, error' % (test_id, r.test(test_id).games)
 
 
@@ -396,11 +533,16 @@ B = lambda **kw: (lambda r: r.engine('base', **kw))
 SCENARIOS = [
     ('games', passing_games),
     ('sprt', sprt_to_result),
+    ('refused', page_refuses),
+    ('approval', approval),
+    ('stop-restart', stop_and_restart),
+    ('crash-stop', crash_then_stop),
+    ('two-tests', two_tests),
     ('compile-source', engine_fails(E(broken='source'), 'compile', "Dev doesn't compile")),
     ('bench-wrong', engine_fails(E(bench=ENGINE_BENCH + 1), 'bench', "Dev's bench doesn't match its commit")),
     ('bench-slow', engine_fails(E(bench_mode='slow'), 'bench', "Dev's bench runs over 60 seconds")),
     ('bench-silent', engine_fails(E(bench_mode='silent'), 'bench', 'Dev failed to run its bench')),
-    ('compile-space', worker_trouble(E(broken='space'), B(), 'compile')),
+    ('compile-space', worker_trouble(E(broken='space'), B(), 'compile', log='No space left on device')),
     ('compile-both', worker_trouble(E(broken='source'), B(broken='source'), 'compile')),
     ('bench-slow-both', worker_trouble(E(bench_mode='slow'), B(bench_mode='slow'), 'bench')),
     ('bench-silent-both', worker_trouble(E(bench_mode='silent'), B(bench_mode='silent'), 'bench')),
@@ -412,7 +554,6 @@ SCENARIOS = [
 
 def load(r):
     # One to a few workers on a long test while pages are read: writes a minute, and whether anything waited a second
-    began = time.time()
     test_id = r.create_test(test_mode='GAMES', max_games=r.args.load_games, workload_size=2)
     r.start_clients(one_at_a_time_for=test_id)
     began = time.time()
@@ -443,22 +584,21 @@ def report_load(r, test_id, began, ended, waits):
     rows = [line.split() for line in (r.temp / 'writes.log').read_text().splitlines()]
     window = [row for row in rows if began <= float(row[0]) <= ended]
     statements, transactions = sum(1 for x in window if x[2] == 'stmt'), sum(1 for x in window if x[2] == 'tx')
-    reports = collections_by_endpoint(r.temp / 'access.log', began)
-    slow = [(path, round(seconds, 2)) for path, (count, longest, seconds_list) in reports.items() for seconds in [longest] if longest >= 1.0]
+    reports = by_endpoint(r.temp / 'access.log')
+    slow = [(path, round(longest, 2)) for path, (count, longest, seconds) in reports.items() if longest >= 1.0]
     page_waits = [x[0] for x in waits]
-    locked = sum(1 for log in ('server.log', 'worker.log') for line in (r.temp / log).read_text().splitlines() if 'database is locked' in line.lower())
     lines = ['load: %d worker(s), test %d, %d games in %.0f s' % (r.args.workers, test_id, r.test(test_id).games, ended - began),
              'writes: %d statements, %d write transactions: %.0f and %.0f a minute' % (statements, transactions, statements / minutes, transactions / minutes),
              'requests by the workers and pages (count, slowest s, median s):']
-    for path, (count, longest, seconds_list) in sorted(reports.items(), key=lambda x: -x[1][0]):
-        lines.append('  %-28s %5d  %.3f  %.3f' % (path, count, longest, statistics.median(seconds_list)))
+    for path, (count, longest, seconds) in sorted(reports.items(), key=lambda x: -x[1][0]):
+        lines.append('  %-28s %5d  %.3f  %.3f' % (path, count, longest, statistics.median(seconds)))
     lines.append('page reads while it ran: %d, slowest %.3f s, median %.3f s, %d not 200' % (
         len(page_waits), max(page_waits, default=0), statistics.median(page_waits or [0]), sum(1 for x in waits if x[2] != 200)))
-    lines.append('requests of a second or more: %s; "database is locked" in the logs: %d' % (slow or 'none', locked))
+    lines.append('requests of a second or more: %s; "database is locked" in the logs: %d' % (slow or 'none', r.logged('database is locked')))
     return '\n'.join(lines)
 
 
-def collections_by_endpoint(path, since):
+def by_endpoint(path):
     found = {}
     for line in path.read_text().splitlines():
         match = re.match(r'(GET|POST|PUT) (\S+?)(?:\?\S*)? HTTP/\S+ (\d+) (\d+\.\d+)', line)
@@ -471,7 +611,7 @@ def collections_by_endpoint(path, since):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--ob', required=True, help='openbench_eg\'s Client/ and Scripts/smoke, extracted from the commit to play with')
+    parser.add_argument('--ob', default=str(next((p for p in (REPO.parent / 'openbench_eg', *(q.parent / 'openbench_eg' for q in REPO.parents)) if p.exists()), REPO.parent / 'openbench_eg')), help='a checkout of openbench_eg, whose Client/ at %s plays' % (CLIENT_REF))
     parser.add_argument('--only', nargs='*', help='scenario names: ' + ', '.join(name for name, _ in SCENARIOS))
     parser.add_argument('--load', action='store_true', help='measure the load of --workers workers on a long test, instead of the scenarios')
     parser.add_argument('--load-games', type=int, default=120)
@@ -479,27 +619,31 @@ def main():
     parser.add_argument('--keep', action='store_true')
     args = parser.parse_args()
 
+    preflight()
     rig = Rig(args)
-    failures = 0
+    failures, ran, began = 0, 0, time.time()
     try:
         rig.start_nyayo()
-        if not args.load:
-            rig.start_clients()
         if args.load:
             print(load(rig))
         else:
+            rig.start_clients()
             for name, run in SCENARIOS:
                 if args.only and name not in args.only:
                     continue
-                began = time.time()
+                ran += 1
+                scenario_began, unreported = time.time(), rig.logged('could not be reported')
                 try:
                     said = run(rig)
-                    print('PASS %-18s %5.1fs  %s' % (name, time.time() - began, said), flush=True)
+                    check(rig.logged('could not be reported') == unreported, 'nyayo refused a report of the test (see server.log)')
+                    print('PASS %-18s %5.1fs  %s' % (name, time.time() - scenario_began, said), flush=True)
                 except Exception as error:
                     failures += 1
                     print('FAIL %-18s %s: %s' % (name, type(error).__name__, error), flush=True)
     finally:
         rig.close(args.keep or failures)
+    if not args.load:
+        print('%d of %d scenarios passed in %.0f s (%.1f minutes)' % (ran - failures, ran, time.time() - began, (time.time() - began) / 60))
     return 1 if failures else 0
 
 

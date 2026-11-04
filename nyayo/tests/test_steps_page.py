@@ -8,7 +8,8 @@ from nyayo.matches import stepsview
 
 from .test_matches_ingest import ID, MatchTestCase, v1
 
-NOW = datetime(2026, 11, 3, 9, 10, tzinfo=timezone.utc)
+# the pages read the real clock, so the tests' reports are dated from it
+NOW = datetime.now(timezone.utc).replace(microsecond=0)
 
 
 def at(seconds_ago):
@@ -50,6 +51,10 @@ class Walk(SimpleTestCase):
         for blame in ("engine", "worker", "unclear"):
             self.assertEqual(stepsview.look({"state": "failed", "blame": blame}), blame)
         self.assertEqual(stepsview.look({"state": "failed"}), "failed")
+
+    def test_a_failure_without_a_blame_counts_once(self):
+        steps = [{"step": "compile", "side": "dev", "state": "failed", "at": at(10)}]
+        self.assertEqual(stepsview.tally([{"steps": steps}])["engines"][0]["text"], "failed to compile on 1")
 
     def test_tally_counts_what_was_sent_and_decides_nothing(self):
         rows = [{"steps": walk(), "kind": "engine"}, {"steps": walk()[:3], "kind": "checks"}]
@@ -119,6 +124,13 @@ class OnThePages(MatchTestCase):
         self.assertTrue(data["open"])
         self.assertEqual(data["state"], "waiting")
         self.assertIn("Compiling dev", data["html"])
+
+    def test_a_waiting_or_held_test_has_not_stopped(self):
+        for state in ("waiting", "held"):
+            page = self.page(unstarted(state))
+            self.assertNotIn("<dt>Stopped</dt>", page)
+            self.assertNotIn("<dt>Ended</dt>", page)
+            self.assertIn("<dt>Last report</dt>", page)
 
     def test_commit_links(self):
         document = v1()
