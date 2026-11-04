@@ -1,0 +1,5 @@
+requests
+psutil>=5.9.5
+py-cpuinfo>=9.0.0
+# optional: Networks are then downloaded compressed
+zstandard>=0.23.0
