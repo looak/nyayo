@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('lab', '0003_machine_rtt_and_place'),
+        ('lab', '0005_one_row_per_worker'),
     ]
 
     operations = [

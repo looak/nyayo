@@ -31,28 +31,24 @@ class List(TestCase):
         self.assertEqual(self.client.get("/machines").status_code, 200)
         self.assertIn("No worker has started", page(self.client))
 
-    def test_restarts_are_one_box_with_the_totals_of_every_session(self):
+    def test_a_worker_is_one_row_with_its_totals_however_often_it_restarted(self):
         test = make_test()
         other = make_test()
-        for number in range(3):
-            machine = make_machine("hunt")
-            result = make_result(test, machine)
-            Result.objects.filter(pk=result.pk).update(games=10 * (number + 1))
+        machine = make_machine("hunt")
+        result = make_result(test, machine)
+        Result.objects.filter(pk=result.pk).update(games=60)
         result = make_result(other, machine)
         Result.objects.filter(pk=result.pk).update(games=5)
         text = page(self.client)
         self.assertEqual(text.count('href="/machines/hunt"'), 1)
-        self.assertIn("started 3 times", text)
         row = [r for r in self.client.get("/machines").context["rows"] if r["name"] == "hunt"][0]
-        self.assertEqual((row["games"], row["tests"], row["sessions"], row["id"]), (65, 2, 3, machine.id))
+        self.assertEqual((row["games"], row["tests"], row["id"]), (65, 2, machine.id))
 
-    def test_a_worker_without_a_name_is_grouped_by_user_and_address(self):
-        a = make_machine("loodinek", machine_name=None, mac_address="aa:bb")
-        b = make_machine("loodinek", machine_name="None", mac_address="aa:bb")
-        make_machine("loodinek", machine_name=None, mac_address="cc:dd")
+    def test_a_row_from_before_the_tokens_has_no_name_and_is_called_by_its_number(self):
+        old = Machine.objects.create(name="", state="approved", info={"os_name": "Linux", "supported": []})
         rows = self.client.get("/machines").context["rows"]
-        self.assertEqual(sorted(r["name"] for r in rows), sorted(["machine %d" % b.id, "machine %d" % (b.id + 1)]))
-        self.assertEqual(self.client.get("/machines/machine %d" % a.id).status_code, 200)
+        self.assertEqual([r["name"] for r in rows], ["machine %d" % old.id])
+        self.assertEqual(self.client.get("/machines/machine %d" % old.id).status_code, 200)
 
     def test_playing_idle_and_gone_quiet(self):
         test = make_test(name="my test")
@@ -79,7 +75,7 @@ class List(TestCase):
         self.assertEqual(self.client.get("/machines").context["rows"][0]["state"], "quiet")
 
     def test_a_worker_that_plays_nothing_says_what_is_missing(self):
-        make_machine("hunt", supported=[], compilers={})
+        make_machine("hunt", supported=[], toolchains={"make": "4.3"})
         text = page(self.client)
         self.assertIn("Plays no engine.", text)
         self.assertIn("Elephant: Missing ['g', 'clang']", text)
@@ -110,14 +106,14 @@ class List(TestCase):
         self.assertEqual(self.client.get("/machines/hunt").status_code, 200)
         self.assertEqual(self.client.get("/machines/nobody").status_code, 404)
 
-    def test_the_number_of_queries_does_not_grow_with_the_sessions(self):
+    def test_the_number_of_queries_does_not_grow_with_the_workers(self):
         test = make_test()
-        for _ in range(3):
-            make_result(test, make_machine("hunt"))
+        for number in range(3):
+            make_result(test, make_machine("hunt%d" % number))
         with CaptureQueriesContext(connection) as few:
             self.client.get("/machines")
-        for _ in range(30):
-            make_result(test, make_machine("hunt"))
+        for number in range(3, 30):
+            make_result(test, make_machine("hunt%d" % number))
         with CaptureQueriesContext(connection) as many:
             self.client.get("/machines")
         self.assertEqual(len(few), len(many))
@@ -149,7 +145,7 @@ class Secrets(TestCase):
 class Detail(TestCase):
     def test_the_system_the_engines_and_the_recent_tests(self):
         machine = make_machine("hunt", cpu_name="Ryzen 9", logical_cores=32, os_ver="6.8", cpu_flags=["POPCNT", "AVX2"],
-                               compilers={"Elephant": ["clang", "18.1.3"]}, fastchess_ver="1.8.1")
+                               toolchains={"clang": "18.1.3", "make": "4.3"}, fastchess_ver="1.8.1")
         test = make_test(name="lmr")
         result = make_result(test, machine)
         Result.objects.filter(pk=result.pk).update(games=40, crashes=2, timeloss=1)

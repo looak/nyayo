@@ -30,16 +30,15 @@ import os
 import secrets
 
 from django.conf import settings
-from django.contrib.auth import authenticate
 from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from nyayo.lab import config, hours, rtt, steps, utils
+from nyayo.lab import config, fastchess, hours, registration, rtt, steps, toolchains, utils
 from nyayo.lab.document import report_test
-from nyayo.lab.get_workload import get_workload
+from nyayo.lab.get_workload import get_workload, heard
 from nyayo.lab.ids import match_id
 from nyayo.lab.models import EngineConfig, LogEvent, Machine, Network, Result, ServerState, Test
 from nyayo.runs.ingest import IngestError
@@ -52,41 +51,94 @@ def reported(test_id):
     transaction.on_commit(lambda: report_test(test_id))
 
 
-def authenticate_worker(request):
-    # The user's credentials, as a worker sends them with its first request of a session. Django's own check, which
-    # refuses an inactive user: that is how a worker's user is disabled.
-    try:
-        return authenticate(username=request.POST['username'], password=request.POST['password'])
-    except KeyError:
-        return None
+def token_of(request):
+    # The token a worker was given on hello, in the form or the query of any call; it is in place of a username and password
+    return request.POST.get('token') or request.GET.get('token') or ''
+
+
+def refusal(machine, message='This worker is not approved'):
+    # What a worker that may not have something is told: a 403 with the reason, its state and whether it is enabled
+    return JsonResponse({ 'error' : message, 'state' : machine.state if machine else '', 'enabled' : bool(machine and machine.enabled) }, status=403)
+
+
+def approved_by_token(request):
+    # (machine, None), or (None, the refusal) for a worker the token names that is not approved: settings and files of
+    # the server go only to an approved worker, enabled or not
+    machine = registration.by_token(token_of(request))
+    if machine is None:
+        return None, JsonResponse({ 'error' : 'Unknown token: say hello first (clientHello)', 'state' : '' }, status=403)
+    if machine.state != 'approved':
+        return None, refusal(machine)
+    return machine, None
+
+
+def verify_session(request):
+    # (machine, None), or (None, the answer) for the machine of a session and its secret, and a client the server accepts
+    try: machine = Machine.objects.get(id=int(request.POST['machine_id']))
+    except Exception: return None, JsonResponse({ 'error' : 'Bad Client Version: Bad Machine Id' })
+
+    # Ensure the Client is using the same version as the Server
+    if (machine.info or {}).get('client_ver') != config.client_version():
+        return None, JsonResponse({ 'error' : 'Bad Client Version: Expected %d' % (config.client_version()) })
+
+    # Prompt the worker to soft-restart if its config is out of date
+    if machine.info.get('OPENBENCH_CONFIG_CHECKSUM') != ServerState.checksum():
+        return None, JsonResponse({ 'error' : 'Bad Client Version: Server Configuration Changed' })
+
+    # Use the secret token as our soft verification
+    if machine.secret != request.POST.get('secret'):
+        return None, JsonResponse({ 'error' : 'Bad Client Version: Invalid Secret Token' })
+
+    return machine, None
 
 
 def verify_worker(function):
 
+    # The session of an approved worker. A disabled one is let through, to finish a workload it has; a pending or
+    # turned-away one is refused, with nothing said of tests, sources or settings
     def wrapped_verify_worker(*args, **kwargs):
-
-        # Get the machine, assuming it exists
-        try: machine = Machine.objects.get(id=int(args[0].POST['machine_id']))
-        except Exception: return JsonResponse({ 'error' : 'Bad Client Version: Bad Machine Id' })
-
-        # Ensure the Client is using the same version as the Server
-        if machine.info['client_ver'] != config.client_version():
-            return JsonResponse({ 'error' : 'Bad Client Version: Expected %d' % (config.client_version()) })
-
-        # Prompt the worker to soft-restart if its config is out of date
-        if machine.info.get('OPENBENCH_CONFIG_CHECKSUM') != ServerState.checksum():
-            return JsonResponse({ 'error' : 'Bad Client Version: Server Configuration Changed' })
-
-        # Use the secret token as our soft verification
-        if machine.secret != args[0].POST.get('secret'):
-            return JsonResponse({ 'error' : 'Bad Client Version: Invalid Secret Token' })
-
-        # Otherwise, carry on, and pass along the machine
+        machine, answer = verify_session(args[0])
+        if answer is not None:
+            return answer
+        if machine.state != 'approved':
+            return refusal(machine)
         return function(*args, machine)
 
     wrapped_verify_worker.__name__ = function.__name__
     return wrapped_verify_worker
 
+
+def verify_session_only(function):
+
+    # The session of a worker in any state: clientGetWorkload tells a pending one what to describe and to wait
+    def wrapped(*args, **kwargs):
+        machine, answer = verify_session(args[0])
+        return answer if answer is not None else function(*args, machine)
+
+    wrapped.__name__ = function.__name__
+    return wrapped
+
+
+@csrf_exempt
+def client_hello(request):
+
+    # A worker says who it is, with no credentials: name, client version, and optionally a join code or the token it was
+    # given before. A token is given once, on the hello that makes the row; a known token makes nothing new.
+    try: version = int(request.POST.get('client_ver', config.client_version()))
+    except ValueError: version = -1
+    if version != config.client_version():
+        return JsonResponse({ 'error' : 'Bad Client Version: Expected %d' % (config.client_version()) })
+
+    try:
+        machine, token = registration.hello(request.POST.get('name', ''), request.POST.get('join') or request.POST.get('join_code') or '', request.POST.get('token', ''))
+    except registration.Refused as refused:
+        return JsonResponse({ 'error' : refused.message, 'state' : refused.state }, status=refused.status)
+
+    # The token is given once, on the hello that made the row. A worker that sent its token and had it known is answered it
+    # again, which is nothing it does not hold, and what the client reads every answer for.
+    answer = { 'worker_id' : machine.id, 'name' : machine.name, 'state' : machine.state, 'enabled' : machine.enabled,
+               'approved' : machine.state == 'approved', 'token' : token or request.POST.get('token', '') }
+    return JsonResponse(answer)
 
 @csrf_exempt
 def client_version_ref(request):
@@ -100,18 +152,43 @@ def client_version_ref(request):
 @csrf_exempt
 def client_match_runner_version_ref(request):
 
-    # Enough information to build the right Fastchess version
-    return JsonResponse({
+    # Enough information to build the right Fastchess version, and, where the server has a file of the release for the
+    # worker's system (`os_name` and `arch` in the call: Linux, Windows or Darwin, and platform.machine()), to fetch it.
+    # Open to every worker, approved or not.
+    answer = {
         'fastchess_min_version' : config.fastchess_min_version(),
         'fastchess_repo_url'    : config.fastchess_repo_url(),
         'fastchess_repo_ref'    : config.fastchess_repo_ref(),
-    })
+    }
+    form   = request.POST if request.method == 'POST' else request.GET
+    binary = fastchess.binary_for(form.get('os_name'), form.get('arch'), config.fastchess_min_version(), request.build_absolute_uri('/'))
+    if binary:
+        answer['binary'] = binary
+    return JsonResponse(answer)
+
+@csrf_exempt
+def client_fastchess(request, version, name):
+
+    # A file of a release `fetch_fastchess` has fetched, to any worker
+    path = fastchess.path_of(version, name)
+    if path is None:
+        return HttpResponse('No such file', status=404)
+    response = FileResponse(open(path, 'rb'), content_type='application/octet-stream')
+    response['Content-Disposition'] = 'attachment; filename=%s' % (name)
+    return response
 
 @csrf_exempt
 def client_get_build_info(request):
 
     ## Information pulled from the config about how to build each engine.
     ## Toss in a private flag as well to indicate the need for Github Tokens.
+    ## It names no test and no source, and the client asks before it knows whether it is approved, with no token, so it is
+    ## open to that, as OpenBench's was; a worker that sends its token and is not approved is refused it.
+
+    if token_of(request):
+        machine, answer = approved_by_token(request)
+        if answer is not None:
+            return answer
 
     data = {}
     for engine in EngineConfig.objects.all():
@@ -121,23 +198,23 @@ def client_get_build_info(request):
 @csrf_exempt
 def client_worker_info(request):
 
-    # Verify the User's credentials
-    if (user := authenticate_worker(request)) is None:
-        return JsonResponse({ 'error' : 'Bad Credentials' })
+    # A session of the worker the token names, in any state: its system, and from the describe job, `toolchains`. A
+    # restart is a new session on the same row, with a new secret.
+    machine = registration.by_token(token_of(request))
+    if machine is None:
+        return JsonResponse({ 'error' : 'Unknown token: say hello first (clientHello)', 'state' : '' }, status=403)
 
-    # Request update before creating a machine
+    # Request update before the session starts
     info         = json.loads(request.POST['system_info'])
     expected_ver = config.client_version()
 
     if info.get('client_ver') != expected_ver:
         return JsonResponse({ 'error' : 'Bad Client Version: Expected %d' % (expected_ver)})
 
-    # Create a new Machine for this session
-    machine = Machine(user=user, info=info)
-
     # Save the machine's latest information and Secret Token for this session
-    machine.info   = info
-    machine.secret = secrets.token_hex(32)
+    machine.info      = info
+    machine.secret    = secrets.token_hex(32)
+    machine.described = bool(info.get('toolchains')) and isinstance(info.get('toolchains'), dict)
 
     # Note the Config checksum at the time of init, in case it changes
     machine.info['OPENBENCH_CONFIG_CHECKSUM'] = ServerState.checksum()
@@ -149,19 +226,19 @@ def client_worker_info(request):
         build = engine.build()
 
         # Must have all CPU flags, for both Public and Private engines
-        if any([flag not in machine.info['cpu_flags'] for flag in build['cpuflags']]):
+        if any([flag not in machine.info.get('cpu_flags', []) for flag in build['cpuflags']]):
             continue
 
         # Private engines must have, or think they have, a Git Token
-        if engine.private and engine.name not in machine.info['tokens'].keys():
+        if engine.private and engine.name not in machine.info.get('tokens', {}).keys():
             continue
 
-        # Public engines must have a compiler of a sufficient version
-        if not engine.private and engine.name not in machine.info['compilers'].keys():
+        # Public engines must have a compiler that builds them, by what the worker found when it described itself
+        if not engine.private and not toolchains.can_build(machine.info, build)[0]:
             continue
 
         # Must match the Operating Systems supported by the engine
-        if machine.info['os_name'] not in build['systems']:
+        if machine.info.get('os_name') not in build['systems']:
             continue
 
         # All requirements are met, and this Machine can play with the given engine
@@ -171,14 +248,15 @@ def client_worker_info(request):
     machine.save()
 
     # Pass back the Machine Id, and Secret Token for this session
-    return JsonResponse({ 'machine_id' : machine.id, 'secret' : machine.secret })
+    return JsonResponse({ 'machine_id' : machine.id, 'secret' : machine.secret, 'state' : machine.state, 'enabled' : machine.enabled })
 
 @csrf_exempt
 def client_get_network(request, engine, name):
 
-    # Verify the User's credentials
-    if authenticate_worker(request) is None:
-        return HttpResponse('Bad Credentials')
+    # Only an approved worker, by its token
+    machine, answer = approved_by_token(request)
+    if answer is not None:
+        return answer
 
     # A network is found by its name or by its sha, for this engine, and kept as a file named by its sha
     candidates = Network.objects.filter(engine=engine)
@@ -193,10 +271,23 @@ def client_get_network(request, engine, name):
     return response
 
 @csrf_exempt
-@verify_worker
+@verify_session_only
 def client_get_workload(request, machine):
+
+    # Any state may ask. { 'describe' : [tools] } until the worker has described itself this session (the same call of
+    # clientWorkerInfo, with `toolchains`); { 'wait' : reason } while it is pending, turned away or disabled, which tells
+    # nothing of a test; then a workload for an approved, enabled worker
     rtt.note(request, machine)
     hours.note(machine)
+    if machine.state == 'turned_away':
+        heard(machine)
+        return JsonResponse({ 'wait' : 'turned away' })
+    if not machine.described:
+        heard(machine)
+        return JsonResponse({ 'describe' : toolchains.TOOLS })
+    if machine.state != 'approved' or not machine.enabled:
+        heard(machine)
+        return JsonResponse({ 'wait' : 'waiting for approval' if machine.state == 'pending' else 'disabled' })
     try:
         return JsonResponse(get_workload(request, machine))
     except IntegrityError as error:
@@ -212,7 +303,7 @@ def client_bench_error(request, machine):
 
     # Log the error into the Events table
     LogEvent.objects.create(
-        author     = machine.user.username,
+        author     = machine.name,
         summary    = request.POST['error'][:128],
         log_file   = '',
         machine_id = int(request.POST['machine_id']),
@@ -271,7 +362,7 @@ def client_submit_error(request, machine):
 
     # Log the Error into the Events table
     event = LogEvent.objects.create(
-        author     = machine.user.username,
+        author     = machine.name,
         summary    = request.POST['error'][:128],
         log_file   = '',
         machine_id = int(request.POST['machine_id']),

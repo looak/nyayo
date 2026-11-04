@@ -15,6 +15,7 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
+from nyayo.lab import registration
 from nyayo.lab.models import EngineConfig, LogEvent, Machine, Result, ServerState, Step, Test
 from nyayo.matches.models import Match, Upload
 
@@ -37,23 +38,33 @@ class FakeSocket:
 
 SYSTEM = {
     'client_ver': 54, 'machine_name': 'hunt', 'concurrency': 4, 'sockets': 1, 'physical_cores': 4, 'syzygy_max': 0,
-    'cpu_flags': ['POPCNT', 'AVX2'], 'compilers': {'Elephant': 'g++'}, 'tokens': {}, 'os_name': 'Linux',
+    'cpu_flags': ['POPCNT', 'AVX2'], 'tokens': {}, 'os_name': 'Linux',
+    'toolchains': {'gcc': '13.3.0', 'g++': '13.3.0', 'clang': None, 'clang++': None, 'dotnet': None, 'rustc': None, 'cargo': None,
+                   'python3': '3.12.3', 'make': '4.3'},
 }
 
 
 @override_settings(PASSWORD_HASHERS=['django.contrib.auth.hashers.MD5PasswordHasher'])
 class Api(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user('worker', password='pw')
+    token = None
 
     def post(self, path, **form):
         # a TestCase never commits, so the reports the views leave for after the commit are run here
         with self.captureOnCommitCallbacks(execute=True):
             return self.client.post(f'/{path}/', form)
 
-    def sign_in(self, **system):
-        answer = self.post('clientWorkerInfo', username='worker', password='pw',
-                           system_info=json.dumps({**SYSTEM, **system})).json()
+    def hello(self, name='hunt', **form):
+        answer = self.post('clientHello', name=name, client_ver=54, **form).json()
+        self.token = answer.get('token', self.token)
+        return answer
+
+    def sign_in(self, approve=True, name='hunt', **system):
+        # hello once, then a session: approved by the owner (here, in the database) unless it is to stay pending
+        if self.token is None:
+            self.hello(name)
+        if approve:
+            Machine.objects.filter(token_hash=registration.digest(self.token)).update(state='approved')
+        answer = self.post('clientWorkerInfo', token=self.token, system_info=json.dumps({**SYSTEM, **system})).json()
         self.machine_id, self.secret = answer['machine_id'], answer['secret']
         return answer
 
@@ -75,8 +86,9 @@ class Settings(Api):
             'fastchess_min_version': '1.8.1', 'fastchess_repo_url': 'https://github.com/AndyGrant/fastchess',
             'fastchess_repo_ref': 'master'})
 
-    def test_how_to_build_each_engine(self):
-        self.assertEqual(self.client.get('/clientGetBuildInfo/').json()['Elephant'], {
+    def test_how_to_build_each_engine_for_an_approved_worker(self):
+        self.sign_in()
+        self.assertEqual(self.client.get('/clientGetBuildInfo/', {'token': self.token}).json()['Elephant'], {
             'path': 'ob_build', 'compilers': ['g', 'clang'], 'cpuflags': ['POPCNT'], 'systems': ['Linux', 'Windows'],
             'private': False})
 
@@ -87,39 +99,58 @@ class Settings(Api):
 
 
 class SigningIn(Api):
-    def test_a_worker_signs_in_as_a_user_and_gets_a_machine(self):
+    def test_a_session_of_an_approved_worker_is_on_its_row(self):
         answer = self.sign_in()
         machine = Machine.objects.get(id=answer['machine_id'])
-        self.assertEqual((machine.user, machine.secret), (self.user, answer['secret']))
+        self.assertEqual((machine.name, machine.secret, machine.state), ('hunt', answer['secret'], 'approved'))
         self.assertEqual(machine.info['supported'], ['Elephant'])
         self.assertEqual(machine.info['OPENBENCH_CONFIG_CHECKSUM'], ServerState.checksum())
+        self.assertTrue(machine.described)
+        self.assertEqual((answer['state'], answer['enabled']), ('approved', True))
 
-    def test_a_bad_password_or_an_inactive_user_is_refused(self):
+    def test_a_restart_is_a_new_secret_on_the_same_row(self):
+        first = self.sign_in()
+        second = self.sign_in()
+        self.assertEqual(first['machine_id'], second['machine_id'])
+        self.assertNotEqual(first['secret'], second['secret'])
+        self.assertEqual(Machine.objects.count(), 1)
+        self.assertIn('Invalid Secret Token', self.post('clientHeartbeat', test_id=1, machine_id=first['machine_id'], secret=first['secret']).json()['error'])
+
+    def test_an_unknown_token_or_none_is_refused_and_makes_nothing(self):
         form = {'system_info': json.dumps(SYSTEM)}
-        self.assertEqual(self.post('clientWorkerInfo', username='worker', password='no', **form).json(),
-                         {'error': 'Bad Credentials'})
-        self.assertEqual(self.post('clientWorkerInfo', **form).json(), {'error': 'Bad Credentials'})
-        User.objects.filter(pk=self.user.pk).update(is_active=False)
-        self.assertEqual(self.post('clientWorkerInfo', username='worker', password='pw', **form).json(),
-                         {'error': 'Bad Credentials'})
+        for token in ({}, {'token': 'nope'}):
+            reply = self.post('clientWorkerInfo', **token, **form)
+            self.assertEqual(reply.status_code, 403)
+            self.assertIn('say hello first', reply.json()['error'])
+        self.assertFalse(Machine.objects.exists())
+
+    def test_a_username_and_password_are_no_longer_a_way_in(self):
+        User.objects.create_user('worker', password='pw')
+        reply = self.post('clientWorkerInfo', username='worker', password='pw', system_info=json.dumps(SYSTEM))
+        self.assertEqual(reply.status_code, 403)
         self.assertFalse(Machine.objects.exists())
 
     def test_an_old_client_is_told_to_update(self):
-        answer = self.post('clientWorkerInfo', username='worker', password='pw',
-                           system_info=json.dumps({**SYSTEM, 'client_ver': 53})).json()
+        self.hello()
+        answer = self.post('clientWorkerInfo', token=self.token, system_info=json.dumps({**SYSTEM, 'client_ver': 53})).json()
         self.assertEqual(answer, {'error': 'Bad Client Version: Expected 54'})
+        self.assertEqual(self.post('clientHello', name='old', client_ver=53).json(), {'error': 'Bad Client Version: Expected 54'})
+        self.assertEqual(Machine.objects.count(), 1)
 
     def test_it_supports_only_the_engines_it_can_build(self):
         self.sign_in(cpu_flags=['AVX2'])
         self.assertEqual(Machine.objects.get().info['supported'], [])
-        self.sign_in(os_name='Windows', compilers={})
-        self.assertEqual(Machine.objects.latest('id').info['supported'], [])
-        self.sign_in(tokens={'Elephant': 'x'})
+        self.sign_in(os_name='Windows', toolchains={'make': '4.3'})
+        self.assertEqual(Machine.objects.get().info['supported'], [])
+        self.sign_in(toolchains={'clang': '18.1.3', 'make': '4.3'})
+        self.assertEqual(Machine.objects.get().info['supported'], ['Elephant'])
+        self.sign_in(toolchains={'clang': '18.1.3'})  # no make
+        self.assertEqual(Machine.objects.get().info['supported'], [])
         EngineConfig.objects.filter(name='Elephant').update(private=True)
         self.sign_in(tokens={'Elephant': 'x'})
-        self.assertEqual(Machine.objects.latest('id').info['supported'], ['Elephant'])
+        self.assertEqual(Machine.objects.get().info['supported'], ['Elephant'])
 
-    def test_every_other_call_checks_the_machine(self):
+    def test_every_other_call_checks_the_session(self):
         self.sign_in()
         for form, error in (({'machine_id': 0, 'secret': self.secret}, 'Bad Machine Id'),
                             ({'machine_id': self.machine_id, 'secret': 'wrong'}, 'Invalid Secret Token')):
@@ -134,11 +165,11 @@ class SigningIn(Api):
         self.assertEqual(self.worker('clientGetWorkload').json(),
                          {'error': 'Bad Client Version: Server Configuration Changed'})
 
-    def test_a_network_is_served_to_a_signed_in_worker(self):
-        self.assertEqual(self.client.post('/clientGetNetwork/Elephant/net/', {'username': 'worker', 'password': 'no'}).content,
-                         b'Bad Credentials')
-        response = self.client.post('/clientGetNetwork/Elephant/net/', {'username': 'worker', 'password': 'pw'})
-        self.assertEqual(response.status_code, 404)
+    def test_a_network_is_served_to_an_approved_worker_by_its_token(self):
+        self.sign_in()
+        self.assertEqual(self.client.post('/clientGetNetwork/Elephant/net/', {'token': 'no'}).status_code, 403)
+        self.assertEqual(self.client.post('/clientGetNetwork/Elephant/net/').status_code, 403)
+        self.assertEqual(self.client.post('/clientGetNetwork/Elephant/net/', {'token': self.token}).status_code, 404)
 
 
 class Scheduling(Api):
@@ -456,8 +487,8 @@ class Steps(Api):
         test = make_test()
         self.handed_out(test)
         self.worker('clientBenchError', test_id=test.id, error='Wrong bench: 2, expected 1')
-        event = LogEvent.objects.get()
-        self.assertEqual((event.summary, event.author, event.test_id), ('Wrong bench: 2, expected 1', 'worker', test.id))
+        event = LogEvent.objects.exclude(test_id=0).get()
+        self.assertEqual((event.summary, event.author, event.test_id), ('Wrong bench: 2, expected 1', 'hunt', test.id))
         self.assertFalse(Test.objects.get().finished)
 
     def test_an_error_keeps_its_log(self):
@@ -465,7 +496,7 @@ class Steps(Api):
         self.handed_out(test)
         with tempfile.TemporaryDirectory() as data, override_settings(DATA_DIR=Path(data)):
             self.worker('clientSubmitError', test_id=test.id, error='engine crashed', logs='the log\n')
-            event = LogEvent.objects.get()
+            event = LogEvent.objects.exclude(test_id=0).get()
             self.assertEqual(event.log_file, f'event{event.id}.log')
             self.assertEqual((Path(data) / 'logs' / event.log_file).read_text(), 'the log\n')
 

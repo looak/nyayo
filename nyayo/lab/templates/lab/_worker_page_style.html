@@ -62,4 +62,35 @@
   .lang-rust { background: #f4b183; color: #3b1c08; } .lang-python { background: #f5dd7a; color: #332a05; } .lang-build { background: #c9b8f2; color: #22163f; }
   .lang-tool { background: #b9c3cb; color: #1d2125; } .lang-gone { background: var(--line); color: var(--fg); }
   @media (max-width: 700px) { .kv { grid-template-columns: 1fr; gap: 0; } .kv dd { margin-bottom: .35rem; } }
+
+  /* a worker waiting for approval (or turned away): what it said, what it could play, and the two buttons */
+  .pending-head { display: flex; align-items: center; gap: .8rem 1rem; margin: 0 0 1rem; }
+  .pending-icon { display: inline-flex; flex: none; width: 44px; height: 44px; align-items: center; justify-content: center; border-radius: 50%;
+                  background: var(--wip-bg); color: var(--wip); }
+  .pending-head.turned_away .pending-icon { background: var(--code-bg); color: var(--muted); }
+  .pending-line { color: var(--wip); font-size: 1.05rem; } .pending-head.turned_away .pending-line { color: var(--muted); }
+  .pending-box { margin-bottom: 1rem; } .pending-box > p { margin-top: 0; }
+  .facts { display: flex; flex-wrap: wrap; gap: .4rem 2rem; margin: .5rem 0 .9rem; }
+  .facts dt { font-size: .8rem; color: var(--muted); } .facts dd { margin: 0; font-weight: 600; color: var(--bright); }
+  .pending-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .pending-actions button { min-height: 44px; padding: 0 1.2rem; border-radius: 3px; font: inherit; cursor: pointer; }
+  .pending-actions .approve { border: 0; background: var(--success); color: #fff; font-weight: 600; }
+  .pending-actions .away { border: 1px solid var(--line); background: var(--code-bg); color: var(--fg); }
+  .job { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .4rem; }
+  .job li { display: flex; flex-wrap: wrap; gap: .2rem .6rem; align-items: baseline; }
+  .jstate { padding: 0 .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .jstate.done { color: var(--published); background: var(--published-bg); } .jstate.todo { color: var(--wip); background: var(--wip-bg); }
+  .jname { color: var(--bright); }
+  .abilities { margin: 1rem 0; } .abilities h3 { margin: 0 0 .5rem; font-size: 1.05rem; color: var(--bright); }
+  .ability-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr)); gap: .75rem; }
+  .ability { padding: .6rem .8rem; border-radius: 3px; background: var(--card); border-top: 3px solid #4b545c; }
+  .ability.yes { border-top-color: var(--success); } .ability b { color: var(--bright); }
+  .ability .astate { font-size: .85rem; color: var(--muted); } .ability.yes .astate { color: var(--published); }
+  .ability .muted { font-size: .75rem; }
+
+  /* the Enabled switch in the Approval tile */
+  .switch-form { margin-top: .3rem; } .away-form { margin: 0; }
+  .switch { display: flex; align-items: center; gap: .5rem; min-height: 32px; font-size: .85rem; font-weight: 600; cursor: pointer; }
+  .switch input { width: 18px; height: 18px; accent-color: var(--success); }
+  .linkish { padding: 0; border: 0; background: none; color: #fff; font: inherit; font-size: .75rem; opacity: .85; text-decoration: underline dotted; cursor: pointer; min-height: 28px; }
 </style>

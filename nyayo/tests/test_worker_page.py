@@ -64,18 +64,17 @@ class Rollup(TestCase):
         self.assertEqual(row.rtt_n, 0)
         self.assertIsNone(hours.last_hours("hunt", timezone.now())[-1]["rtt"])
 
-    def test_a_restart_goes_on_in_the_same_row_and_another_box_has_its_own(self):
-        hours.note(self.machine())
-        hours.note(make_machine("hunt"))
-        hours.note(make_machine("pc-wsl"))
+    def test_a_worker_has_its_own_rows_by_its_lowercase_name(self):
+        machine = self.machine()
+        hours.note(machine)
+        hours.note(machine)
+        hours.note(make_machine("Pc-WSL"))
         self.assertEqual(sorted(MachineHour.objects.values_list("box", "games")), [("hunt", 0), ("pc-wsl", 0)])
         self.assertEqual(MachineHour.objects.get(box="hunt").hour, hours.start_of(timezone.now()))
 
-    def test_a_worker_with_no_name_is_kept_by_its_user_and_address(self):
-        a = make_machine("anon", machine_name=None, mac_address="aa")
-        b = make_machine("anon", machine_name="None", mac_address="bb")
-        self.assertNotEqual(hours.box_of(a), hours.box_of(b))
-        self.assertTrue(hours.box_of(a).startswith("anon:"))
+    def test_a_worker_with_no_name_is_kept_as_machine_and_its_id(self):
+        machine = make_machine("")
+        self.assertEqual(hours.box_of(machine), "machine %d" % machine.id)
 
     def test_a_failure_never_reaches_the_worker(self):
         class Broken:
@@ -211,7 +210,7 @@ class Page(TestCase):
         Result.objects.filter(pk=older.pk).update(updated=timezone.now() - datetime.timedelta(days=1))
         text = page(self.client)
         for expected in ("Games, all time", ">40<", "on 2 tests", "2 crashes", "1 time loss", "Last workload", "SPSA against main",
-                         "Contributed to", "1 SPSA", "1 SPRT", "Approval", "Not kept yet"):
+                         "Contributed to", "1 SPSA", "1 SPRT", "Approval", "Enabled: takes work"):
             self.assertIn(expected, text)
         self.assertEqual(sorted(k for k, n in self.client.get("/machines/hunt").context["kinds"]), ["SPRT", "SPSA"])
 
@@ -228,19 +227,21 @@ class Page(TestCase):
         self.assertIn("Plays no engine", page(self.client))
 
     def test_toolchains_are_what_was_reported_and_say_so_until_registration_keeps_them(self):
-        make_machine("hunt", compilers={"Elephant": ["clang++", "21.1.4"]}, python_ver="3.12.3")
+        make_machine("hunt", described=False, toolchains={}, compilers={"Elephant": ["clang++", "21.1.4"]}, python_ver="3.12.3")
         text = page(self.client)
         self.assertIn("clang++", text)
         self.assertIn("21.1.4", text)
         self.assertIn("python3", text)
-        self.assertIn("not shown as missing", text)
+        self.assertIn("has not described itself yet", text)
 
     def test_toolchains_that_registration_kept_show_the_missing_ones_greyed(self):
-        machine = make_machine("hunt")
-        machine.toolchains = {"g++": "13.3.0", "rustc": ""}
-        rows = machines.toolchains(machine)
-        self.assertTrue(rows["complete"])
-        self.assertEqual([(r["name"], r["found"], r["cls"]) for r in rows["rows"]], [("g++", True, "cpp"), ("rustc", False, "rust")])
+        machine = make_machine("hunt", toolchains={"rustc": None, "g++": "13.3.0", "dotnet": None})
+        rows = machines.toolchain_rows(machine)
+        self.assertTrue(rows["described"])
+        self.assertEqual([(r["name"], r["found"], r["cls"]) for r in rows["rows"]],
+                         [("g++", True, "cpp"), ("dotnet", False, "cs"), ("rustc", False, "rust")])
+        text = page(self.client)
+        self.assertIn('lang-gone">C#</span><span class="tool">dotnet</span><span class="ver">not found', text)
 
     def test_cpu_flags_are_pills_inside_the_hardware_box_with_tooltips(self):
         make_machine("hunt", cpu_flags=["POPCNT", "NOVEL"], cpu_name="Ryzen 9")
@@ -279,3 +280,75 @@ class Page(TestCase):
         text = page(self.client)
         for secret in ("THE-SESSION-SECRET", "ghp_THE_GIT_TOKEN", "pw-in-info", "info-secret", "de:ad:be:ef", "THE-GPU-TOKEN"):
             self.assertNotIn(secret, text)
+
+
+class Approval(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        User.objects.create_user("owner", password="pw", is_staff=True, is_superuser=True)
+
+    def sign_in(self):
+        self.client.login(username="owner", password="pw")
+
+    def test_an_approved_worker_has_the_switch_and_turn_away_only_for_someone_signed_in(self):
+        make_machine("hunt")
+        text = page(self.client)
+        self.assertIn("Enabled: takes work", text)
+        self.assertNotIn('name="action"', text)
+        self.sign_in()
+        text = page(self.client)
+        self.assertIn('type="checkbox" checked', text)
+        self.assertIn('name="action" value="disable"', text)
+        self.assertIn('value="turn_away"', text)
+
+    def test_the_switch_disables_and_enables_and_is_unchecked_while_disabled(self):
+        machine = make_machine("hunt")
+        self.sign_in()
+        self.client.post("/machine-action", {"id": machine.id, "action": "disable", "back": "machine"})
+        machine.refresh_from_db()
+        self.assertFalse(machine.enabled)
+        text = page(self.client)
+        self.assertNotIn('type="checkbox" checked', text)
+        self.assertIn('name="action" value="enable"', text)
+        self.assertIn("Disabled", text)
+        self.client.post("/machine-action", {"id": machine.id, "action": "enable", "back": "machine"})
+        machine.refresh_from_db()
+        self.assertTrue(machine.enabled)
+
+    def test_a_pending_worker_has_its_own_page_with_what_it_reported_and_what_it_could_play(self):
+        make_machine("tor", state="pending", toolchains={"g++": "13.3.0", "rustc": None, "python3": "3.12.3"}, ram_total_mb=32768,
+                     logical_cores=16, cpu_name="Ryzen")
+        text = page(self.client, "/machines/tor")
+        for expected in ("Waiting for your approval", "It gets no tests until then", "Its first job", "What it could play, once approved",
+                         "16 threads", "32 GB", "version 54", "Can build", "Not found", "no gcc or clang"):
+            self.assertIn(expected, text)
+        self.assertNotIn("Last 48 hours", text)
+        self.assertNotIn('value="approve"', text)
+        self.sign_in()
+        text = page(self.client, "/machines/tor")
+        self.assertIn('value="approve"', text)
+        self.assertIn(">Approve tor<", text)
+        self.assertIn('value="turn_away"', text)
+
+    def test_a_real_approve_makes_the_full_page(self):
+        machine = make_machine("tor", state="pending")
+        self.sign_in()
+        self.client.post("/machine-action", {"id": machine.id, "action": "approve", "back": "machine"})
+        text = page(self.client, "/machines/tor")
+        self.assertIn("Last 48 hours", text)
+        self.assertNotIn("Waiting for your approval", text)
+
+    def test_a_turned_away_worker_may_still_be_approved_but_not_turned_away_again(self):
+        make_machine("away", state="turned_away")
+        self.sign_in()
+        text = page(self.client, "/machines/away")
+        self.assertIn("Turned away", text)
+        self.assertIn('value="approve"', text)
+        self.assertNotIn('value="turn_away"', text)
+
+    def test_the_list_says_who_is_pending_and_links_to_each(self):
+        make_machine("tor", state="pending")
+        text = page(self.client, "/machines")
+        self.assertIn("1 worker waiting for approval", text)
+        self.assertIn('href="/machines/tor"', text.split("waiting for approval")[1])
+        self.assertIn('class="pending-row"', text)

@@ -1,9 +1,8 @@
 """The hourly rollup behind the 48-hour graph on a box's page: one `MachineHour` row per box and hour with the games it
 reported, the seconds it was heard from and the round trips measured.
 
-It is written by the calls a worker makes anyway (`note`: one small upsert of the hour's row, a single statement), never by the page, and a failure here never fails a worker's request. A box is its lowercase
-name, or for a worker with none its user and MAC address, so a restart goes on in the same row (the way
-`machines.py` groups sessions). Rows are kept `KEEP_DAYS` and pruned by nyayo's worker.
+It is written by the calls a worker makes anyway (`note`: one small upsert of the hour's row, a single statement), never by the page, and a failure here never fails a worker's request. A box is its worker, named by its lowercase
+name (`machine <id>` when it has none): registration keeps one row for a worker across restarts, so they go on in the same row. Rows are kept `KEEP_DAYS` and pruned by nyayo's worker.
 
 Seconds heard are the time since the session was last heard, counted only when that is under `GAP` (so a worker that
 was away does not get credit for the time it was gone), and put in the hour of the call.
@@ -24,17 +23,9 @@ GAP = 300          # seconds: the longest silence still counted as the worker be
 HOUR = datetime.timedelta(hours=1)
 
 
-def slug(name, user_id, mac):
-    """The key of a box: its lowercase name, or 'anon:<user>:<mac>' for one with none."""
-    name = (name or '').strip() if isinstance(name, str) else ''
-    if name and name != 'None':
-        return name.lower()[:150]
-    return ('anon:%s:%s' % (user_id, mac or ''))[:150]
-
-
 def box_of(machine):
-    info = machine.info if isinstance(machine.info, dict) else {}
-    return slug(info.get('machine_name'), machine.user_id, info.get('mac_address'))
+    """The key of a worker: its lowercase name, or `machine <id>` for one with none (a row for each worker, across restarts)."""
+    return (machine.name or 'machine %d' % machine.id).lower()[:150]
 
 
 def start_of(moment):
