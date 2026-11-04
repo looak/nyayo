@@ -53,6 +53,104 @@
     }, 400);
   }
 
+  // The branch fields are comboboxes over the source's real branches: an arrow and a list that opens on a click, filters as
+  // you type, and takes the arrow keys, Enter and Escape. The text stays free (a sha or any other name works), and with
+  // GitHub down the list says why it is empty and the form is as it was.
+  var branches = { repo: null, state: "loading", names: [], why: "" };
+  var combos = [];
+
+  function fillBranches() {
+    var repo = field("dev_repo").value;
+    if (branches.repo === repo) return;
+    branches = { repo: repo, state: "loading", names: [], why: "" };
+    combos.forEach(function (c) { c.render(); });
+    fetch(form.dataset.branches + "?" + new URLSearchParams({ repo: repo }), { credentials: "same-origin" })
+      .then(function (r) { return r.json(); }).then(function (data) {
+        if (branches.repo !== repo) return;
+        branches.names = data.branches || [];
+        branches.state = branches.names.length ? "ready" : "none";
+        branches.why = data.error || "";
+        combos.forEach(function (c) { c.render(); });
+      }).catch(function () {
+        if (branches.repo !== repo) return;
+        branches.state = "none"; branches.why = "The list did not answer.";
+        branches.repo = null;
+        combos.forEach(function (c) { c.render(); });
+      });
+  }
+
+  function combo(input) {
+    var wrap = document.createElement("span"), list = document.createElement("ul"), arrow = document.createElement("button");
+    wrap.className = "combo";
+    list.className = "combo-list"; list.id = input.id + "-list"; list.setAttribute("role", "listbox"); list.hidden = true;
+    arrow.type = "button"; arrow.className = "combo-arrow"; arrow.tabIndex = -1; arrow.textContent = "▾";
+    arrow.setAttribute("aria-label", "Show the branches");
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input); wrap.appendChild(arrow); wrap.appendChild(list);
+    input.setAttribute("role", "combobox"); input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-controls", list.id); input.setAttribute("aria-expanded", "false");
+    var open = false, filter = "", active = -1, shown = [];
+
+    function note(text) { var li = document.createElement("li"); li.className = "combo-note"; li.textContent = text; list.appendChild(li); }
+
+    function render() {
+      list.textContent = ""; shown = []; active = -1;
+      if (!open) return;
+      if (branches.state === "loading") { note("Loading branches…"); return; }
+      if (branches.state === "none") { note((branches.why || "No branches found.") + " Type a branch or a sha."); return; }
+      var needle = filter.toLowerCase();
+      shown = branches.names.filter(function (n) { return n.toLowerCase().indexOf(needle) >= 0; });
+      shown.forEach(function (name, i) {
+        var li = document.createElement("li");
+        li.textContent = name; li.setAttribute("role", "option"); li.id = list.id + "-" + i;
+        if (name === input.value) li.classList.add("current");
+        li.addEventListener("mousedown", function (e) { e.preventDefault(); pick(name); });
+        li.addEventListener("click", function (e) { e.stopPropagation(); });
+        list.appendChild(li);
+      });
+      if (!shown.length) note("No branch matches “" + filter + "”: it is used as typed.");
+    }
+
+    function setOpen(on, all) {
+      open = on; filter = all ? "" : input.value.trim();
+      list.hidden = !on; input.setAttribute("aria-expanded", on ? "true" : "false");
+      if (on) fillBranches();
+      render();
+    }
+
+    function pick(name) {
+      input.value = name;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      setOpen(false);
+    }
+
+    function move(by) {
+      if (!shown.length) return;
+      active = (active + by + shown.length) % shown.length;
+      Array.prototype.forEach.call(list.children, function (li, i) { li.classList.toggle("active", i === active); });
+      input.setAttribute("aria-activedescendant", list.children[active].id);
+      list.children[active].scrollIntoView({ block: "nearest" });
+    }
+
+    input.addEventListener("click", function () { if (!open) setOpen(true, true); });
+    input.addEventListener("input", function (e) { if (e.isTrusted) setOpen(true, false); });
+    input.addEventListener("blur", function () { setOpen(false); });
+    arrow.addEventListener("mousedown", function (e) { e.preventDefault(); });
+    arrow.addEventListener("click", function () { input.focus(); setOpen(!open, true); });
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (!open) setOpen(true, true);
+        move(e.key === "ArrowDown" ? 1 : -1);
+      } else if (e.key === "Enter" && open && active >= 0) {
+        e.preventDefault(); pick(shown[active]);
+      } else if (e.key === "Escape" && open) {
+        e.preventDefault(); setOpen(false);
+      }
+    });
+    return { render: render };
+  }
+
   function show(data, dev) {
     if (data.error) { fact("r-subject", data.error, "bad"); return; }
     var d = data.dev || {}, b = data.base || {};
@@ -80,13 +178,17 @@
   form.querySelectorAll('input[name="test_kind"]').forEach(function (r) {
     r.addEventListener("change", function () { field("bounds").value = r.dataset.bounds; summarize(); });
   });
+  ["dev_branch", "base_branch"].forEach(function (n) { combos.push(combo(field(n))); });
   ["dev_branch", "base_branch", "dev_repo"].forEach(function (n) { field(n).addEventListener("input", lookup); });
   ["name", "dev_tc", "dev_options", "bounds", "max_games", "test_mode", "dev_repo"].forEach(function (n) { field(n).addEventListener("input", summarize); });
   field("engine").addEventListener("change", function () {
     var engine = engines[field("engine").value];
     if (engine) { field("dev_repo").value = engine.source; field("base_repo").value = engine.source; field("scale_nps").value = engine.nps; }
     applyPreset();
+    fillBranches();
   });
+  field("dev_repo").addEventListener("change", fillBranches);
   summarize();
+  fillBranches();
   if (field("dev_branch").value.trim()) lookup();
 })();

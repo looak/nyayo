@@ -68,15 +68,34 @@ def facts(repo, ref):
     return out
 
 
+def allowed_source(repo):
+    return bool(re.match(r'^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+\/?$', repo)) and creating.repo_path(repo) in creating.allowed_repos()
+
+
 @action_required
 def lookup(request):
     """GET: the page's script asks what GitHub says of the typed branches. Never a failure: a problem is in the answer."""
     repo = request.GET.get('repo', '')
-    if not re.match(r'^https:\/\/github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+\/?$', repo) or creating.repo_path(repo) not in creating.allowed_repos():
+    if not allowed_source(repo):
         return JsonResponse({'error': "That source isn't the source of an engine."})
     dev, base = facts(repo, request.GET.get('dev', '')), facts(repo, request.GET.get('base', ''))
     behind = github.commits_behind(repo, dev['sha'], base['sha']) if dev.get('sha') and base.get('sha') else None
     return JsonResponse({'dev': dev, 'base': base, 'behind': behind})
+
+
+@action_required
+def branches(request):
+    """GET: the branch names of a source, for the page's suggestions, the engine's base branch first. Never a failure: a
+    problem is an empty list and the reason."""
+    repo = request.GET.get('repo', '')
+    if not allowed_source(repo):
+        return JsonResponse({'branches': [], 'error': "That source isn't the source of an engine."})
+    try:
+        names = sorted(set(github.branches(repo)))
+    except github.GithubDown:
+        return JsonResponse({'branches': [], 'error': 'GitHub did not answer.'})
+    names.sort(key=lambda name: name != creating.DEFAULT_BASE)
+    return JsonResponse({'branches': names})
 
 
 @action_required

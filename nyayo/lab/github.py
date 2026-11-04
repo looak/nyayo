@@ -5,6 +5,7 @@
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 
@@ -85,6 +86,30 @@ def branch_of_sha(repo, sha):
     except Exception: pass
 
     return None
+
+BRANCH_CACHE_SECONDS = 60
+BRANCH_PAGES = 10
+_branch_cache = {}
+
+def branches(repo):
+
+    # The names of a repository's branches, as GitHub lists them. Kept a minute per repository, as anonymous callers get
+    # sixty requests an hour. Raises GithubDown, also when GitHub answers with anything but a list
+    now = time.monotonic()
+    cached = _branch_cache.get(repo)
+    if cached and now - cached[0] < BRANCH_CACHE_SECONDS:
+        return list(cached[1])
+
+    names = []
+    for page in range(1, BRANCH_PAGES + 1):
+        status, data = api_get('%s/branches?per_page=100&page=%d' % (api_base(repo).rstrip('/'), page))
+        if status != 200 or not isinstance(data, list):
+            raise GithubDown('GitHub answered %s for the branches' % status)
+        names += [x['name'] for x in data if isinstance(x, dict) and 'name' in x]
+        if len(data) < 100: break
+
+    _branch_cache[repo] = (now, names)
+    return list(names)
 
 def commits_behind(repo, dev_sha, base_sha):
 
