@@ -185,11 +185,21 @@ deploy/make-env.sh
 It prints what it wrote, without the secret: check `NYAYO_DATA_DIR=/home/fischer/dev/nyayo-2-data`, `NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches-2`,
 `NYAYO_CSRF_TRUSTED_ORIGINS=http://172.16.100.11:8002,http://bobby.home:8002`, and that there is no `NYAYO_BACKUP_REPO` line.
 
-**4. Copy the data.** The database is the online copy that `backup` takes in the current checkout (never the live file, which is in
-WAL mode), then it and `archive/` and `games/` go into the new data directory, without `games/batches`. Choose what to do with the
-games kept as data first (*Batches*, below): with option (a) add `WITH_INDEX=1`, which copies the index that belongs to them.
+**4. Copy the batches** (the games of every finished test: 258 MB, with plenty of room on the share). `rsync -a` copies; it is safe to repeat,
+which the switch does, and the current nyayo may go on adding to its batches meanwhile:
 
 ```bash
+rsync -a --info=progress2 /mnt/nyayo-batches/batches/ /mnt/nyayo-batches/batches-2/
+[ -d /mnt/nyayo-batches/datasets ] && rsync -a /mnt/nyayo-batches/datasets/ /mnt/nyayo-batches/datasets-2/
+rsync -a --dry-run -i /mnt/nyayo-batches/batches/ /mnt/nyayo-batches/batches-2/ | wc -l     # 0 when it is all there (the current worker may add a few)
+```
+
+**5. Copy the data.** The database is the online copy that `backup` takes in the current checkout (never the live file, which is in
+WAL mode); it and `archive/` and `games/` go into the new data directory, without `games/batches`, and `WITH_INDEX=1` copies the index
+of the games kept as data (`index.sqlite3`, which points into the batches by their relative names, so it belongs with the copy above).
+
+```bash
+WITH_INDEX=1 \
 OLD_CHECKOUT=/home/fischer/dev/nyayo \
 OLD_BIN="$(conda info --base)/envs/nyayo/bin" \
 NEW_DATA=/home/fischer/dev/nyayo-2-data \
@@ -199,29 +209,8 @@ deploy/copy-live-data.sh
 It says `database copied to /home/fischer/dev/nyayo-data/backup/nyayo.sqlite3` and how many matches the copy has (compare with the
 Matches page of the current nyayo). It refuses a data directory that already has data, and the current one.
 
-**5. Batches: two choices.**
-
-(a) *Copy them* (it is the games of every finished test; the share's copy takes as long as the data is big: `du -sh /mnt/nyayo-batches/batches` first,
-and run it in `tmux` so that a dropped connection does not stop it). It is safe to repeat, which the switch does:
-
-```bash
-rsync -a --info=progress2 /mnt/nyayo-batches/batches/ /mnt/nyayo-batches/batches-2/
-[ -d /mnt/nyayo-batches/datasets ] && rsync -a /mnt/nyayo-batches/datasets/ /mnt/nyayo-batches/datasets-2/
-rsync -a --dry-run -i /mnt/nyayo-batches/batches/ /mnt/nyayo-batches/batches-2/ | wc -l     # 0 when it is all there (the current worker may add a few)
-```
-
-and step 4 with `WITH_INDEX=1`, so the index of the games (`index.sqlite3`, which points into the batches by their relative names) comes
-too. Then, after step 6, `python manage.py reindex --dry-run`: it says how many batches would be indexed; if it says some, run
-`python manage.py reindex` (low priority, one batch at a time, safe to stop and start again).
-
-(b) *Skip them for the trial*: nothing to copy, and the empty `batches-2` that step 3 made is used. What then **does not work**: whatever is
-read out of the batches, which is the games kept as data of every test that has finished. They are left out of exports (the Exports page,
-`/api/games`: tried on a copy, an export came back half the size) and of datasets for the tuner, and a game whose single file was
-purged (`purge_games`) has no moves on its page. The numbers on a match page, *N games stored as data*, still say what the database
-says, because they are rows; it is the files that are not there. Everything else works: match pages, results, SPRT figures, Machines, the games of
-`games/` (copied), creating tests and playing them. Run step 4 without `WITH_INDEX`.
-
-**6. Migrate, static files, fastchess, the owner.**
+**6. Migrate, static files, fastchess, the owner.** After `migrate`, `python manage.py reindex --dry-run` says how many batches would be
+indexed; if it says some, run `python manage.py reindex` (low priority, one batch at a time, safe to stop and start again).
 
 ```bash
 python manage.py migrate
@@ -256,8 +245,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://172.16.100.11:8002/matches     #
 curl -s http://172.16.100.11:8002/clientVersionRef/ -X POST                    # {"client_version": 54, "client_url": "http://172.16.100.11:8002/client.zip", ...}
 ```
 
-Then in the browser, at `http://172.16.100.11:8002/`: **an old match** (Matches, open one), **an old game** (Games, open one: only with batches
-option (a), or a live game), **Machines** (empty but for tokens, with the box that says how to start a worker), and **sign in** with the owner's
+Then in the browser, at `http://172.16.100.11:8002/`: **an old match** (Matches, open one), **an old game** (Games, open one), **Machines** (empty but for tokens, with the box that says how to start a worker), and **sign in** with the owner's
 name. The id the next test will have is printed at the end of `NYAYO_CONDA_ENV=nyayo2 NYAYO_UNITS="nyayo2 nyayo2-worker" deploy/update.sh`:
 `The next test is openbench-openbench-1000 (NYAYO_INSTANCE=openbench)`, the next thousand above the highest `openbench-openbench-N` of the copy
 (1000 if 63 is near the highest), and `NYAYO_INSTANCE=openbench` there is what the current ids have.
@@ -281,7 +269,7 @@ sudo systemctl daemon-reload
 conda deactivate
 rm -rf ~/dev/nyayo-2 ~/dev/nyayo-2-data
 conda env remove -n nyayo2 -y
-rm -rf /mnt/nyayo-batches/batches-2 /mnt/nyayo-batches/datasets-2      # the trial's copies, if they were made: never `batches` or `datasets`
+rm -rf /mnt/nyayo-batches/batches-2 /mnt/nyayo-batches/datasets-2      # the trial's copies: never `batches` or `datasets`
 ```
 
 The worker has nowhere to go then (the current nyayo on 8001 has no worker API, and OpenBench's server is not running): stop it, or
@@ -299,7 +287,7 @@ directory is kept aside as `nyayo-2-data.trial`, and the copy is made again from
 sudo systemctl stop nyayo-expire.timer nyayo-backup.timer nyayo nyayo-worker nyayo2 nyayo2-worker
 ```
 
-**2. Put the trial aside and copy again.** (a) with batches: the `rsync` is the same as in the trial and only brings what is new.
+**2. Put the trial aside and copy again.** The `rsync` is the same as in the trial and only brings what is new.
 
 ```bash
 cd ~/dev/nyayo-2
@@ -322,7 +310,7 @@ NEW_DATA=/home/fischer/dev/nyayo-2-data \
 deploy/copy-live-data.sh
 ```
 
-(b) without batches: leave out the two `rsync` lines and `WITH_INDEX=1`, as in the trial. `.env` now has port 8001 in its origins and
+`.env` now has port 8001 in its origins and
 `NYAYO_BACKUP_REPO=/home/fischer/dev/nyayo-backups`, the backup repository the current nyayo writes to: nothing else writes to it
 once the current one is stopped.
 
