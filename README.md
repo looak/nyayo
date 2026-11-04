@@ -98,8 +98,10 @@ gone, users and the author of a test are Django's); and the seed data of `nyayo/
 OpenBench's book list and the Elephant engine file. The worker's API (`worker_api.py`), the scheduling
 (`get_workload.py`), the results (`utils.py`) and the match document (`document.py`) are adapted from the same
 OpenBench files (`views.py`, `workloads/get_workload.py`, `utils.py`), through the owner's fork, with OpenBench's notice on
-each; `steps.py` is the fork's own, moved. The worker that plays the games is OpenBench's `Client/`, used unchanged from
-openbench_eg: nyayo serves it. The smoke test in `tools/smoke/` (its toy engine, book and file server) is from
+each; `steps.py` is the fork's own, moved. The worker that plays the games is OpenBench's `Client/`, which
+lives in `nyayo/client/` now: copied from openbench_eg at commit `6a072fa` (its `Client/`, with the registration of
+looak/openbench_eg#30), with OpenBench's notice at the top of each file, and changed only where it fetches itself: it
+updates from nyayo's `/client.zip`, not from GitHub. nyayo serves it, and its tests moved to `nyayo/tests/client/`. The smoke test in `tools/smoke/` (its toy engine, book and file server) is from
 openbench_eg's `Scripts/smoke`.
 
 Bundled with it: lichess's board, [chessground](https://github.com/lichess-org/chessground) 9.1.1 (GPL-3.0,

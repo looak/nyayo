@@ -12,15 +12,9 @@ def setting(name, default):
 
 
 def client_version():
-    return int(setting("NYAYO_CLIENT_VERSION", 54))
-
-
-def client_repo_url():
-    return setting("NYAYO_CLIENT_REPO_URL", "https://github.com/looak/openbench_eg")
-
-
-def client_repo_ref():
-    return setting("NYAYO_CLIENT_REPO_REF", "master")
+    # The CLIENT_VERSION of the client nyayo hands out (lab/clientzip.py), unless a setting says otherwise
+    from nyayo.lab import clientzip
+    return int(setting("NYAYO_CLIENT_VERSION", clientzip.version() or 0))
 
 
 def fastchess_min_version():

@@ -77,9 +77,11 @@ class Api(TestCase):
 
 
 class Settings(Api):
-    def test_the_client_to_fetch(self):
-        self.assertEqual(self.client.get('/clientVersionRef/').json(), {
-            'client_version': 54, 'client_repo_url': 'https://github.com/looak/openbench_eg', 'client_repo_ref': 'master'})
+    def test_the_client_to_fetch_is_nyayos_own(self):
+        answer = self.client.get('/clientVersionRef/').json()
+        self.assertEqual(sorted(answer), ['client_sha256', 'client_url', 'client_version'])
+        self.assertEqual((answer['client_version'], answer['client_url']), (54, 'http://testserver/client.zip'))
+        self.assertNotIn('github', json.dumps(answer))
 
     def test_the_fastchess_to_build(self):
         self.assertEqual(self.client.get('/clientMatchRunnerVersionRef/').json(), {
@@ -92,10 +94,9 @@ class Settings(Api):
             'path': 'ob_build', 'compilers': ['g', 'clang'], 'cpuflags': ['POPCNT'], 'systems': ['Linux', 'Windows'],
             'private': False})
 
-    @override_settings(NYAYO_CLIENT_VERSION=55, NYAYO_CLIENT_REPO_REF='next')
-    def test_they_are_settings(self):
-        answer = self.client.get('/clientVersionRef/').json()
-        self.assertEqual((answer['client_version'], answer['client_repo_ref']), (55, 'next'))
+    @override_settings(NYAYO_CLIENT_VERSION=55)
+    def test_the_version_may_be_a_setting(self):
+        self.assertEqual(self.client.get('/clientVersionRef/').json()['client_version'], 55)
 
 
 class SigningIn(Api):

@@ -33,10 +33,11 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.http import FileResponse, HttpResponse, JsonResponse
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from nyayo.lab import config, fastchess, hours, registration, rtt, steps, toolchains, utils
+from nyayo.lab import clientzip, config, fastchess, hours, registration, rtt, steps, toolchains, utils
 from nyayo.lab.document import report_test
 from nyayo.lab.get_workload import get_workload, heard
 from nyayo.lab.ids import match_id
@@ -144,10 +145,19 @@ def client_hello(request):
 def client_version_ref(request):
     # Enough information to download the right Client
     return JsonResponse({
-        'client_version'  : config.client_version(),
-        'client_repo_url' : config.client_repo_url(),
-        'client_repo_ref' : config.client_repo_ref(),
+        'client_version' : config.client_version(),
+        'client_url'     : request.build_absolute_uri(reverse('client_zip')),
+        'client_sha256'  : clientzip.build()[1],
     })
+
+def client_download(request):
+
+    # The client, zipped, to anyone: it is OpenBench's worker and holds nothing of this server
+    data, sha = clientzip.build()
+    response  = HttpResponse(data, content_type='application/zip')
+    response['Content-Disposition'] = 'attachment; filename=nyayo-client.zip'
+    response['ETag'] = '"%s"' % sha
+    return response
 
 @csrf_exempt
 def client_match_runner_version_ref(request):

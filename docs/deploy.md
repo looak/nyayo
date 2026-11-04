@@ -119,7 +119,7 @@ activate the env first.
 ## The lab: OpenBench's workers
 
 From nyayo 2.0 nyayo is OpenBench's server: it makes the tests, hands the workers their work, and takes their results.
-The worker that plays is OpenBench's own `Client/` (looak/openbench_eg, `master`), with the registration of *Workers register themselves* below: no username and no password. OpenBench itself is no longer
+The worker that plays is OpenBench's own `Client/`, which nyayo carries (`nyayo/client/`, from looak/openbench_eg `6a072fa`) and hands out at `/client.zip`, with the registration of *Workers register themselves* below: no username and no password. OpenBench itself is no longer
 run on bobby: its service is stopped and disabled, and its checkout has the merged code, whose `migrate` refuses its old
 database, so it cannot just be started again. Going back means nyayo goes back (see the checklist in the pull request),
 and SPRTs stay off until the 2.0 code is fixed forward. Bringing OpenBench back would take a `git reset` of its checkout
@@ -152,8 +152,8 @@ address the worker uses. From the worker's machine:
 curl -s http://172.16.100.11:8001/clientVersionRef/
 ```
 
-answers `{"client_version": 54, "client_repo_url": "https://github.com/looak/openbench_eg", "client_repo_ref": "master"}`
-(`clientVersionRef` needs nothing, so a client can always update itself). There is no path prefix for a worker to get wrong:
+answers `{"client_version": 54, "client_url": "http://172.16.100.11:8001/client.zip", "client_sha256": "..."}`
+(`clientVersionRef` needs nothing, so a client can always update itself, and from nyayo, not GitHub). There is no path prefix for a worker to get wrong:
 with `NYAYO_SCRIPT_NAME` set it would have to be part of `-S`.
 
 **Workers register themselves.** There is no worker user and no password. A worker says hello (`POST /clientHello/`) with
@@ -176,22 +176,27 @@ built with `ob_build`, compilers `g` and `clang`, presets STC, LTC, SMP STC and 
 `8.0+0.08`) and OpenBench's twelve books. They are under Lab, Engine configs and Books in the admin (the Engines and Books
 pages in the sidebar are not built yet).
 
-**What a worker needs** (hunt): Python 3 with the packages in `Client/requirements.txt` (`requests`, `psutil`,
-`py-cpuinfo`, `zstandard`), and access to `github.com` and `raw.githubusercontent.com`, from where it downloads its own client,
-the engine's source as an archive and the books. To build Elephant it needs `make` and a C and C++ compiler. When it has
+**What a worker needs** (hunt): Python 3 with the packages in the client's `requirements.txt` (`requests`, `psutil`,
+`py-cpuinfo`, and optionally `zstandard`), and access to `github.com` and `raw.githubusercontent.com`, from where it downloads
+the engine's source as an archive and the books (the client itself comes from nyayo). To build Elephant it needs `make` and a C and C++ compiler. When it has
 described itself the server judges what it can build: the engine's compilers, `g` and `clang`, are `g++` or `gcc`, and `clang`
 or `clang++` (a `>=` minimum is kept), and `make` is needed too. The tools the worker is asked about are `gcc`, `g++`,
 `clang`, `clang++`, `dotnet`, `rustc`, `cargo`, `python3` and `make`; only C and C++ are scheduled for now, so an engine that
 builds with Rust or C# is handed to no worker. The page of a worker says what it found and what it plays; one that plays
 nothing says what is missing (`Missing ['g', 'clang']`, `Missing make`, a missing CPU flag such as `POPCNT`, an operating
-system the engine is not built for). A test no worker can play stays *waiting for a worker*. It starts with
+system the engine is not built for). A test no worker can play stays *waiting for a worker*. It is got and started with the commands on nyayo's `/worker` page (no sign-in), which have the server's own address in them:
 
 ```bash
-python3 client.py -S http://172.16.100.11:8001 -T <threads> -N <sockets> -I hunt
+curl -fLo client.zip http://172.16.100.11:8001/client.zip
+python3 -m zipfile -e client.zip nyayo-worker
+python3 -m pip install -r nyayo-worker/requirements.txt
+python3 nyayo-worker/client.py --server http://172.16.100.11:8001 -T <threads> -N <sockets> -I hunt
 ```
 
-(`-S` is the whole address, no path; the server may instead be in `OPENBENCH_SERVER`. Add `--join CODE` to be approved on
-hello.) If the worker's start is automatic, only `-S` changes from what was run against OpenBench, and the credentials go.
+(`--server`, or `-S`, is the whole address, no path; it may instead be in `OPENBENCH_SERVER`. Add `--join CODE` to be approved on
+hello.) A worker that already has a client directory from OpenBench's fork needs only `-S` changed and the credentials taken off:
+it updates itself from nyayo when the version asks, and keeps its `worker.token`. The client updates itself from nyayo, never
+from GitHub: raise its version (`CLIENT_VERSION` in `nyayo/client/worker.py`) in a release, and every worker follows.
 Its first run says *waiting for approval*; the page of Machines shows it as *Waiting for approval* with *Approve* and *Turn
 away*. A worker plays for one server at a time: stop it before it is pointed elsewhere.
 
@@ -211,10 +216,10 @@ Under *Advanced* on Create test, type the base's bench (and the dev's, if its co
 the node count `bench` prints for that commit. The page says "Unable to parse a Bench" until it is.
 
 **The smoke test** (`tools/smoke/run.py`; its docstring has the setup) is how to see all of this work before a real test:
-nyayo as deployed, openbench_eg's worker (`--client-ref`, the registration branch until it is on `master`) started with no
-username and no password, a toy engine and a GitHub of its own, tests made through the real create page, the engine's failures
+nyayo as deployed, nyayo's own client downloaded from `/client.zip` and started with no
+username and no password (no checkout of openbench_eg), a toy engine and a GitHub of its own, tests made through the real create page, the engine's failures
 staged. It checks hello, pending (told to wait, nothing played), describe, approve and play, disable and enable, a join code, a
-turned-away worker refused by name, a restart keeping its row and its games, and fastchess from the server. Linux or WSL,
+turned-away worker refused by name, a restart keeping its row and its games, a worker updating itself from nyayo, and fastchess from the server. Linux or WSL,
 `make` and `g++`, about three to four minutes.
 
 ## Game threads

@@ -383,7 +383,7 @@ with OpenBench's notice. Tunes and datagens come later.
   no `Test`, shows no link to OpenBench's server, and no buttons.
 ### Lab: the worker's API
 
-OpenBench's Client (openbench_eg's `Client/`, the worker) runs against nyayo unchanged: every `client*` endpoint is at the
+OpenBench's Client (`nyayo/client/`, the worker: see *The client* below) runs against nyayo: every `client*` endpoint is at the
 path and with the answers it had (`nyayo/lab/worker_api.py`, from the client hook views of OpenBench's `views.py`). They are
 CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
 
@@ -431,10 +431,27 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
   (Linux, Windows or Darwin; `platform.machine()`), from the newest fetched release that is at least
   `NYAYO_FASTCHESS_MIN_VERSION` and has a file for them, else no `binary`. `GET /clientFastchess/<tag>/<file>` serves a file
   the manifest lists, to anyone.
-- **Settings in place of `Config/config.json`** (`nyayo/lab/config.py`): `NYAYO_CLIENT_VERSION` (54),
-  `NYAYO_CLIENT_REPO_URL` (`https://github.com/looak/openbench_eg`), `NYAYO_CLIENT_REPO_REF` (`master`),
-  `NYAYO_FASTCHESS_MIN_VERSION` (1.8.1), `NYAYO_FASTCHESS_REPO_URL` and `NYAYO_FASTCHESS_REPO_REF`, each from settings or the
-  environment. Engines and books are rows.
+- **Settings in place of `Config/config.json`** (`nyayo/lab/config.py`): `NYAYO_CLIENT_VERSION` (by default the `CLIENT_VERSION` of
+  the client nyayo hands out, 54: see *The client*), `NYAYO_FASTCHESS_MIN_VERSION` (1.8.1), `NYAYO_FASTCHESS_REPO_URL` and
+  `NYAYO_FASTCHESS_REPO_REF`, each from settings or the environment. Engines and books are rows.
+- **The client** (`nyayo/client/`, `nyayo/lab/clientzip.py`). The worker is OpenBench's `Client/`, copied from openbench_eg at
+  `6a072fa` (looak/openbench_eg#30), with OpenBench's notice on each file; its tests are pytest's, in `nyayo/tests/client/`,
+  and run from `nyayo/tests/test_lab_client.py` when pytest and `nyayo/client/requirements.txt` (`requests`, `psutil`,
+  `py-cpuinfo`, and optionally `zstandard`) are installed. nyayo's own `pyproject.toml` needs none of them.
+  - `GET /client.zip`, with no sign-in, is a zip of the client's files (no tests, no bytecode, no `worker.token`), the same bytes
+    while the files are the same, with its sha256 in an `ETag`. `clientVersionRef` answers `{ client_version, client_url,
+    client_sha256 }`: the version is the `CLIENT_VERSION` of the `worker.py` that is in the zip, so the server and what it hands
+    out cannot disagree (`NYAYO_CLIENT_VERSION` overrides it; `NYAYO_CLIENT_DIR` serves another copy, which the smoke test does
+    to raise the version). The old `client_repo_url` and `client_repo_ref` are gone: nothing asks GitHub for the client.
+  - A worker starts from that zip (the page `/worker` has the commands, and the same box, `lab/_get_a_worker.html`, is on `/machines`):
+    unpack, `pip install -r requirements.txt`, `client.py --server URL [--join CODE]`. It updates itself the way it did: a call
+    answered `Bad Client Version` makes `client.py` fetch `client_url` (a path is the server's own), check `client_sha256`, and
+    copy every file of the zip over its own but `client.py`, which is running, and `worker.token`, which is its own, with the time
+    of the copy (Python keeps compiled files by the time and size of their source, and 54 and 55 are the same size). `client.py`
+    itself is not updated by an update, as before. The worker's version stays 54: the protocol did not change, only where it fetches.
+  - The worker's own behaviour (hello and `worker.token`, the describe job and *wait*, `gpus`, fastchess from the server with the
+    build as a fallback, a game named and tagged with its `Termination` and the whole comment of each move, steps and the retry
+    the server asks for) is what *Worker registration* above and the match schema describe from the server's side.
 - **Scheduling** (`get_workload.py`, OpenBench's `workloads/get_workload.py`, names only): a worker is handed an approved,
   unfinished, undeleted test it can play (the engines it can build, its threads, syzygy, `--only`, `--focus`, `--noisy`, its
   blacklist, and the tests it left after a failure nobody could place), of the highest priority, balanced by threads against
@@ -459,11 +476,11 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
   `clientGetNetwork`), `api_*` of OpenBench's own scripts.
 
 The smoke test, `tools/smoke/run.py` (WSL or Linux; its docstring says how to set it up), runs nyayo as deployed (gunicorn,
-4 workers of 4 threads, and `manage.py worker`) with openbench_eg's `Client/` at `da629d7` playing, unchanged but for its
-timers. A toy engine, a book and a stand-in for the part of GitHub's API that the create page asks (`NYAYO_GITHUB_API`, which
+4 workers of 4 threads, and `manage.py worker`) with nyayo's own client playing, downloaded from `/client.zip` as a worker does and
+changed only in its timers, with no checkout of openbench_eg and no password. A toy engine, a book and a stand-in for the part of GitHub's API that the create page asks (`NYAYO_GITHUB_API`, which
 replaces `https://api.github.com/repos`) are served from the harness, and every test is made through the real create page,
 signed in as the owner. It checks a games test (named, a base bench typed in, the walk, games put away, the pages), an SPRT to a
-result, what the page refuses, approval by the owner, stop and restart, crashes, two tests at once, an idle worker that the Machines page says is idle and, once stopped, gone quiet, and each failure of the
+result, what the page refuses, approval by the owner, stop and restart, crashes, two tests at once, an idle worker that the Machines page says is idle and, once stopped, gone quiet, a worker that updates itself from here when the version goes up and keeps its token and its row, and each failure of the
 verdict table it can stage (a compile error, a wrong, slow or silent bench on dev; the machine's own failures; a killed
 compiler and a wrong bench on both, which hold the test; a bench that is right and then wrong). After each, the match agrees
 with its test on everything fixed and on the counts, and no report was refused. A full run takes about two to three minutes

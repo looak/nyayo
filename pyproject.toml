@@ -23,4 +23,4 @@ dependencies = [
 include = ["nyayo*"]
 
 [tool.setuptools.package-data]
-nyayo = ["templates/**/*"]
+nyayo = ["templates/**/*", "client/*"]

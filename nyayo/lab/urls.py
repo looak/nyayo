@@ -1,10 +1,12 @@
 from django.urls import path
 
-from . import worker_api as api
+from . import client_views, worker_api as api
 
 # The worker's endpoints, at the paths OpenBench's Client has always used
 urlpatterns = [
     path("clientHello/", api.client_hello),
+    path("client.zip", api.client_download, name="client_zip"),
+    path("worker", client_views.worker_page, name="worker_setup"),
     path("clientVersionRef/", api.client_version_ref),
     path("clientMatchRunnerVersionRef/", api.client_match_runner_version_ref),
     path("clientFastchess/<str:version>/<str:name>", api.client_fastchess),
