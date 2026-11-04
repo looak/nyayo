@@ -3,6 +3,8 @@
   .test-actions button.stop { background: var(--danger); }
   .test-actions button.restart { background: var(--warning); }
   .test-actions button.approve { background: var(--success); }
+  .card-head .test-actions { margin: 0; gap: .4rem; flex-wrap: nowrap; }
+  .card-head .test-actions button { min-height: 44px; min-width: 44px; padding: .25rem .8rem; font-size: .85rem; }
 </style>
 <form class="test-actions" method="post" aria-label="Test {{ test.id }}">{% csrf_token %}
   {% if not test.approved %}<span class="badge waiting">not approved</span>{% endif %}
