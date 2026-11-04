@@ -197,8 +197,10 @@ away*. A worker plays for one server at a time: stop it before it is pointed els
 
 **Fastchess from the server.** nyayo can hand a worker the official fastchess release's file for its system, so a worker
 needs no compiler for it: `python manage.py fetch_fastchess <tag>` (`v1.8.1-alpha` or `1.8.1-alpha`) downloads that release
-of `Disservin/fastchess` (AndyGrant's has no commits of its own over it), every file with its sha256, into
-`DATA_DIR/fastchess/<tag>/`, with a `manifest.json`. `clientMatchRunnerVersionRef` then names the file for the system and
+of `Disservin/fastchess` (AndyGrant's has no commits of its own over it) into `DATA_DIR/fastchess/<tag>/`, with a
+`manifest.json` of each file's sha256. A release file is an archive of the source tree and the executable; the archive's checksum is
+checked against GitHub's, and the executable alone is kept and served (`fastchess-linux-x86-64`, `fastchess-windows-x86-64.exe`),
+with its own sha256. A file that is no archive, or holds no `fastchess`, is served as it came. `clientMatchRunnerVersionRef` then names the file for the system and
 architecture a worker asks with (`os_name`, `arch`), with its sha256, if its release is at least `NYAYO_FASTCHESS_MIN_VERSION`;
 the worker downloads it from `/clientFastchess/<tag>/<file>`, checks the sha256 and runs its version, and builds from source
 where there is no file or it will not run. Any worker may fetch it, approved or not. Run the command once per release, on

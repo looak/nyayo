@@ -1,7 +1,10 @@
 """Fetches an official fastchess release's files, with their sha256, for the workers: manage.py fetch_fastchess <version>."""
 
+import io
 import json
 import os
+import tarfile
+import zipfile
 import urllib.error
 import urllib.request
 
@@ -59,8 +62,19 @@ class Command(BaseCommand):
             if digest.startswith('sha256:') and digest[7:].lower() != sha:
                 partial.unlink(missing_ok=True)
                 raise CommandError('%s does not match the sha256 GitHub gives for it' % name)
-            os.replace(partial, target / name)
             system, arch = fastchess.classify(name)
+            # A release file is an archive of the source tree and the executable: the executable alone is what is served,
+            # one small file, with its own sha256 (the archive's was checked above). What is no archive, or has no
+            # executable in it, is served as it came.
+            executable = fastchess.extract_executable(partial, name)
+            if executable is not None:
+                served, content = executable
+                (target / served).write_bytes(content)
+                partial.unlink(missing_ok=True)
+                sha = fastchess.sha256_of(target / served)
+                name = served
+            else:
+                os.replace(partial, target / name)
             files.append({'name': name, 'sha256': sha, 'os': system, 'arch': arch, 'size': (target / name).stat().st_size})
             self.stdout.write('%s  %s  %s %s' % (sha, name, system or '-', arch or '-'))
         if not files:

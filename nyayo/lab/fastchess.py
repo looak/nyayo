@@ -7,6 +7,8 @@ is no file, or it will not run. Unapproved workers may fetch it: it is a public 
 import hashlib
 import json
 import re
+import tarfile
+import zipfile
 from pathlib import Path
 
 from django.conf import settings
@@ -99,3 +101,27 @@ def sha256_of(path):
         for chunk in iter(lambda: handle.read(1 << 20), b''):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def extract_executable(path, archive_name):
+    """(file name to serve, its bytes) for the `fastchess` executable in a .tar or .zip release file, or None when the file
+    is not an archive or holds none. The name is the archive's without its extension, with .exe when the executable has it."""
+    base = re.sub(r'\.(tar\.gz|tgz|tar\.xz|tar|zip)$', '', archive_name)
+    wanted = re.compile(r'fastchess(\.exe)?')
+    try:
+        if archive_name.endswith('.zip'):
+            with zipfile.ZipFile(path) as archive:
+                member = next((n for n in archive.namelist() if wanted.fullmatch(n.rsplit('/', 1)[-1])), None)
+                content, found = (archive.read(member), member) if member else (None, None)
+        elif '.tar' in archive_name or archive_name.endswith('.tgz'):
+            with tarfile.open(path) as archive:
+                member = next((m for m in archive.getmembers() if m.isfile() and wanted.fullmatch(m.name.rsplit('/', 1)[-1])), None)
+                content, found = (archive.extractfile(member).read(), member.name) if member else (None, None)
+        else:
+            return None
+    except (OSError, tarfile.TarError, zipfile.BadZipFile, KeyError):
+        return None
+    if not content:
+        return None
+    served = base + ('.exe' if found.endswith('.exe') else '')
+    return (served, content) if FILE.match(served) else None

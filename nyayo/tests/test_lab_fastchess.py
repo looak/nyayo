@@ -5,7 +5,9 @@ import hashlib
 import io
 import json
 import shutil
+import tarfile
 import tempfile
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -126,6 +128,55 @@ class Fetching(TestCase):
         release = Release()
         self.fetch(release, '1.8.2-alpha')
         self.assertTrue(any(url.endswith('/tags/v1.8.2-alpha') for url in release.requests))
+
+
+def tar_of(member='fastchess-v1/fastchess', content=b'ELF executable'):
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode='w') as archive:
+        for name, data in ((member, content), ('fastchess-v1/src/main.cpp', b'source')):
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+    return buffer.getvalue()
+
+
+def zip_of(member='fastchess.exe', content=b'MZ executable'):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w') as archive:
+        archive.writestr('src/main.cpp', b'source')
+        archive.writestr(member, content)
+    return buffer.getvalue()
+
+
+class Archives(TestCase):
+    def setUp(self):
+        self.data = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.data, True)
+        settings = override_settings(DATA_DIR=Path(self.data))
+        settings.enable()
+        self.addCleanup(settings.disable)
+
+    def test_the_executable_alone_is_kept_and_served_with_its_own_checksum(self):
+        files = {'fastchess-linux-x86-64.tar': tar_of(), 'fastchess-windows-x86-64.zip': zip_of(), 'fastchess-linux-riscv64.tar': tar_of(member='fastchess')}
+        with mock.patch('urllib.request.urlopen', Release(files=files).urlopen):
+            call_command('fetch_fastchess', '1.8.2-alpha', stdout=io.StringIO())
+        folder = Path(self.data) / 'fastchess' / 'v1.8.2-alpha'
+        manifest = {f['name']: f for f in json.loads((folder / 'manifest.json').read_text())['files']}
+        self.assertEqual(sorted(manifest), ['fastchess-linux-riscv64', 'fastchess-linux-x86-64', 'fastchess-windows-x86-64.exe'])
+        self.assertEqual((folder / 'fastchess-linux-x86-64').read_bytes(), b'ELF executable')
+        self.assertEqual(manifest['fastchess-linux-x86-64']['sha256'], hashlib.sha256(b'ELF executable').hexdigest())
+        self.assertEqual((manifest['fastchess-windows-x86-64.exe']['os'], manifest['fastchess-windows-x86-64.exe']['arch']), ('windows', 'x86-64'))
+        self.assertFalse((folder / 'fastchess-linux-x86-64.tar').exists())
+        binary = fastchess.binary_for('Windows', 'AMD64', '1.8.1', 'http://nyayo')
+        self.assertEqual((binary['name'], binary['sha256']), ('fastchess-windows-x86-64.exe', hashlib.sha256(b'MZ executable').hexdigest()))
+
+    def test_an_archive_without_the_executable_or_no_archive_is_kept_as_it_came(self):
+        files = {'fastchess-linux-x86-64.tar': tar_of(member='fastchess-v1/other'), 'fastchess-windows-x86-64.zip': b'not a zip'}
+        with mock.patch('urllib.request.urlopen', Release(files=files).urlopen):
+            call_command('fetch_fastchess', '1.8.2-alpha', stdout=io.StringIO())
+        folder = Path(self.data) / 'fastchess' / 'v1.8.2-alpha'
+        self.assertTrue((folder / 'fastchess-linux-x86-64.tar').exists())
+        self.assertEqual((folder / 'fastchess-windows-x86-64.zip').read_bytes(), b'not a zip')
 
 
 class Offering(Api):

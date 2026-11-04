@@ -424,7 +424,7 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
     24 by default; shown once; kept as a sha256; one use; `POST /machine-code-revoke`).
 - **Fastchess from the server** (`nyayo/lab/fastchess.py`). `manage.py fetch_fastchess <tag> [--api URL]` downloads an official
   release of Disservin/fastchess (the tag with or without its `v`) into `DATA_DIR/fastchess/<tag>/` with a `manifest.json` of
-  each file's sha256, system and architecture (told by its name; a file whose digest GitHub gives that does not match is refused).
+  each file's sha256, system and architecture (told by its name; a file whose digest GitHub gives that does not match is refused). A `.tar` or `.zip` release file is checked as it came and then replaced by the `fastchess` executable in it, named like the archive without its extension (`.exe` when it has it), with the executable's own sha256; a file that is no archive or holds none is kept as it came.
   `clientMatchRunnerVersionRef` also answers `binary: { url, sha256, version, name }` for the `os_name` and `arch` of the call
   (Linux, Windows or Darwin; `platform.machine()`), from the newest fetched release that is at least
   `NYAYO_FASTCHESS_MIN_VERSION` and has a file for them, else no `binary`. `GET /clientFastchess/<tag>/<file>` serves a file
