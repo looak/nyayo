@@ -469,6 +469,37 @@ def stop_and_restart(r):
     return 'test %d: stopped at %d games, the worker stopped, restarted and played to %d, stopped' % (test_id, games, r.test(test_id).games)
 
 
+def unapprove_and_delete(r):
+    from nyayo.lab.models import Result, Test
+    from nyayo.matches.models import Match, Tombstone
+    # unapproving: a test nobody has played, approved and taken back at once, is not given to a worker
+    waiting = r.create_test(who=r.helper, max_games=4)
+    check(r.owner.act(waiting, 'approve') == 302, 'the owner could not approve')
+    said = r.owner.act(waiting, 'unapprove')
+    if r.test(waiting).games == 0:
+        check(said == 302 and not r.test(waiting).approved, 'unapprove did not take a test with no games back (%d)' % (said))
+        time.sleep(RETRY + 3)
+        check(r.test(waiting).games == 0, 'a worker played an unapproved test')
+    r.owner.act(waiting, 'stop')
+    # a test with games cannot be unapproved, and is deleted while it is being played
+    test_id = r.create_test(max_games=400, workload_size=2)
+    r.wait_for(lambda: r.test(test_id).games > 0, 90, 'test %d to play' % (test_id))
+    check(r.owner.act(test_id, 'unapprove') == 409, 'a test with games was unapproved')
+    match = r.match(test_id)
+    reply = r.owner.post('/matches-remove', id=match.pk, mode='delete')
+    check(reply.status_code == 302, 'deleting the match answered %d' % (reply.status_code))
+    check(not Test.objects.filter(pk=test_id).exists() and not Match.objects.filter(pk=match.pk).exists(), 'the test or its match is still there')
+    check(Tombstone.objects.filter(pk=match.pk).exists(), 'no tombstone')
+    time.sleep(RETRY + 5)
+    check(not Result.objects.filter(test_id=test_id).exists(), 'a worker went on reporting results of the deleted test')
+    check('was deleted' in r.owner.session.get(r.url + '/matches/%s' % match.pk).text, 'the deleted page does not say so')
+    # the worker is alive and plays the next test
+    after = r.create_test(max_games=4, workload_size=2)
+    r.wait_for(lambda: r.test(after).finished, 90, 'the next test to be played after the delete')
+    r.settled(after, 'finished')
+    return 'test %d: unapprove with no games taken back and not played, refused with games (409); test %d deleted at %d games while played, tombstone, no more results; test %d played after' % (waiting, test_id, r.test(after).games, after)
+
+
 def crash_then_stop(r):
     from nyayo.lab.models import Result
     test_id = r.create_test(dev=r.engine('dev'), dev_options='Threads=1 Hash=16 CrashAfter=6', max_games=400)
@@ -749,6 +780,7 @@ SCENARIOS = [
     ('fastchess', fastchess_from_the_server),
     ('approval', approval),
     ('stop-restart', stop_and_restart),
+    ('unapprove-delete', unapprove_and_delete),
     ('crash-stop', crash_then_stop),
     ('two-tests', two_tests),
     ('compile-source', engine_fails(E(broken='source'), 'compile', "Dev doesn't compile")),

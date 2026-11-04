@@ -6,7 +6,7 @@ Behind nyayo/actions/access.py's gate. Routed from nyayo/actions/urls.py, where 
 import re
 
 from django.core.exceptions import PermissionDenied
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -106,6 +106,8 @@ def modify(request, test_id, action):
     test = get_object_or_404(Test, pk=test_id)
     if not modify_test.may(request.user, action):
         raise PermissionDenied
+    if action == 'unapprove' and action not in modify_test.offers(test):
+        return HttpResponse('Only a test with no games played, and still running, can be unapproved: stop it instead.', status=409, content_type='text/plain')
     modify_test.apply(request.user, test, action)
     modify_test.report(test)
     return redirect('match', match_id=test.match_id())

@@ -220,7 +220,9 @@ def report_test(test):
     try:
         with transaction.atomic():
             if not isinstance(test, Test):
-                test = Test.objects.select_related('dev', 'base').get(id=test)
+                test = Test.objects.select_related('dev', 'base').filter(id=test).first()
+                if test is None:
+                    return None # Deleted with its games while a report was on its way
             document = build_document(test)
             return ingest(json.dumps(document).encode('utf-8'), None, document['match']['id'])
     except Exception:

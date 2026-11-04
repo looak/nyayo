@@ -1,6 +1,7 @@
 from django.urls import path
 
 from nyayo.lab import machines_views
+from nyayo.matches import removal_views
 from nyayo.lab import views as lab
 
 from . import views
@@ -24,5 +25,8 @@ urlpatterns = [
     path("machine-action", machines_views.machine_action, name="machine_action"),
     path("machine-join-code", machines_views.machine_join_code, name="machine_join_code"),
     path("machine-code-revoke", machines_views.machine_code_revoke, name="machine_code_revoke"),
+    path("matches-remove", removal_views.remove, name="match_remove"),
+    path("matches-removed", removal_views.removed, name="matches_removed"),
+    path("matches-restore", removal_views.restore, name="match_restore"),
     path("machines/<path:name>", machines_views.machine_page, name="machine"),
 ]

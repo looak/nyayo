@@ -309,7 +309,9 @@ def client_bench_error(request, machine):
 
     # The test is not stopped here: the bench is the worker's step, and the verdict on it (clientReportStep)
     # says whether the test stops. This keeps the event, and the report.
-    test = Test.objects.get(id=int(request.POST['test_id']))
+    test = Test.objects.filter(id=int(request.POST['test_id'])).first()
+    if test is None:
+        return JsonResponse({ 'stop' : True }) # Deleted with its games
 
     # Log the error into the Events table
     LogEvent.objects.create(
@@ -404,9 +406,9 @@ def client_heartbeat(request, machine):
     machine.save(update_fields=['updated', *rtt.changed(machine)])
 
     # Include a 'stop' header iff the test was finished
-    finished = Test.objects.filter(id=int(request.POST['test_id'])).values_list('finished', flat=True).first()
+    stopped = Test.objects.filter(id=int(request.POST['test_id'])).values_list('finished', 'deleted', 'approved').first()
 
-    return JsonResponse([{}, { 'stop' : True }][bool(finished)])
+    return JsonResponse([{}, { 'stop' : True }][bool(stopped is None or stopped[0] or stopped[1] or not stopped[2])])
 
 @csrf_exempt
 @verify_worker
@@ -442,6 +444,10 @@ def client_submit_pgn(request, machine):
 
     # A workload that played nothing sends an empty archive (14 bytes), which nyayo would refuse for holding no game
     if len(data) < 64 and not uploads.bunzip(data, 64).strip():
+        return JsonResponse({})
+
+    # The test was deleted with its games while the worker played it: the games are not wanted
+    if not Test.objects.filter(id=test_id).exists():
         return JsonResponse({})
 
     try:

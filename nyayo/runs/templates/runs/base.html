@@ -56,6 +56,21 @@
                      background: var(--accent); }
   .side nav .count.green { background: var(--success); } .side nav .count.orange { background: var(--warning); }
   .side nav .count.red { background: var(--danger); }
+  /* a match's actions, last in the nav so that no other link moves as buttons come and go; stuck to the bottom of the window
+     while the nav is taller than it */
+  .side-actions { position: sticky; bottom: 0; background: var(--side); border-top: 1px solid #111; padding-bottom: .5rem; }
+  .side-actions form, .side-actions .side-links { display: flex; flex-wrap: wrap; gap: .4rem; padding: .45rem .8rem 0; }
+  .side-actions .side-note { margin: .4rem .8rem 0; font-size: .75rem; color: var(--muted); }
+  .side nav a.side-act, .side-act { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 .8rem;
+    border: 1px solid transparent; border-radius: 3px; font: inherit; font-size: .85rem; color: #fff; cursor: pointer; background: var(--accent);
+    border-left: 1px solid transparent; }
+  .side-act.stop { background: var(--danger); } .side-act.restart { background: var(--warning); color: #1d2125; }
+  .side-act.approve, .side-act.bring { background: var(--success); } .side-act.unapprove { background: #4b545c; }
+  .side nav a.side-act.remove, .side nav a.side-act.delete { background: transparent; border-color: #4b545c; color: #c2c9cf; }
+  .side nav a.side-act.delete { color: #f1a89f; border-color: var(--danger); }
+  .side nav a.side-act:hover { text-decoration: none; filter: brightness(1.15); background-color: inherit; }
+  .flash { margin: 0 0 .75rem; padding: .55rem .8rem; border-left: 4px solid var(--success); border-radius: 3px; background: var(--card); }
+  .flash.error { border-left-color: var(--danger); background: var(--error-bg); }
   .topbar { height: 50px; display: flex; align-items: center; gap: 1rem; padding: 0 1rem; background: var(--bg);
             border-bottom: 1px solid #1a1d20; }
   .topbar .crumb { color: var(--bright); font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -587,11 +602,13 @@
     <a href="{% url 'admin:matches_upload_changelist' %}"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1 2 5v6l6 4 6-4V5zm0 2 4 2.6L8 8 4 5.6z"/></svg>Uploads{% if shell.uploads_refused %}<span class="count red">{{ shell.uploads_refused }} refused</span>{% elif shell.uploads_waiting %}<span class="count orange">{{ shell.uploads_waiting }}</span>{% endif %}</a>
     <h5>System</h5>
     <a href="{% url 'admin:index' %}"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm6.4 2-1.3-.3-.5-1.2.7-1.1-1.4-1.4-1.1.7-1.2-.5L9.3 2H6.7l-.3 1.3-1.2.5-1.1-.7-1.4 1.4.7 1.1-.5 1.2L1.6 7v2.6l1.3.3.5 1.2-.7 1.1 1.4 1.4 1.1-.7 1.2.5.3 1.3h2.6l.3-1.3 1.2-.5 1.1.7 1.4-1.4-.7-1.1.5-1.2 1.3-.3z"/></svg>Admin</a>
+    {% block side_actions %}{% endblock %}
   </nav>
 </aside>
 <div class="page">
   <div class="topbar"><span class="crumb">{% block crumb %}{% if here == "dashboard" %}Dashboard{% elif here == "matches" %}Testing › Matches{% elif here == "match" %}Testing › Matches › a match{% elif here == "game" %}Testing › Matches › a game{% elif here == "runs" %}Testing › Runs{% elif here == "run" %}Testing › Runs › a run{% elif here == "case" %}Testing › Runs › a position{% elif here == "compare" %}Testing › Compare{% elif here == "games" %}Catalogue › Games{% elif here == "exports" %}Catalogue › Exports{% elif here == "sign_in" %}Actions › Sign in{% endif %}{% endblock %}</span><span class="host">host <code>{{ shell.host }}</code> · times in <code title="{{ time_zone }}">{% now "T" %}</code></span><span class="who">{% if user.is_authenticated %}<b>{{ user.get_username }}</b> · <form method="post" action="{% url 'sign_out' %}">{% csrf_token %}<button class="linkish">sign out</button></form>{% else %}<a href="{% url 'sign_in' %}?next={{ request.get_full_path|urlencode }}">sign in</a>{% endif %}</span></div>
   <main>
+  {% if messages %}{% for message in messages %}<p class="flash {{ message.tags }}" role="status">{{ message }}</p>{% endfor %}{% endif %}
   {% block content %}{% endblock %}
   </main>
 </div>

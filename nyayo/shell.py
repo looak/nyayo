@@ -29,8 +29,8 @@ def status():
         "uploads_waiting": uploads["pending"],
         "uploads_refused": uploads["refused"],
         # live: running and heard from lately, as the match list's cards count them; a silent match is left out
-        "running": Match.objects.filter(state="running", updated_at__gte=silent_cutoff()).count(),
-        "in_play": Game.objects.filter(result="*", match__state="running").count(),
+        "running": Match.objects.filter(state="running", hidden=False, updated_at__gte=silent_cutoff()).count(),
+        "in_play": Game.objects.filter(result="*", match__state="running", match__hidden=False).count(),
     }
 
 

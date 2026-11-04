@@ -225,9 +225,9 @@ def update_test(request, machine):
         # same transaction.atomic(). The sole purpose and utility of that is to ensure either EVERYTHING
         # gets updated as per this function, or NOTHING gets updated.
 
-        test = Test.objects.select_for_update().get(id=test_id)
+        test = Test.objects.select_for_update().filter(id=test_id).first()
 
-        if test.finished or test.deleted:
+        if test is None or test.finished or test.deleted or not test.approved: # Gone (deleted with its games), stopped, or unapproved # Unapproved, a worker on it is told to stop
             return { 'stop' : True }
 
         test.losses += losses # Trinomial

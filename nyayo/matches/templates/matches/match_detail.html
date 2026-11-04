@@ -2,6 +2,7 @@
 {% load lab_extras runs_extras matches_extras %}
 {% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
 {% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
+{% block side_actions %}{% match_actions match %}{% endblock %}
 {% block content %}
 <div class="pagehead">
   <h1>{{ match.name|default:match.pk }}</h1>
@@ -44,7 +45,7 @@
     <span class="card-end">
     {% if timing.elapsed is not None %}<span class="timing muted">{% if timing.running %}running for{% else %}ran for{% endif %} {{ timing.elapsed|seconds }}</span>{% endif %}
     {% if silent %}<span class="outcome silent card-state">silent</span>{% else %}<span class="outcome {{ match.state }} card-state">{{ match.state }}</span>{% endif %}
-    {% test_actions match %}</span>
+</span>
   </div>
   <div class="score">
     <div class="score-row">

@@ -12,11 +12,12 @@ from django.template.loader import render_to_string
 
 from django.utils import timezone
 
+from nyayo.actions.access import may_act
 from nyayo.lab.templatetags.lab_extras import producer_link
 from nyayo.paging import paginate
 
 from . import catalogue, games, pgnview, progress, sprtview, stats, stepsview, timing
-from .models import KINDS, STATES, Engine, Game, Match
+from .models import KINDS, STATES, Engine, Game, Match, Tombstone
 
 OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): "loss", ("1-0", "black"): "loss",
             ("1/2-1/2", "white"): "draw", ("1/2-1/2", "black"): "draw"}
@@ -29,8 +30,17 @@ UNSTARTED_CARDS = 12
 WALKS_ON_A_CARD = 3
 
 
-def match_queryset():
-    return Match.objects.select_related("subject", "machine").prefetch_related("results__engine")
+def match_queryset(with_removed=False):
+    """The matches the lists and pages show: not the removed ones (`Match.hidden`) unless asked, as a game's page does."""
+    queryset = Match.objects.select_related("subject", "machine").prefetch_related("results__engine")
+    return queryset if with_removed else queryset.filter(hidden=False)
+
+
+def missing(request, match_id):
+    """The 404 for a match that is not shown: one removed (it can be brought back), one deleted with its games, or none."""
+    removed = Match.objects.filter(pk=match_id, hidden=True).first()
+    tomb = None if removed else Tombstone.objects.filter(pk=match_id).first()
+    return render(request, "matches/gone.html", {"match_id": match_id, "removed": removed, "tomb": tomb}, status=404)
 
 
 def engine_label(engine):
@@ -363,7 +373,8 @@ def matches_list(request):
         match.elo_error = produced.get("error") if produced else match.summary.overall.error
     return render(request, "matches/matches_list.html", {
         "page": page, "kind": kind, "kinds": KINDS, "state": state, "states": STATES + ["silent"], "engine": engine,
-        "running": running, "unstarted": unstarted,
+        "running": running, "unstarted": unstarted, "can_act": may_act(request.user),
+        "removed_count": Match.objects.filter(hidden=True).count() if may_act(request.user) else 0,
         "engines": Engine.objects.filter(matches_as_subject__isnull=False).distinct(),
     })
 
@@ -434,7 +445,9 @@ def build_entry(match, number, entry, row, names):
 
 def match_workers(request, match_id):
     """The Workers area alone, for the match page to poll while a step is open and redraw."""
-    match = get_object_or_404(match_queryset(), pk=match_id)
+    match = match_queryset().filter(pk=match_id).first()
+    if match is None:
+        raise Http404("no such match")
     context = workers_context(match, match.results.first())
     context.update(match=match, polled=True)
     html = render_to_string("matches/_workers.html", context, request=request)
@@ -443,7 +456,9 @@ def match_workers(request, match_id):
 
 
 def match_detail(request, match_id):
-    match = get_object_or_404(match_queryset(), pk=match_id)
+    match = match_queryset().filter(pk=match_id).first()
+    if match is None:
+        return missing(request, match_id)
     excluded = {o for o in request.GET.getlist("exclude") if o}
     entries = game_entries(match)
     groups = {name: [e for e in entries if e["state"] == name] for name in STATE_ORDER}
@@ -574,7 +589,7 @@ def requested_ply(request):
 
 
 def game_page(request, match_id, game):
-    match = get_object_or_404(match_queryset(), pk=match_id)
+    match = get_object_or_404(match_queryset(with_removed=True), pk=match_id)
     ply = requested_ply(request)
     context = game_context(match, game, ply)
     if context is None:
@@ -594,7 +609,7 @@ def game_fragment(request, match_id, game):
     token = version_token(match_id, game, state, ply)
     if request.GET.get("v") == token:
         return HttpResponse(status=204)
-    match = get_object_or_404(match_queryset(), pk=match_id)
+    match = get_object_or_404(match_queryset(with_removed=True), pk=match_id)
     context = game_context(match, game, ply)
     if context is None:
         raise Http404("no such game")
