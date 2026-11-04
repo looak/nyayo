@@ -34,7 +34,7 @@ def new_test():
 
 def new_worker(test, name):
     user    = User.objects.create(username='%s%d' % (name, User.objects.count()))
-    machine = Machine.objects.create(user=user, info={ 'machine_name' : name }, workload=test.id)
+    machine = Machine.objects.create(user=user, name=name, info={ 'machine_name' : name }, workload=test.id)
     result  = Result.objects.create(test=test, machine=machine, workloads=1)
     steps.start_walk(result)
     return result

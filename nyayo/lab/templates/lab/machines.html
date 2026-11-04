@@ -21,6 +21,13 @@
   <div class="tile grey">{% include "runs/_tile_icon.html" with icon="scale-balanced" %}<div class="inner"><h4>Tokens</h4><div class="big">{{ tokens }}</div><div class="sub">{{ revoked }} revoked</div></div></div>
   <div class="tile warning">{% include "runs/_tile_icon.html" with icon="clock" %}<div class="inner"><h4>Gone quiet</h4><div class="big">{{ quiet }}</div><div class="sub">workers not heard from for 5 minutes</div></div></div>
 </div>
+{% if new_code %}
+<div class="card"><h3 class="box-title">A join code</h3>
+  <p><code class="join-code">{{ new_code }}</code></p>
+  <p class="muted">Shown once: only a hash is kept. It approves one worker that says hello with it (<code>--join</code>), and stops working at {{ new_code_until|date:"D j M H:i" }}.</p>
+</div>
+{% endif %}
+{% if pending %}<div class="card"><p>{{ pending }} worker{{ pending|pluralize }} waiting for approval.{% if not may_act %} <span class="muted">Sign in to approve.</span>{% endif %}</p></div>{% endif %}
 <div class="card">
   <h3 class="box-title">Machines <span class="right muted"><span class="tag worker">worker</span> plays what the server hands out · <span class="tag token">token</span> may report to nyayo</span></h3>
   {% if rows %}
@@ -31,7 +38,7 @@
       <td class="nowrap"><b><a href="{% url 'machine' r.name %}">{{ r.name }}</a></b> {% if r.worker %}<span class="tag worker">worker</span> {% endif %}{% if r.token %}<span class="tag token{% if not r.token.active %} revoked{% endif %}">{% if r.token.active %}token{% else %}token revoked{% endif %}</span>{% endif %}{% if r.place %}<br><span class="place">{{ r.place }}</span>{% endif %}</td>
       <td data-label="System" class="nowrap">{% if r.worker %}{% include "lab/_os_icon.html" with kind=r.os_kind wsl=r.wsl title=r.os_ver %} {{ r.os|default:"–" }}{% else %}<span class="muted">–</span>{% endif %}</td>
       {% if r.worker %}<td data-label="Threads" class="num">{{ r.threads|default_if_none:"–" }}{% if r.sockets and r.sockets > 1 %} <span class="muted">/ {{ r.sockets }} sockets</span>{% endif %}</td>
-      <td data-label="Now">{% if r.state == "playing" %}<a href="{% url 'match' r.match %}">{{ r.label }}</a>{% elif r.state == "idle" %}<span class="muted">idle</span>{% else %}<span class="worse">gone quiet</span>{% endif %}</td>
+      <td data-label="Now">{% if r.state == "playing" %}<a href="{% url 'match' r.match %}">{{ r.label }}</a>{% elif r.state == "idle" %}<span class="muted">idle</span>{% elif r.state == "pending" %}<span class="muted">waiting for approval</span>{% elif r.state == "disabled" %}<span class="muted">disabled</span>{% elif r.state == "turned_away" %}<span class="muted">turned away</span>{% else %}<span class="worse">gone quiet</span>{% endif %}</td>
       <td data-label="MNPS dev / base" class="num nowrap">{% if r.dev_mnps or r.base_mnps %}{{ r.dev_mnps|floatformat:2 }}M / {{ r.base_mnps|floatformat:2 }}M{% else %}<span class="muted">–</span>{% endif %}</td>
       <td data-label="Response" class="num nowrap">{% if r.rtt is not None %}{% if r.rtt < 10 %}{{ r.rtt|floatformat:1 }}{% else %}{{ r.rtt|floatformat:0 }}{% endif %} ms{% else %}<span class="muted">–</span>{% endif %}</td>
       {% else %}<td class="num muted na">–</td><td><span class="muted">doesn't play</span></td><td class="num muted na">–</td><td class="num muted na">–</td>{% endif %}
@@ -39,6 +46,7 @@
       <td data-label="Games" class="num">{% if r.worker %}{{ r.games }}{% else %}<span class="muted">–</span>{% endif %}</td>
       <td data-label="Tests" class="num">{% if r.worker %}{{ r.tests }}{% else %}<span class="muted">–</span>{% endif %}</td>
     </tr>
+    {% if may_act and r.worker %}<tr class="spec-row"><td></td><td colspan="9">{% include "lab/_worker_actions.html" with r=r back="machines" %}</td></tr>{% endif %}
     {% if r.worker and r.missing %}<tr class="spec-row"><td></td><td colspan="9" class="worse">{% if not r.supports %}Plays no engine. {% endif %}{% for engine, why in r.missing %}{{ engine }}: {{ why|join:"; " }}.{% if not forloop.last %} {% endif %}{% endfor %}</td></tr>{% endif %}
     <tr class="spec-row"><td></td><td colspan="9" class="muted">{% if r.user %}{{ r.user }}{% else %}no worker{% endif %}{% if r.cpu %} · {{ r.cpu }}{% endif %}{% if r.os_ver %} · {{ r.os_ver }}{% endif %}{% if r.worker %} · plays {% if r.supports %}{{ r.supports|join:", " }}{% else %}nothing{% endif %}{% endif %}{% if r.sessions > 1 %} · started {{ r.sessions }} times{% endif %}{% if r.token %} · token made {{ r.token.created|date:"Y-m-d" }}{% if r.token.last %}, last reported {{ r.token.ago }}{% else %}, has not reported{% endif %}{% endif %}</td></tr>
     {% endfor %}</tbody>
@@ -46,4 +54,18 @@
   {% else %}<p class="muted">No worker has started and no token has been made.</p>{% endif %}
   <div class="actions-row"><a class="act quiet" href="{% url 'admin:runs_machine_changelist' %}">Tokens, in the admin</a></div>
 </div>
+{% if may_act %}
+<div class="card" style="margin-top: 1rem">
+  <h3 class="box-title">Join codes</h3>
+  <p class="muted">A worker started with <code>--join CODE</code> is approved when it says hello. A code works once and expires.</p>
+  <form method="post" action="{% url 'machine_join_code' %}" class="place-form">{% csrf_token %}
+    <label class="muted" for="code-hours">Valid for</label>
+    <input type="number" id="code-hours" name="hours" value="24" min="1" max="336" style="width: 5rem"> <span class="muted">hours</span>
+    <button class="act" type="submit">Make a join code</button>
+  </form>
+  {% for code in codes %}<form method="post" action="{% url 'machine_code_revoke' %}" class="place-form">{% csrf_token %}
+    <span class="muted">A code until {{ code.expires|date:"D j M H:i" }}{% if code.made_by %}, made by {{ code.made_by }}{% endif %}</span>
+    <input type="hidden" name="id" value="{{ code.id }}"><button class="act quiet" type="submit">Revoke</button></form>{% endfor %}
+</div>
+{% endif %}
 {% endblock %}

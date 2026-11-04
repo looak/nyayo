@@ -39,11 +39,11 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import files  # noqa: E402
 
-CLIENT_REF = 'da629d7'    # the commit of openbench_eg whose Client/ plays
+CLIENT_REF = 'claude/v2-registration-worker'    # what of openbench_eg's Client/ plays: a ref (--client-ref); master once the registration is on it
 ENGINE_NAME, ENGINE_NPS, ENGINE_BENCH = 'smoke', 1000000, 1000000
 SOURCE = 'https://github.com/smoke/engine'
 INSTANCE = 'smoke'
-OWNER, HELPER, WORKER, PASSWORD = 'owner', 'helper', 'worker', 'smoke-password'
+OWNER, HELPER, PASSWORD = 'owner', 'helper', 'smoke-password'    # people who sign in to the pages; a worker has no password
 CLIENT_TIMERS = { 'TIMEOUT_ERROR' : 1, 'TIMEOUT_WORKLOAD' : 1, 'REPORT_INTERVAL' : 2 }
 RETRY = 2          # seconds a worker waits before it tries a test again after a verdict that isn't the engine's
 BENCH_LIMIT = 3    # seconds before a bench is over its time (Client/bench.py's 60)
@@ -149,7 +149,7 @@ class Rig:
         self.temp = Path(tempfile.mkdtemp(prefix='nyayo-smoke-'))
         self.port = free_port()
         self.url = 'http://127.0.0.1:%d' % (self.port)
-        self.procs, self.clients, self.nonce, self.branches = [], [], str(time.time()), 0
+        self.procs, self.clients, self.extras, self.nonce, self.branches = [], [], [], str(time.time()), 0
         self.file_server = files.FileServer().__enter__()
         (self.temp / 'rigsettings.py').write_text(RIG_SETTINGS % { 'retry' : RETRY })
         self.env = { k : v for k, v in os.environ.items() if not k.startswith('NYAYO_') }
@@ -189,7 +189,6 @@ class Rig:
         from nyayo.lab.models import Book, EngineConfig
         User.objects.create_superuser(OWNER, password=PASSWORD)
         User.objects.create_user(HELPER, password=PASSWORD, is_staff=True)
-        User.objects.create_user(WORKER, password=PASSWORD)
         EngineConfig.objects.all().delete()
         EngineConfig.objects.create(
             name=ENGINE_NAME, nps=ENGINE_NPS, source=SOURCE, build_path='.', build_compilers='g++', build_cpuflags='',
@@ -214,41 +213,66 @@ class Rig:
 
     # the worker
 
-    def start_clients(self, one_at_a_time_for=None):
+    def prepare_client(self, number):
+        # A copy of the unchanged Client/, with its timers shortened (and a built fastchess, if one is kept)
+        source = self.temp / 'ob'
+        if not source.exists():
+            source.mkdir()
+            archive = subprocess.run(['git', '-C', str(self.ob), 'archive', self.args.client_ref, 'Client'], check=True, capture_output=True).stdout
+            subprocess.run(['tar', '-x', '-C', str(source)], input=archive, check=True)
+        client = self.temp / ('Client%d' % (number))
+        shutil.copytree(source / 'Client', client, ignore=shutil.ignore_patterns('__pycache__', 'PGNs', 'Engines', 'Networks', 'Books'))
+        worker = (client / 'worker.py').read_text()
+        for name, value in CLIENT_TIMERS.items():
+            worker, count = re.subn(r'^(%s\s*=\s*)\d+' % (name), r'\g<1>%d' % (value), worker, flags=re.M)
+            check(count == 1, 'worker.py has no %s to shorten' % (name))
+        worker, count = re.subn(r'results_queue\.get\(timeout=5\)', 'results_queue.get(timeout=0.5)', worker)
+        check(count == 1, 'worker.py has no results_queue wait to shorten')
+        (client / 'worker.py').write_text(worker)
+        bench = (client / 'bench.py').read_text()
+        bench, count = re.subn(r'^(MAX_BENCH_TIME_SECONDS\s*=\s*)\d+', r'\g<1>%d' % (BENCH_LIMIT), bench, flags=re.M)
+        check(count == 1, 'bench.py has no MAX_BENCH_TIME_SECONDS to shorten')
+        (client / 'bench.py').write_text(bench)
+        cache = Path.home() / '.cache' / 'openbench-smoke' / 'fastchess-ob'
+        if cache.is_file():
+            shutil.copy2(cache, client / 'fastchess-ob')
+        return client
+
+    def start_client(self, number, name=None, join=None, extra=False):
+        # No username and no password: the worker says hello with its name (and a join code, if it has one), is given a
+        # token, which it keeps in worker.token beside client.py, and waits to be approved
+        client = self.temp / ('Client%d' % (number))
+        env = dict(os.environ, PYTHONUNBUFFERED='1', PYTHON=sys.executable,
+                   PATH=os.path.dirname(sys.executable) + os.pathsep + os.environ['PATH'])
+        command = [sys.executable, '-u', str(client / 'client.py'), '-S', self.url, '-T', '1', '-N', '1', '-I', name or 'smoke-%d' % (number),
+                   '--no-client-downloads'] + (['--join', join] if join else [])
+        log = open(self.temp / ('client%d.log' % (number)), 'a')
+        process = subprocess.Popen(command, cwd=client, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        (self.extras if extra else self.clients).append(process)
+        return process
+
+    def start_clients(self, one_at_a_time_for=None, approve=True):
         # one_at_a_time_for: a test id; each worker is started once the last has passed its walk on it, as the
         # first workloads of several workers at once make the toy engine fail to execute (a race in the machine)
-        source = self.temp / 'ob'
-        source.mkdir()
-        archive = subprocess.run(['git', '-C', str(self.ob), 'archive', CLIENT_REF, 'Client'], check=True, capture_output=True).stdout
-        subprocess.run(['tar', '-x', '-C', str(source)], input=archive, check=True)
         for number in range(self.args.workers):
-            client = self.temp / ('Client%d' % (number))
-            shutil.copytree(source / 'Client', client, ignore=shutil.ignore_patterns('__pycache__', 'PGNs', 'Engines', 'Networks', 'Books'))
-            worker = (client / 'worker.py').read_text()
-            for name, value in CLIENT_TIMERS.items():
-                worker, count = re.subn(r'^(%s\s*=\s*)\d+' % (name), r'\g<1>%d' % (value), worker, flags=re.M)
-                check(count == 1, 'worker.py has no %s to shorten' % (name))
-            worker, count = re.subn(r'results_queue\.get\(timeout=5\)', 'results_queue.get(timeout=0.5)', worker)
-            check(count == 1, 'worker.py has no results_queue wait to shorten')
-            (client / 'worker.py').write_text(worker)
-            bench = (client / 'bench.py').read_text()
-            bench, count = re.subn(r'^(MAX_BENCH_TIME_SECONDS\s*=\s*)\d+', r'\g<1>%d' % (BENCH_LIMIT), bench, flags=re.M)
-            check(count == 1, 'bench.py has no MAX_BENCH_TIME_SECONDS to shorten')
-            (client / 'bench.py').write_text(bench)
-            cache = Path.home() / '.cache' / 'openbench-smoke' / 'fastchess-ob'
-            if cache.is_file():
-                shutil.copy2(cache, client / 'fastchess-ob')
-            env = dict(os.environ, PYTHONUNBUFFERED='1', PYTHON=sys.executable,
-                       PATH=os.path.dirname(sys.executable) + os.pathsep + os.environ['PATH'])
-            log = open(self.temp / ('client%d.log' % (number)), 'w')
-            self.clients.append(subprocess.Popen(
-                [sys.executable, '-u', str(client / 'client.py'), '-U', WORKER, '-P', PASSWORD, '-S', self.url,
-                 '-T', '1', '-N', '1', '-I', 'smoke-%d' % (number), '--no-client-downloads'],
-                cwd=client, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True))
+            self.prepare_client(number)
+            self.start_client(number)
+            if approve:
+                self.approve('smoke-%d' % (number))
             if one_at_a_time_for:
                 from nyayo.lab.models import Step
                 self.wait_for(lambda: Step.objects.filter(result__test_id=one_at_a_time_for, step='running', state='passed').count() > number,
                               240, 'worker %d to pass its walk' % (number))
+
+    def machine(self, name):
+        from nyayo.lab.models import Machine
+        return Machine.objects.filter(name=name).first()
+
+    def approve(self, name, timeout=90):
+        # What the owner does on the Machines page, once the worker has said hello and described itself
+        self.wait_for(lambda: (self.machine(name) or 0) and self.machine(name).described, timeout, '%s to say hello and describe itself' % (name))
+        machine = self.machine(name)
+        check(self.owner.post('/machine-action', id=machine.id, action='approve').status_code == 302, 'the owner could not approve %s' % (name))
 
     def wait_for(self, predicate, timeout, what):
         deadline = time.time() + timeout
@@ -336,7 +360,7 @@ class Rig:
         check(not problems, 'nyayo disagrees with test %d on %s' % (test_id, ', '.join(problems)))
 
     def close(self, keep):
-        for client in self.clients:
+        for client in self.clients + self.extras:
             stop(client)
         for proc in self.procs:
             stop(proc)
@@ -375,7 +399,7 @@ def passing_games(r):
     check(match.pk in r.page('/matches'), 'the match is not on the list')
     # the round trip, read from the kernel's TCP_INFO of the connection the worker's calls came in on, under gunicorn
     from nyayo.lab.models import Machine
-    rtt = Machine.objects.filter(info__machine_name='smoke-0').order_by('-id').first().rtt_ms
+    rtt = Machine.objects.filter(name='smoke-0').order_by('-id').first().rtt_ms
     check(rtt is not None and 0 < rtt < 1000, "the worker's round trip was not measured: %s" % (rtt))
     check('%s ms' % ('%.1f' % rtt if rtt < 10 else '%.0f' % rtt) in r.page('/machines'), 'the Machines page does not show %s ms' % (rtt))
     return 'test %d: 8 games, named, base bench typed, the walk passed, %d games put away, pages answer, round trip %.3f ms' % (test_id, kept, rtt)
@@ -533,6 +557,122 @@ def later_workload(r):
     return 'test %d: bench right, then wrong on a later workload, %d games kept, error' % (test_id, r.test(test_id).games)
 
 
+def registering(r):
+    # hello, pending (told to wait, no test), describe, approve, play. The worker has no password anywhere
+    from nyayo.lab.models import Machine, Result
+    r.wait_for(lambda: r.machine('smoke-0') and r.machine('smoke-0').described, 90, 'the worker to say hello and describe itself')
+    machine = r.machine('smoke-0')
+    check(machine.state == 'pending' and machine.token_hash and not machine.user_id, 'the worker is %s' % (machine.state))
+    check(machine.info['toolchains'].get('make') and 'cpu_flags' in machine.info, 'it said nothing of its tools: %s' % (machine.info.get('toolchains')))
+    arguments = ' '.join(r.clients[0].args)
+    check('-U' not in r.clients[0].args and '-P' not in r.clients[0].args and 'password' not in arguments.lower(), 'the worker was started with credentials: %s' % (arguments))
+    token_file = r.temp / 'Client0' / 'worker.token'
+    check(token_file.is_file() and (token_file.stat().st_mode & 0o077) == 0, 'worker.token is missing or readable by others')
+    import hashlib
+    check(hashlib.sha256(token_file.read_text().strip().encode()).hexdigest() == machine.token_hash, 'the token file is not the token the server hashed')
+    test_id = r.create_test(max_games=4, workload_size=1)
+    time.sleep(RETRY + 4)
+    check(not Result.objects.filter(test_id=test_id).exists() and r.test(test_id).games == 0, 'a pending worker was handed a test')
+    check(r.match(test_id).state == 'waiting', 'the match is %s' % (r.match(test_id).state))
+    check('Waiting for approval' in r.page('/machines'), 'the Machines page does not say it is waiting for approval')
+    r.approve('smoke-0')
+    r.wait_for(lambda: r.test(test_id).finished, 90, 'test %d to be played' % (test_id))
+    r.settled(test_id, 'finished')
+    r.agrees(test_id)
+    check(Machine.objects.filter(name='smoke-0').count() == 1, 'more than one row for the worker')
+    return 'test %d: the worker said hello and described itself, was pending and played nothing, was approved, played 4 games; no password' % (test_id)
+
+
+def disable_and_enable(r):
+    from nyayo.lab.models import Machine
+    test_id = r.create_test(max_games=1000, workload_size=1)
+    r.wait_for(lambda: r.test(test_id).games > 0, 90, 'test %d to play' % (test_id))
+    machine = r.machine('smoke-0')
+    check(r.owner.post('/machine-action', id=machine.id, action='disable').status_code == 302, 'disable did not redirect')
+    time.sleep(RETRY + 3)                    # a workload it has finishes
+    games = r.test(test_id).games
+    time.sleep(RETRY + 3)
+    check(r.test(test_id).games == games, 'a disabled worker was given a new workload')
+    check('Disabled' in r.page('/machines') and not r.machine('smoke-0').enabled, 'the worker is not shown disabled')
+    check(r.owner.post('/machine-action', id=machine.id, action='enable').status_code == 302, 'enable did not redirect')
+    r.wait_for(lambda: r.test(test_id).games > games, 90, 'the worker to play again')
+    r.stop_test(test_id)
+    return 'test %d: disabled after %d games, nothing new was handed out, enabled, played on' % (test_id, games)
+
+
+def join_code(r):
+    from nyayo.lab.models import JoinCode
+    page = r.owner.post('/machine-join-code', hours=1).text
+    code = re.search(r'class="join-code">([^<]+)<', page).group(1)
+    r.prepare_client(1)
+    r.start_client(1, name='smoke-join', join=code, extra=True)
+    r.wait_for(lambda: r.machine('smoke-join') and r.machine('smoke-join').described, 90, 'the worker with a join code to say hello')
+    machine = r.machine('smoke-join')
+    check(machine.state == 'approved', 'the worker with a join code is %s' % (machine.state))
+    check(JoinCode.objects.get().used_by_id == machine.id, 'the code was not used up')
+    stop(r.extras.pop())
+    return 'a worker started with --join was approved on hello, and the code is used up'
+
+
+def turned_away(r):
+    from nyayo.lab.models import Machine
+    r.prepare_client(2)
+    away = r.start_client(2, name='smoke-away', extra=True)
+    r.wait_for(lambda: r.machine('smoke-away') and r.machine('smoke-away').described, 90, 'the worker to say hello')
+    machine = r.machine('smoke-away')
+    check(machine.state == 'pending', 'it is %s' % (machine.state))
+    check(r.owner.post('/machine-action', id=machine.id, action='turn_away').status_code == 302, 'turn away did not redirect')
+    log = r.temp / 'client2.log'
+    r.wait_for(lambda: 'Waiting: turned away' in log.read_text(errors='replace'), 60, 'the turned-away worker to be told to wait')
+    stop(r.extras.pop())
+    # without its token it is a new hello, refused by its name
+    (r.temp / 'Client2' / 'worker.token').unlink()
+    again = r.start_client(2, name='smoke-away', extra=True)
+    r.wait_for(lambda: again.poll() is not None, 60, 'the refused worker to exit')
+    check(again.returncode != 0 and 'turned away' in log.read_text(errors='replace').lower(), 'the refused worker did not say so: %s' % (log.read_text(errors='replace')[-300:]))
+    check(Machine.objects.filter(name__istartswith='smoke-away').count() == 1, 'a new row was made for a turned-away name')
+    r.extras.pop()
+    return 'a turned-away worker was told to wait, and without its token was refused by name, with no new row'
+
+
+def restart_keeps_the_row(r):
+    from nyayo.lab.models import Machine, Result
+    test_id = r.create_test(max_games=1000, workload_size=1)
+    r.wait_for(lambda: r.test(test_id).games > 0, 90, 'test %d to play' % (test_id))
+    before = r.machine('smoke-0')
+    games = Result.objects.get(test_id=test_id, machine=before).games
+    stop(r.clients.pop())
+    r.start_client(0)
+    r.wait_for(lambda: Machine.objects.get(pk=before.id).secret != before.secret, 60, 'the restarted worker to start a session')
+    after = Machine.objects.get(pk=before.id)
+    check(Machine.objects.filter(name='smoke-0').count() == 1 and after.state == 'approved', 'the restart made a row or lost its approval')
+    r.wait_for(lambda: Result.objects.get(test_id=test_id, machine=before).games > games, 90, 'the restarted worker to play on the same result')
+    check(Result.objects.filter(test_id=test_id).count() == 1, 'the restart made another result')
+    r.stop_test(test_id)
+    return 'test %d: restarted at %d games: the same row, a new session secret, the same result played on' % (test_id, games)
+
+
+def fastchess_from_the_server(r):
+    # A release fetched into the data directory, offered to a system it has a file for (one no worker here is), and served
+    import hashlib
+    import json
+    import requests
+    binary = b'riscv fastchess'
+    sha = hashlib.sha256(binary).hexdigest()
+    base = r.file_server.url
+    r.file_server.add('/downloads/fastchess-linux-riscv64.tar', binary, 'application/octet-stream')
+    r.file_server.add('/repos/Disservin/fastchess/releases/tags/v9.9.9-smoke', json.dumps({'tag_name': 'v9.9.9-smoke', 'assets': [
+        {'name': 'fastchess-linux-riscv64.tar', 'browser_download_url': base + '/downloads/fastchess-linux-riscv64.tar', 'digest': 'sha256:' + sha}]}).encode(), 'application/json')
+    r.run('manage.py', 'fetch_fastchess', '9.9.9-smoke', '--api', base + '/repos/Disservin/fastchess')
+    answer = requests.get(r.url + '/clientMatchRunnerVersionRef/', params={'os_name': 'Linux', 'arch': 'riscv64'}, timeout=10).json()
+    check(answer.get('binary', {}).get('sha256') == sha, 'the file is not offered: %s' % (answer))
+    served = requests.get(answer['binary']['url'], timeout=10)
+    check(served.status_code == 200 and hashlib.sha256(served.content).hexdigest() == sha, 'the file served is not the file fetched')
+    check('binary' not in requests.get(r.url + '/clientMatchRunnerVersionRef/', params={'os_name': 'Linux', 'arch': 'x86_64'}, timeout=10).json(),
+          'a file was offered to a system it is not for')
+    return 'fetch_fastchess kept v9.9.9-smoke with its sha256, offered it to linux riscv64 only, and served it'
+
+
 def idle_then_quiet(r):
     # The worker has nothing to play: it polls, and the Machines page says idle. Stopped, it says nothing more, and
     # five minutes later the page says gone quiet (the clock is moved on, as five minutes is too long to wait)
@@ -540,15 +680,15 @@ def idle_then_quiet(r):
     from django.utils import timezone
     from nyayo.lab.models import Machine, Test
     r.wait_for(lambda: not Test.objects.filter(finished=False).exists(), 60, 'every test to have ended')
-    r.wait_for(lambda: Machine.objects.filter(info__machine_name='smoke-0').exists(), 60, 'the worker to sign in')
-    before = Machine.objects.filter(info__machine_name='smoke-0').order_by('-id').first().updated
-    r.wait_for(lambda: Machine.objects.filter(info__machine_name='smoke-0').order_by('-id').first().updated > before, 30,
+    r.wait_for(lambda: Machine.objects.filter(name='smoke-0').exists(), 60, 'the worker to sign in')
+    before = Machine.objects.filter(name='smoke-0').order_by('-id').first().updated
+    r.wait_for(lambda: Machine.objects.filter(name='smoke-0').order_by('-id').first().updated > before, 30,
                'the idle worker to be heard from')
     check('<span class="muted">idle</span>' in r.page('/machines'), 'the page does not say idle: %s' % (
         re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', re.sub(r'(?s)<style.*?</style>', '', r.page('/machines'))))[:600]))
     stop(r.clients.pop())
     time.sleep(RETRY + 1)
-    machine = Machine.objects.filter(info__machine_name='smoke-0').order_by('-id').first()
+    machine = Machine.objects.filter(name='smoke-0').order_by('-id').first()
     time.sleep(RETRY + 1)
     check(Machine.objects.get(pk=machine.pk).updated == machine.updated, 'a stopped worker was heard from')
     check('<span class="muted">idle</span>' in r.page('/machines'), 'a worker stopped a moment ago is not idle yet')
@@ -561,9 +701,15 @@ E = lambda **kw: (lambda r: r.engine('dev', **kw))
 B = lambda **kw: (lambda r: r.engine('base', **kw))
 
 SCENARIOS = [
+    ('register', registering),     # first: the worker starts pending, and this approves it
     ('games', passing_games),
     ('sprt', sprt_to_result),
     ('refused', page_refuses),
+    ('disable-enable', disable_and_enable),
+    ('join-code', join_code),
+    ('turned-away', turned_away),
+    ('restart-keeps-row', restart_keeps_the_row),
+    ('fastchess', fastchess_from_the_server),
     ('approval', approval),
     ('stop-restart', stop_and_restart),
     ('crash-stop', crash_then_stop),
@@ -642,12 +788,13 @@ def by_endpoint(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--ob', default=str(next((p for p in (REPO.parent / 'openbench_eg', *(q.parent / 'openbench_eg' for q in REPO.parents)) if p.exists()), REPO.parent / 'openbench_eg')), help='a checkout of openbench_eg, whose Client/ at %s plays' % (CLIENT_REF))
+    parser.add_argument('--ob', default=str(next((p for p in (REPO.parent / 'openbench_eg', *(q.parent / 'openbench_eg' for q in REPO.parents)) if p.exists()), REPO.parent / 'openbench_eg')), help='a checkout of openbench_eg, whose Client/ plays (--client-ref)')
     parser.add_argument('--only', nargs='*', help='scenario names: ' + ', '.join(name for name, _ in SCENARIOS))
     parser.add_argument('--load', action='store_true', help='measure the load of --workers workers on a long test, instead of the scenarios')
     parser.add_argument('--load-games', type=int, default=120)
     parser.add_argument('--workers', type=int, default=1)
     parser.add_argument('--keep', action='store_true')
+    parser.add_argument('--client-ref', default=CLIENT_REF, help='the ref of openbench_eg whose Client/ plays (default %(default)s)')
     args = parser.parse_args()
 
     preflight()
@@ -661,7 +808,8 @@ def main():
         if args.load:
             print(load(rig))
         else:
-            rig.start_clients()
+            chosen = [name for name, _ in SCENARIOS if not args.only or name in args.only]
+            rig.start_clients(approve='register' not in chosen)
             for name, run in SCENARIOS:
                 if args.only and name not in args.only:
                     continue

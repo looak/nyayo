@@ -1,0 +1,7 @@
+{# approve, turn away, enable and disable, as the worker's state allows; each is logged #}
+<form method="post" action="{% url 'machine_action' %}" class="place-form">{% csrf_token %}
+  <input type="hidden" name="id" value="{{ r.id }}"><input type="hidden" name="back" value="{{ back }}">
+  {% if r.registration != "approved" %}<button class="act" name="action" value="approve" type="submit">Approve</button>{% endif %}
+  {% if r.registration == "approved" %}{% if r.enabled %}<button class="act quiet" name="action" value="disable" type="submit">Disable</button>{% else %}<button class="act" name="action" value="enable" type="submit">Enable</button>{% endif %}{% endif %}
+  {% if r.registration != "turned_away" %}<button class="act quiet" name="action" value="turn_away" type="submit">Turn away</button>{% endif %}
+</form>

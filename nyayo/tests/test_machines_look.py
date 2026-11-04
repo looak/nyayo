@@ -44,7 +44,7 @@ class Status(TestCase):
         self.assertIn("Not heard from for 5 minutes", health["reasons"][0])
 
     def test_a_worker_that_plays_no_engine_is_a_warning_that_says_why(self):
-        make_machine("hunt", supported=[], compilers={})
+        make_machine("hunt", supported=[], toolchains={"make": "4.3"})
         health = row(self.client)["health"]
         self.assertEqual(health["look"], "warn")
         self.assertIn("Plays no engine: Elephant: Missing ['g', 'clang'].", health["reasons"][0])
@@ -80,14 +80,14 @@ class Status(TestCase):
         self.assertIn("stuck is held after compile dev failed here", health["reasons"][0])
 
     def test_the_words_and_the_reasons_are_on_the_page_not_only_the_colour(self):
-        make_machine("hunt", supported=[], compilers={})
+        make_machine("hunt", supported=[], toolchains={"make": "4.3"})
         page = text(self.client)
         self.assertIn('<span class="net-words">Needs a look</span>', page)
         self.assertIn('role="tooltip"', page)
         self.assertIn('aria-label="Needs a look: Plays no engine', page)
         make_machine("tor")
         self.assertIn(">Online<", text(self.client))
-        age(Machine.objects.get(info__machine_name="tor"), minutes=9)
+        age(Machine.objects.get(name="tor"), minutes=9)
         self.assertIn(">Offline<", text(self.client))
 
     def test_the_tooltip_is_focusable_for_the_keyboard_and_a_tap(self):
@@ -136,7 +136,7 @@ class Place_(TestCase):
 
     def test_a_box_with_no_name_or_that_does_not_exist_cannot_have_one(self):
         self.staff()
-        unnamed = make_machine("loodinek", machine_name=None, mac_address="aa")
+        unnamed = Machine.objects.create(name="", state="approved", info={})
         self.assertEqual(self.client.post("/machine-place", {"name": "machine %d" % unnamed.id, "text": "x"}).status_code, 404)
         self.assertEqual(self.client.post("/machine-place", {"name": "nobody", "text": "x"}).status_code, 404)
         self.assertIn("has no name", text(self.client, "/machines/machine %d" % unnamed.id))
@@ -197,7 +197,7 @@ class SystemInSections(TestCase):
     def test_the_five_sections(self):
         make_machine("hunt", cpu_name="Ryzen 9", isa_name="x86-64-avx2", logical_cores=24, physical_cores=12, ram_total_mb=30914,
                      huge_pages="madvise", python_ver="3.12.3", fastchess_ver="1.8.2", os_ver="6.8", cxx_comp="g++",
-                     compilers={"Elephant": ["clang", "18.1.3"]})
+                     toolchains={"clang": "18.1.3", "make": "4.3", "python3": "3.12.3"})
         page = text(self.client, "/machines/hunt")
         for heading in ("Hardware", "Memory", "GPU", "Software", "Compilers"):
             self.assertIn(">%s</h3>" % heading, page)

@@ -138,10 +138,9 @@ def build_document(test):
 
     machines = []
     for row in rows:
-        name = (row.machine.info or {}).get('machine_name')
         machines.append({
-            'name': name if name and name != 'None' else 'machine %d' % (row.machine.id),
-            'machine_id': row.machine.id, 'user': row.machine.user.username,
+            'name': row.machine.name or 'machine %d' % (row.machine.id),
+            'machine_id': row.machine.id, **({ 'user': row.machine.user.username } if row.machine.user_id else {}),
             'games': row.games, 'crashes': row.crashes, 'timeloss': row.timeloss, 'updated_at': iso(row.updated),
             'active': row.machine.workload == test.id and row.machine.updated >= recent,
             'workloads': row.workloads,

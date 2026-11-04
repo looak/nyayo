@@ -169,8 +169,7 @@ def spoken(seconds):
 
 
 def machine_name(machine):
-    name = (machine.info or {}).get('machine_name')
-    return name if name and name != 'None' else 'machine %d' % (machine.id)
+    return machine.name or 'machine %d' % (machine.id)
 
 
 def compile_kind(row):
@@ -355,7 +354,7 @@ def stop_test(step):
         return
     test.finished = True
     test.save()
-    LogEvent.objects.create(author=result.machine.user.username, summary=(STOPPED + headline(step))[:128],
+    LogEvent.objects.create(author=result.machine.name, summary=(STOPPED + headline(step))[:128],
                             log_file='', machine_id=result.machine.id, test_id=test.id)
 
 
