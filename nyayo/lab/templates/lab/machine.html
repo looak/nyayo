@@ -10,7 +10,7 @@
   {% if place %}<span class="muted">{{ place }}</span>{% endif %}
 </div>
 
-{% if worker %}
+{% if worker %}<div class="wpage">
 {% if worker and machine.state != "approved" %}
 <header class="pending-head {{ machine.state }}">
   <span class="pending-icon" role="img" aria-label="{% if machine.state == 'pending' %}Waiting for approval{% else %}Turned away{% endif %}">
@@ -18,7 +18,7 @@
   </span>
   <div><div class="pending-line">{% if machine.state == "pending" %}Waiting for your approval. It gets no tests until then.{% else %}Turned away. It is told to wait and gets no tests.{% endif %}</div></div>
 </header>
-<section class="card top-silent pending-box">
+<section class="wsec pending-box">
   <p>A worker said hello {{ machine.first_seen|date:"D j M H:i" }} ({{ first_seen_ago }}), and {% if machine.described %}has reported what it can do{% else %}has not yet reported what it can do{% endif %}. Check it is one of yours.</p>
   <dl class="facts">
     {% for k, v in facts %}<div><dt>{{ k }}</dt><dd>{{ v }}</dd></div>{% endfor %}
@@ -29,8 +29,8 @@
     {% if machine.state == "pending" %}<button class="away" name="action" value="turn_away" type="submit">Turn away</button>{% endif %}
   </form>{% else %}<p class="muted">Signing in lets you approve or turn it away.</p>{% endif %}
 </section>
-<section class="card">
-  <h3 class="box-title">Its first job: tell us about yourself</h3>
+<section class="wsec">
+  <h2>Its first job: tell us about yourself</h2>
   <ol class="job">{% for name, done, note in job %}<li><span class="jstate {% if done %}done{% else %}todo{% endif %}">{% if done %}done{% else %}not yet{% endif %}</span> <span class="jname">{{ name }}</span> <span class="muted">{{ note }}</span></li>{% endfor %}</ol>
 </section>
 <section class="abilities">
@@ -40,9 +40,9 @@
 {% endif %}
 {% with g=graph %}
 {% if machine.state == "approved" %}
-<section class="card top-active graph" aria-labelledby="graph-title">
+<section class="wsec graph" aria-labelledby="graph-title">
   <div class="graph-head">
-    <h3 id="graph-title">Last 48 hours</h3>
+    <h2 id="graph-title">Last 48 hours</h2>
     <div class="legend">
       <span><i class="sw bar"></i>Games each hour</span>
       {% if g.has_rtt %}<span><i class="sw line"></i>Response time</span>{% endif %}
@@ -57,84 +57,74 @@
       <div class="y y-left"><span>{{ g.top }}</span><span>{{ g.half }}</span><span>0</span></div>
       <div class="plot">
         <div class="mid"></div>
-        <div class="cols">{% for c in g.cols %}<div class="col {{ c.look }}" data-i="{{ forloop.counter0 }}" data-tip="{{ c.tip }}" title="{{ c.tip }}"><i class="bar" style="height: {{ c.pct }}%"></i></div>{% endfor %}</div>
+        <div class="cols">{% for c in g.cols %}<div class="col {{ c.look }}" data-i="{{ forloop.counter0 }}" data-tip="{{ c.tip }}"><i class="bar" style="height: {{ c.pct }}%"></i></div>{% endfor %}</div>
         {% if g.has_rtt %}<svg viewBox="0 0 480 100" preserveAspectRatio="none" aria-hidden="true">{% for l in g.lines %}<polyline points="{{ l }}" fill="none" stroke="var(--wip)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>{% endfor %}</svg>{% endif %}
+        {% if g.empty %}<p class="graph-note" id="note">Nothing on record yet</p>{% elif g.little %}<p class="graph-note" id="note">Only {{ g.recorded }} hour{{ g.recorded|pluralize }} of history, since {{ g.since|date:"D H:i" }}</p>{% endif %}
+        <div class="chip" id="readout" aria-live="polite" hidden></div>
       </div>
       <div class="y y-right">{% if g.has_rtt %}<span>{{ g.rtt_top }} ms</span><span>{{ g.rtt_half }} ms</span><span>0</span>{% endif %}</div>
       <div class="y-label">Online</div>
-      <div class="strip">{% for c in g.cols %}<div class="cell {{ c.look }}" data-i="{{ forloop.counter0 }}" title="{{ c.tip }}"></div>{% endfor %}</div>
+      <div class="strip">{% for c in g.cols %}<div class="cell {{ c.look }}" data-i="{{ forloop.counter0 }}"></div>{% endfor %}</div>
       <div></div>
       <div></div>
       <div class="xs"><span>48 h ago</span><span>36 h</span><span>24 h</span><span>12 h</span><span>now</span></div>
       <div></div>
     </div>
   </div>
-  <p class="readout" id="readout" aria-live="polite">Point at an hour, or tap it, for its details.</p>
-  <p class="muted graph-note">
-    {% if g.empty %}Nothing is on record for this machine yet: the graph fills in from the first time it is heard from, and the hours before are left blank.
-    {% elif g.little %}Only {{ g.recorded }} hour{{ g.recorded|pluralize }} of history so far, since {{ g.since|date:"D j M H:i" }}. The hours before that are blank, not offline.
-    {% else %}{{ g.games_48 }} game{{ g.games_48|pluralize }} in 48 hours, {{ g.average }} an hour on average.{% endif %}
-    An hour with no games is a quiet one, not a broken one.
-    {% if not g.has_rtt %}No response time is shown: it is measured from the server's connection to the worker, and nothing has measured it (a development server cannot).{% endif %}
-  </p>
 </section>
 
-<div class="tiles worker-tiles">
-  <div class="tile {% if row.health.look == 'ok' %}success{% elif row.health.look == 'warn' %}warning{% else %}grey{% endif %}">
-    <svg class="wifi" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 9.5a14 14 0 0 1 18 0"/><path d="M6.5 13a9 9 0 0 1 11 0"/><path d="M10 16.5a4 4 0 0 1 4 0"/><circle cx="12" cy="20" r="0.6"/>{% if row.health.look == 'offline' %}<path d="M3 3l18 18"/>{% endif %}</svg>
-    <div class="inner"><h4>Connection</h4>
-      <div class="big{% if row.health.label|length > 8 %} mid{% endif %}">{{ row.health.label }}</div>
-      <div class="sub">{% if g.up_for %}Up {{ g.up_for }}{% if g.up_pct is not None %} · {{ g.up_pct }}% of {% if g.little %}the {{ g.recorded }} h on record{% else %}48 h{% endif %}{% endif %}{% else %}No history yet{% endif %}{% if rtt is not None %} · {% if rtt < 10 %}{{ rtt|floatformat:1 }}{% else %}{{ rtt|floatformat:0 }}{% endif %} ms{% endif %} · {% if row.state == "quiet" %}last heard {{ ago }}{% else %}heard from {{ ago }}{% endif %}</div>
-      {% if row.health.look == 'warn' %}{% for why in row.health.reasons %}<div class="sub why">{{ why }}</div>{% endfor %}{% endif %}
-    </div>
+<div class="wtiles">
+  <div class="wtile {% if row.health.look == 'ok' %}success{% elif row.health.look == 'warn' %}warning ink{% else %}grey{% endif %}">
+    <div class="wtile-top"><span>Connection</span>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 9.5a14 14 0 0 1 18 0"/><path d="M6.5 13a9 9 0 0 1 11 0"/><path d="M10 16.5a4 4 0 0 1 4 0"/><circle cx="12" cy="20" r="0.6"/>{% if row.health.look == 'offline' %}<path d="M3 3l18 18"/>{% endif %}</svg></div>
+    <div class="big{% if row.health.label|length > 8 %} mid{% endif %}">{{ row.health.label }}</div>
+    <div class="sub">{% if g.up_for %}Up {{ g.up_for }}{% if g.up_pct is not None %} · {{ g.up_pct }}% of {% if g.little %}the {{ g.recorded }} h on record{% else %}48 h{% endif %}{% endif %}{% else %}No history yet{% endif %}{% if rtt is not None %} · {% if rtt < 10 %}{{ rtt|floatformat:1 }}{% else %}{{ rtt|floatformat:0 }}{% endif %} ms{% endif %} · {% if row.state == "quiet" %}last heard {{ ago }}{% else %}heard from {{ ago }}{% endif %}</div>
+    {% if row.health.look == 'warn' %}{% for why in row.health.reasons %}<div class="sub why">{{ why }}</div>{% endfor %}{% endif %}
   </div>
-  <div class="tile info">{% include "runs/_tile_icon.html" with icon="chess-board" %}
-    <div class="inner"><h4>Games, all time</h4>
-      <div class="big">{{ totals.games|floatformat:"0g" }}</div>
-      <div class="sub">on {{ totals.tests }} test{{ totals.tests|pluralize }}{% if g.per_hour is not None %} · {{ g.per_hour }} an hour lately{% endif %} · <span{% if totals.crashes %} class="hot"{% endif %}>{{ totals.crashes }} crash{{ totals.crashes|pluralize:"es" }}</span>, {{ totals.timeloss }} time loss{{ totals.timeloss|pluralize:"es" }}</div>
-    </div>
+  <div class="wtile info">
+    <div class="wtile-top"><span>Games, all time</span></div>
+    <div class="big">{{ totals.games|floatformat:"0g" }}</div>
+    <div class="sub">on {{ totals.tests }} test{{ totals.tests|pluralize }}{% if g.per_hour is not None %} · {{ g.per_hour }} an hour lately{% endif %} · <span{% if totals.crashes %} class="hot"{% endif %}>{{ totals.crashes }} crash{{ totals.crashes|pluralize:"es" }}</span>, {{ totals.timeloss }} time loss{{ totals.timeloss|pluralize:"es" }}</div>
   </div>
-  <div class="tile warning ink">
-    <div class="inner"><h4>Last workload</h4>
-      {% if last %}<div class="big small"><a href="{% url 'match' last.match %}">{{ last.label }}</a></div>
-      <div class="sub">{{ last.kind }} against {{ last.against }} · {{ last.workloads }} workload{{ last.workloads|pluralize }}, {{ last.games }} game{{ last.games|pluralize }} on it · {{ last.ago }}</div>
-      <div class="sub">Contributed to {% for kind, n in kinds %}{{ n }} {{ kind }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
-      {% else %}<div class="big small">None yet</div><div class="sub">It has not played a test.</div>{% endif %}
-    </div>
+  <div class="wtile warning ink">
+    <div class="wtile-top"><span>Last workload</span></div>
+    {% if last %}<div class="big small"><a href="{% url 'match' last.match %}">{{ last.label }}</a></div>
+    <div class="sub">{{ last.kind }} against {{ last.against }} · {{ last.workloads }} workload{{ last.workloads|pluralize }}, {{ last.games }} game{{ last.games|pluralize }} on it · {{ last.ago }}</div>
+    <div class="sub">Contributed to {% for kind, n in kinds %}{{ n }} {{ kind }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
+    {% else %}<div class="big small">None yet</div><div class="sub">It has not played a test.</div>{% endif %}
   </div>
-  <div class="tile grey">
-    <div class="inner"><h4>Approval</h4>
-      <div class="big">Approved</div>
-      <div class="sub">First heard from {{ machine.first_seen|date:"j M" }}{% if token %} · its token is {% if token.active %}active{% else %}revoked{% endif %}{% endif %}</div>
-      {% if may_act %}<form method="post" action="{% url 'machine_action' %}" class="switch-form">{% csrf_token %}
-        <input type="hidden" name="id" value="{{ machine.id }}"><input type="hidden" name="back" value="machine">
-        <input type="hidden" name="action" value="{% if machine.enabled %}disable{% else %}enable{% endif %}">
-        <label class="switch"><input type="checkbox" {% if machine.enabled %}checked{% endif %} onchange="this.form.submit()"> Enabled: takes work</label>
-        <noscript><button class="act" type="submit">{% if machine.enabled %}Disable{% else %}Enable{% endif %}</button></noscript>
-      </form>
-      <form method="post" action="{% url 'machine_action' %}" class="away-form">{% csrf_token %}
-        <input type="hidden" name="id" value="{{ machine.id }}"><input type="hidden" name="back" value="machine">
-        <button class="linkish" name="action" value="turn_away" type="submit">Turn away</button>
-      </form>
-      {% else %}<div class="sub">{% if machine.enabled %}Enabled: takes work{% else %}Disabled: takes no work{% endif %}</div>{% endif %}
-    </div>
+  <div class="wtile grey">
+    <div class="wtile-top"><span>Approval</span></div>
+    <div class="big">Approved</div>
+    <div class="sub">First heard from {{ machine.first_seen|date:"j M" }}{% if token %} · its token is {% if token.active %}active{% else %}revoked{% endif %}{% endif %}</div>
+    {% if may_act %}<form method="post" action="{% url 'machine_action' %}" class="switch-form">{% csrf_token %}
+      <input type="hidden" name="id" value="{{ machine.id }}"><input type="hidden" name="back" value="machine">
+      <input type="hidden" name="action" value="{% if machine.enabled %}disable{% else %}enable{% endif %}">
+      <label class="switch"><input type="checkbox" {% if machine.enabled %}checked{% endif %} onchange="this.form.submit()"> Enabled: takes work</label>
+      <noscript><button class="act" type="submit">{% if machine.enabled %}Disable{% else %}Enable{% endif %}</button></noscript>
+    </form>
+    <form method="post" action="{% url 'machine_action' %}" class="away-form">{% csrf_token %}
+      <input type="hidden" name="id" value="{{ machine.id }}"><input type="hidden" name="back" value="machine">
+      <button class="linkish" name="action" value="turn_away" type="submit">Turn away</button>
+    </form>
+    {% else %}<div class="sub">{% if machine.enabled %}Enabled: takes work{% else %}Disabled: takes no work{% endif %}</div>{% endif %}
   </div>
 </div>
 {% endif %}
 
 {% if trouble %}
-<div class="card top-worker">
-  <h3 class="box-title">Trouble now</h3>
+<section class="wsec trouble">
+  <h2>Trouble now</h2>
   {% for t in trouble %}
   <p><span class="pill st-{{ t.step.blame }}">{{ t.step.blame }}</span> {{ t.where }} on <a href="{% url 'match' t.match %}">{{ t.label }}</a>: {{ t.step.detail }}
     <span class="muted">· {{ t.step.tries }} {% if t.step.tries == 1 %}try{% else %}tries{% endif %}{% if t.step.retry_at %}, next try {{ t.step.retry_at|date:"H:i:s" }}{% endif %}</span></p>
   {% endfor %}
-</div>
+</section>
 {% endif %}
 
 <div class="worker-grid">
-  <section class="card">
-    <h3 class="box-title">Hardware</h3>
+  <section class="wsec">
+    <h2>Hardware</h2>
     <dl class="kv">{% for k, v in hardware %}<dt>{{ k }}</dt><dd>{{ v }}</dd>{% endfor %}</dl>
     <div class="flags">
       <div class="muted">CPU flags{% if pills %} <span class="count">{{ pills|length }}</span>{% endif %}</div>
@@ -144,35 +134,35 @@
     </div>
   </section>
 
-  <section class="card">
-    <h3 class="box-title">Toolchains</h3>
+  <section class="wsec">
+    <h2>Toolchains</h2>
     {% if toolchains.rows %}<ul class="tools">{% for t in toolchains.rows %}
       <li{% if not t.found %} class="missing"{% endif %}><span class="lang lang-{% if t.found %}{{ t.cls }}{% else %}gone{% endif %}">{{ t.lang }}</span><span class="tool">{{ t.name }}</span><span class="ver">{% if t.found %}{{ t.version }}{% else %}not found{% endif %}</span></li>{% endfor %}
     </ul>{% else %}<p class="muted">The worker has reported no tools.</p>{% endif %}
     {% if not toolchains.described %}<p class="muted">This worker has not described itself yet, so only what it reported with each engine is listed.</p>{% endif %}
   </section>
 
-  <section class="card">
-    <h3 class="box-title">Software</h3>
+  <section class="wsec">
+    <h2>Software</h2>
     <dl class="kv">{% for k, v in software %}<dt>{{ k }}</dt><dd>{{ v }}</dd>{% empty %}<dt>System</dt><dd class="muted">not reported</dd>{% endfor %}</dl>
   </section>
 
-  <section class="card">
-    <h3 class="box-title">Engines</h3>
-    <div class="scroll"><table><thead><tr><th>Engine</th><th>Plays it</th><th>Compiler</th></tr></thead><tbody>
-    {% for engine, ok, why, compiler in supported %}<tr><td>{{ engine }}</td>
-      <td>{% if ok %}yes{% else %}<span class="worse">no</span> <span class="muted">{{ why|join:"; " }}</span>{% endif %}</td>
-      <td>{{ compiler|default:"–" }}</td></tr>{% empty %}<tr><td colspan="3" class="muted">No engine is set up.</td></tr>{% endfor %}
-    </tbody></table></div>
-    {% if info.token_engines %}<p class="muted">Has an access token for {{ info.token_engines|join:", " }}.</p>{% endif %}
-  </section>
 </div>
+<section class="wsec">
+  <h2>Engines</h2>
+  <div class="scroll"><table><thead><tr><th>Engine</th><th>Plays it</th><th>Compiler</th></tr></thead><tbody>
+  {% for engine, ok, why, compiler in supported %}<tr><td>{{ engine }}</td>
+    <td>{% if ok %}yes{% else %}<span class="worse">no</span> <span class="muted">{{ why|join:"; " }}</span>{% endif %}</td>
+    <td>{{ compiler|default:"–" }}</td></tr>{% empty %}<tr><td colspan="3" class="muted">No engine is set up.</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if info.token_engines %}<p class="muted">Has an access token for {{ info.token_engines|join:", " }}.</p>{% endif %}
+</section>
 {% endwith %}
-{% endif %}
+</div>{% endif %}
 
 {% if may_act and nameable %}
-<div class="card" style="margin-top: 1rem">
-  <h3 class="box-title">Where it is</h3>
+<section class="wsec" style="margin-top: 16px">
+  <h2>Where it is</h2>
   <form method="post" action="{% url 'machine_place' %}" class="place-form">{% csrf_token %}
     <input type="hidden" name="name" value="{{ name }}">
     <label class="muted" for="place-text">Place</label>
@@ -180,12 +170,12 @@
     <button class="act" type="submit">Save</button>
   </form>
   <p class="muted">Typed by hand and kept by the name, so it stays through restarts. Nothing is looked up.</p>
-</div>
+</section>
 {% elif not nameable %}<p class="muted">This worker has no name (<code>-I</code>), so a place cannot be kept for it.</p>{% endif %}
 
 {% if worker %}
-<div class="card" style="margin-top: 1rem" id="tests">
-  <h3 class="box-title">Every test it has played <span class="right muted">{{ tests_page.paginator.count }}</span></h3>
+<section class="wsec" style="margin-top: 16px" id="tests">
+  <h2>Every test it has played <span class="right muted">{{ tests_page.paginator.count }}</span></h2>
   {% if recent %}
   <div class="scroll"><table><thead><tr><th>Test</th><th class="num">Games</th><th class="num">Workloads</th><th class="num">Crashes</th><th class="num">Time losses</th><th class="num">Failed steps</th><th>Last</th></tr></thead><tbody>
   {% for t in recent %}<tr><td><a href="{% url 'match' t.match %}">{{ t.label }}</a></td><td class="num">{{ t.games }}</td><td class="num">{{ t.workloads }}</td>
@@ -194,16 +184,16 @@
   </tbody></table></div>
   {% pager tests_page %}
   {% else %}<p class="muted">It has not played a test.</p>{% endif %}
-</div>
+</section>
 {% endif %}
 
 {% if token %}
-<div class="card" style="margin-top: 1rem">
-  <h3 class="box-title">Token</h3>
+<section class="wsec" style="margin-top: 16px">
+  <h2>Token</h2>
   <p>{% if token.active %}Active{% else %}<span class="worse">Revoked</span>{% endif %}. Made {{ token.created|date:"Y-m-d" }}.
     {% if token.last %}Last reported {{ token.last|date:"D j M H:i" }}{% if token.runs %}, runs{% endif %}{% if token.matches %}{% if token.runs %} and{% endif %}, matches{% endif %}.{% else %}Has not reported.{% endif %}
     <a href="{% url 'admin:runs_machine_changelist' %}">In the admin</a>.</p>
-</div>
+</section>
 {% endif %}
 {% if worker %}{% include "lab/_worker_page_script.html" %}{% endif %}
 {% endblock %}

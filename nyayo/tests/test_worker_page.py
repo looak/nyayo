@@ -173,7 +173,7 @@ class Graph(TestCase):
 
     def test_the_axes_are_round_numbers_over_the_highest_hour(self):
         g = self.build(self.hours(a2=dict(games=101, heard=3600, rtt=3.2)))
-        self.assertEqual((g["top"], g["half"], g["rtt_top"]), (120, 60, 5))
+        self.assertEqual((g["top"], g["half"], g["rtt_top"]), (120, 60, 4))
 
     def test_the_figures(self):
         rows = self.hours(**{"a%d" % i: dict(games=10, heard=3600, rtt=1.0) for i in range(24)})
@@ -191,14 +191,16 @@ class Page(TestCase):
         self.assertLess(text.index("Last 48 hours"), text.index("Connection"))
         self.assertIn("Games each hour", text)
         self.assertNotIn("Response time</span>", text)
-        self.assertIn("No response time is shown", text)
+        self.assertNotIn(" ms</span><span>", text)
         keep(ago=1, games=2, heard=3600, rtt_sum=4.0, rtt_n=2)
         self.assertIn("Response time</span>", page(self.client))
 
     def test_a_new_worker_with_nothing_on_record(self):
         make_machine("fresh")
         text = page(self.client, "/machines/fresh")
-        self.assertIn("Nothing is on record for this machine yet", text)
+        self.assertIn("Nothing on record yet", text)
+        self.assertEqual(text.count('class="col none"'), 48)
+        self.assertNotIn("hl", text.split('id="hours"')[1].split("</section>")[0].replace("hl'", ""))
         self.assertIn("It has not played a test", text)
 
     def test_the_four_tiles(self):
@@ -246,7 +248,7 @@ class Page(TestCase):
     def test_cpu_flags_are_pills_inside_the_hardware_box_with_tooltips(self):
         make_machine("hunt", cpu_flags=["POPCNT", "NOVEL"], cpu_name="Ryzen 9")
         text = page(self.client)
-        hardware = text.split(">Hardware</h3>")[1].split(">Toolchains</h3>")[0]
+        hardware = text.split(">Hardware</h2>")[1].split(">Toolchains</h2>")[0]
         self.assertIn('tabindex="0" role="button" aria-label="POPCNT:', hardware)
         self.assertIn('<span class="flagpill">NOVEL</span>', hardware)
 
@@ -352,3 +354,39 @@ class Approval(TestCase):
         self.assertIn("1 worker waiting for approval", text)
         self.assertIn('href="/machines/tor"', text.split("waiting for approval")[1])
         self.assertIn('class="pending-row"', text)
+
+
+class LikeTheBoard(TestCase):
+    def test_a_young_box_has_its_note_inside_the_plot_and_no_line_under_the_graph(self):
+        make_machine("hunt")
+        keep(ago=1, games=5, heard=3600)
+        keep(games=12, heard=1800)
+        text = page(self.client)
+        plot = text.split('class="plot"')[1].split('id="readout"')[0]
+        self.assertIn("Only 2 hours of history", plot)
+        self.assertNotIn("nothing on record yet", text.lower().split('id="hours"')[1].split("</script>")[0].split('data-tip="')[0])
+        self.assertNotIn('class="readout"', text)
+        self.assertIn('id="readout" aria-live="polite" hidden', text)
+
+    def test_blank_hours_are_a_class_of_their_own_with_no_outline(self):
+        make_machine("hunt")
+        keep(games=12, heard=1800)
+        text = page(self.client)
+        self.assertEqual(text.count('class="cell none"'), 47)
+        self.assertNotIn("dashed var(--line)", text.split(".strip .cell.none")[1].split("}")[0])
+
+    def test_four_blocks_in_a_row_and_plain_headings(self):
+        make_machine("hunt")
+        text = page(self.client)
+        self.assertEqual(text.count('class="wtile '), 4)
+        self.assertIn("repeat(4, minmax(0, 1fr))", text)
+        for heading in ("Last 48 hours", "Hardware", "Toolchains", "Software", "Engines"):
+            self.assertIn(">%s</h2>" % heading, text)
+
+    def test_the_demo_box_has_the_boards_numbers(self):
+        from nyayo.lab import demo
+        demo.seed()
+        text = page(self.client, "/machines/pc-wsl")
+        for expected in ("14,208", "eval-pieces-outposts", "31 tests", "Contributed to 26 SPRT, 3 SPSA, 2 games", "AVX512VNNI", "RTX 4080 SUPER", "120", "4 ms"):
+            self.assertIn(expected, text)
+        self.assertEqual(text.count('class="col none"'), 0)

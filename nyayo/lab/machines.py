@@ -304,7 +304,7 @@ def graph(rows, now, up):
     first = next((i for i, r in enumerate(rows) if r['has']), None)
     top = nice(max([r['games'] for r in rows] + [4]))
     measured = [r['rtt'] for r in rows if r['rtt'] is not None]
-    ceiling = nice(max(measured) * 1.3) if measured else None
+    ceiling = nice(max(measured) * 1.1) if measured else None
     cols, segments, run, online = [], [], [], 0
     for i, r in enumerate(rows):
         ago_h = len(rows) - 1 - i

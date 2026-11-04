@@ -529,4 +529,6 @@ def seed():
         seed_gauntlet(match_id, state, rating, finished, playing, silent, now)
     for match_id, state, silent_minutes, scenario in UNSTARTED:
         seed_unstarted(match_id, state, silent_minutes, scenario, now)
-    return [s[0] for s in SCENARIOS] + [u[0] for u in UNSTARTED] + [WALKING[0]] + [g[0] for g in GAUNTLETS]
+    from nyayo.lab import demo as lab_demo
+    boxes = lab_demo.seed(now)
+    return [s[0] for s in SCENARIOS] + [u[0] for u in UNSTARTED] + [WALKING[0]] + [g[0] for g in GAUNTLETS] + boxes
