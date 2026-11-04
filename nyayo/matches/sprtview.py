@@ -107,6 +107,15 @@ def size(megabytes):
     return f"{megabytes / 1024:.0f} GB" if megabytes >= 1024 else f"{megabytes:.0f} MB"
 
 
+def machine_pages():
+    """The names that have a page on Machines, which a worker's card links to; none if the lab can't say."""
+    try:
+        from nyayo.lab.machines import names
+        return names()
+    except Exception:
+        return set()
+
+
 def workers(machines, games, now=None, state=""):
     """The machines that played a test as rows for a list, busiest first. Only `name` and `games` are required of a
     machine; the CPU, cores, memory, system and the rest are shown when it reported them. A machine with `steps` also
@@ -115,6 +124,7 @@ def workers(machines, games, now=None, state=""):
 
     now = now or timezone.now()
     rows = []
+    known = machine_pages()
     for machine in machines if isinstance(machines, list) else []:
         if not isinstance(machine, dict):
             continue
@@ -127,6 +137,7 @@ def workers(machines, games, now=None, state=""):
             f"{machine['concurrency']} at a time" if isinstance(machine.get("concurrency"), int) else "") if part]
         rows.append({
             "name": machine.get("name") or "unnamed", "user": machine.get("user") or "",
+            "page": (machine.get("name") or "").lower() in known,
             "games": played, "share": f"{played / games:.0%}" if games else "",
             "crashes": machine.get("crashes") or 0, "timelosses": machine.get("timeloss") or 0,
             "updated": parse_datetime(machine["updated_at"]) if isinstance(machine.get("updated_at"), str) else None,
