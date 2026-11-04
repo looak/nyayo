@@ -4,11 +4,12 @@
 Linux or WSL only. One server, no recorder or second app between: gunicorn (4 workers of 4 threads, SQLite in WAL) and the
 worker that puts games away, on a port and a data directory of their own. A toy engine and a book are served the way GitHub
 serves archives, with a stand-in for the part of GitHub's API that the create page asks (NYAYO_GITHUB_API), so a test is
-made through the real create page, signed in as the owner. openbench_eg's Client/ at a given commit is extracted by
-`git archive` and run unchanged, except that its timers are shortened in the copy so a scenario takes seconds.
+made through the real create page, signed in as the owner. The worker is nyayo's own client (nyayo/client), downloaded from
+the server's /client.zip as a worker does, with no checkout of openbench_eg and no password; its timers are shortened in the
+copy so a scenario takes seconds.
 
     python3 -m venv ~/.venvs/nyayo-smoke && ~/.venvs/nyayo-smoke/bin/pip install -e . gunicorn requests psutil py-cpuinfo
-    ~/.venvs/nyayo-smoke/bin/python tools/smoke/run.py [--only NAME ...] [--ob ../openbench_eg] [--load]
+    ~/.venvs/nyayo-smoke/bin/python tools/smoke/run.py [--only NAME ...] [--load]
 
 It needs make and g++ (the worker builds the toy engine, and fastchess when it has none: keep a built one at
 ~/.cache/openbench-smoke/fastchess-ob), and prints how long a full run took. The toy engine, the book and the file
@@ -39,7 +40,6 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import files  # noqa: E402
 
-CLIENT_REF = 'claude/v2-registration-worker'    # what of openbench_eg's Client/ plays: a ref (--client-ref); master once the registration is on it
 ENGINE_NAME, ENGINE_NPS, ENGINE_BENCH = 'smoke', 1000000, 1000000
 SOURCE = 'https://github.com/smoke/engine'
 INSTANCE = 'smoke'
@@ -109,7 +109,7 @@ def stop(proc):
 
 def preflight():
     missing = [what for what, found in (('Linux (run it in WSL)', platform.system() == 'Linux'), ('make', shutil.which('make')),
-                                        ('g++', shutil.which('g++')), ('git', shutil.which('git'))) if not found]
+                                        ('g++', shutil.which('g++'))) if not found]
     if missing:
         raise Failure('the smoke test needs: %s' % (', '.join(missing)))
 
@@ -144,19 +144,20 @@ class Rig:
 
     def __init__(self, args):
         self.args = args
-        self.ob = Path(args.ob).resolve()
-        check((self.ob / '.git').exists(), '%s is not a checkout of openbench_eg (--ob)' % (self.ob))
         self.temp = Path(tempfile.mkdtemp(prefix='nyayo-smoke-'))
         self.port = free_port()
         self.url = 'http://127.0.0.1:%d' % (self.port)
         self.procs, self.clients, self.extras, self.nonce, self.branches = [], [], [], str(time.time()), 0
         self.file_server = files.FileServer().__enter__()
         (self.temp / 'rigsettings.py').write_text(RIG_SETTINGS % { 'retry' : RETRY })
+        # the client nyayo hands out: a copy the server serves, so a scenario can raise its version
+        self.served = self.temp / 'served'
+        shutil.copytree(REPO / 'nyayo' / 'client', self.served, ignore=shutil.ignore_patterns('__pycache__', 'tests', '.gitattributes'))
         self.env = { k : v for k, v in os.environ.items() if not k.startswith('NYAYO_') }
         self.env.update(
             DJANGO_SETTINGS_MODULE='rigsettings', PYTHONPATH=os.pathsep.join([str(self.temp), str(REPO)]),
             NYAYO_DATA_DIR=str(self.temp / 'data'), NYAYO_SECRET_KEY='smoke', NYAYO_INSTANCE=INSTANCE,
-            NYAYO_GITHUB_API=self.file_server.url + '/repos', NYAYO_ALLOWED_HOSTS='127.0.0.1,localhost',
+            NYAYO_GITHUB_API=self.file_server.url + '/repos', NYAYO_CLIENT_DIR=str(self.served), NYAYO_ALLOWED_HOSTS='127.0.0.1,localhost',
             RIG_WRITES=str(self.temp / 'writes.log'), PYTHONUNBUFFERED='1', PYTHONDONTWRITEBYTECODE='1')
 
     # nyayo
@@ -214,14 +215,15 @@ class Rig:
     # the worker
 
     def prepare_client(self, number):
-        # A copy of the unchanged Client/, with its timers shortened (and a built fastchess, if one is kept)
-        source = self.temp / 'ob'
-        if not source.exists():
-            source.mkdir()
-            archive = subprocess.run(['git', '-C', str(self.ob), 'archive', self.args.client_ref, 'Client'], check=True, capture_output=True).stdout
-            subprocess.run(['tar', '-x', '-C', str(source)], input=archive, check=True)
+        # What a worker does to start: downloads the client from the server (no GitHub, no checkout) and unpacks it. Its
+        # timers are then shortened, and a built fastchess is put beside it, if one is kept
+        import io
+        import zipfile
+        import requests
         client = self.temp / ('Client%d' % (number))
-        shutil.copytree(source / 'Client', client, ignore=shutil.ignore_patterns('__pycache__', 'PGNs', 'Engines', 'Networks', 'Books'))
+        reply = requests.get(self.url + '/client.zip', timeout=30)
+        check(reply.status_code == 200, '/client.zip answered %d' % (reply.status_code))
+        zipfile.ZipFile(io.BytesIO(reply.content)).extractall(client)
         worker = (client / 'worker.py').read_text()
         for name, value in CLIENT_TIMERS.items():
             worker, count = re.subn(r'^(%s\s*=\s*)\d+' % (name), r'\g<1>%d' % (value), worker, flags=re.M)
@@ -238,14 +240,14 @@ class Rig:
             shutil.copy2(cache, client / 'fastchess-ob')
         return client
 
-    def start_client(self, number, name=None, join=None, extra=False):
+    def start_client(self, number, name=None, join=None, extra=False, updates=False):
         # No username and no password: the worker says hello with its name (and a join code, if it has one), is given a
         # token, which it keeps in worker.token beside client.py, and waits to be approved
         client = self.temp / ('Client%d' % (number))
         env = dict(os.environ, PYTHONUNBUFFERED='1', PYTHON=sys.executable,
                    PATH=os.path.dirname(sys.executable) + os.pathsep + os.environ['PATH'])
         command = [sys.executable, '-u', str(client / 'client.py'), '-S', self.url, '-T', '1', '-N', '1', '-I', name or 'smoke-%d' % (number),
-                   '--no-client-downloads'] + (['--join', join] if join else [])
+                   ] + ([] if updates else ['--no-client-downloads']) + (['--join', join] if join else [])
         log = open(self.temp / ('client%d.log' % (number)), 'a')
         process = subprocess.Popen(command, cwd=client, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         (self.extras if extra else self.clients).append(process)
@@ -336,10 +338,17 @@ class Rig:
         # The match is updated in the request that changed the test, so it is there as soon as the test is
         self.wait_for(lambda: self.match(test_id).state == state, timeout, 'the match of test %d to be %s' % (test_id, state))
 
-    def put_away(self, match, timeout=60):
+    def verdict(self, test_id, timeout=20):
+        # The match's verdict, which arrives in a report of its own, a moment after the state it explains
+        self.wait_for(lambda: self.match(test_id).verdict, timeout, 'the verdict of test %d' % (test_id))
+        return self.match(test_id).verdict
+
+    def put_away(self, match, timeout=60, expect=0):
+        # expect: the games to be in, as the uploads of a workload's last games may still be on their way
         from django.db.models import Sum
         from nyayo.matches.models import Upload
-        self.wait_for(lambda: Upload.objects.filter(match=match).exists() and not Upload.objects.filter(match=match, state='pending').exists(),
+        total = lambda: Upload.objects.filter(match=match).aggregate(total=Sum('appended'))['total'] or 0
+        self.wait_for(lambda: Upload.objects.filter(match=match).exists() and not Upload.objects.filter(match=match, state='pending').exists() and total() >= expect,
                       timeout, 'the games of %s to be put away' % (match.pk))
         check(not Upload.objects.filter(match=match, state='refused').exists(), 'an upload was refused: %s' % (
             list(Upload.objects.filter(match=match, state='refused').values_list('reason', flat=True))))
@@ -389,7 +398,7 @@ def passing_games(r):
     from nyayo.lab.models import Step
     states = {(s.step, s.side): s.state for s in Step.objects.filter(result__test_id=test_id)}
     check(len(states) == 6 and set(states.values()) == { 'passed' }, 'the walk: %s' % (states))
-    kept = r.put_away(match)
+    kept = r.put_away(match, expect=8)
     check(kept == 8, 'nyayo holds %d games, expected 8' % (kept))
     pages = [r.get(path) for path in ('/matches', '/matches/%s' % (match.pk), '/games')]
     check(pages == [200, 200, 200], 'pages answer %s' % (pages))
@@ -493,7 +502,7 @@ def engine_fails(dev, step, summary):
         check(r.step(test_id, step, 'base').state == 'passed', 'base %s beside the failed dev' % (r.step(test_id, step, 'base').state))
         check(r.test(test_id).games == 0, 'games were played')
         r.settled(test_id, 'failed_prechecks')
-        verdict = r.match(test_id).verdict
+        verdict = r.verdict(test_id)
         check(verdict['blame'] == 'engine' and verdict['summary'] == summary, 'verdict %s' % (verdict))
         r.agrees(test_id)
         check('Stopped' in r.page('/matches/%s' % (r.match(test_id).pk)), 'the page does not say it stopped')
@@ -516,7 +525,7 @@ def worker_trouble(dev, base, step, log=None):
         check(log is None or log in row.log, 'the step\'s log lacks %r: %s' % (log, row.log[-200:]))
         check(not r.test(test_id).finished and r.test(test_id).games == 0, 'the test stopped or played')
         r.settled(test_id, 'waiting')
-        verdict = r.match(test_id).verdict
+        verdict = r.verdict(test_id)
         check(verdict and verdict['blame'] == 'worker', 'verdict %s' % (verdict))
         r.agrees(test_id)
         r.stop_test(test_id)
@@ -533,7 +542,7 @@ def unclear(dev, base, step, summary, restart=False):
         check(r.step(test_id, step, 'dev').blame == 'unclear', 'blame %r' % (r.step(test_id, step, 'dev').blame))
         check(not r.test(test_id).finished, 'a failure nobody can place stopped the test')
         r.settled(test_id, 'held')
-        verdict = r.match(test_id).verdict
+        verdict = r.verdict(test_id)
         check(verdict['summary'] == summary, 'verdict %s' % (verdict))
         check('Last report' in r.page('/matches/%s' % (r.match(test_id).pk)) and '<dt>Stopped</dt>' not in r.page('/matches/%s' % (r.match(test_id).pk)),
               'the time card of a held test')
@@ -673,6 +682,34 @@ def fastchess_from_the_server(r):
     return 'fetch_fastchess kept v9.9.9-smoke with its sha256, offered it to linux riscv64 only, and served it'
 
 
+def client_update(r):
+    # A worker started from the client it downloaded here updates itself from here when the version goes up, and keeps its
+    # token and its row. Last: the version then no longer matches the workers that were started before
+    import re as regex
+    from nyayo.lab.models import Machine
+    page = r.owner.post('/machine-join-code', hours=1).text
+    code = regex.search(r'class="join-code">([^<]+)<', page).group(1)
+    r.prepare_client(3)
+    r.start_client(3, name='smoke-update', join=code, extra=True, updates=True)
+    r.wait_for(lambda: r.machine('smoke-update') and r.machine('smoke-update').described and r.machine('smoke-update').state == 'approved', 90,
+               'the worker started from the downloaded client to be approved')
+    before = r.machine('smoke-update')
+    token = (r.temp / 'Client3' / 'worker.token').read_text()
+    log = r.temp / 'client3.log'
+    while r.clients:    # started with --no-client-downloads, and not of this version once it goes up: it would refuse to update
+        stop(r.clients.pop())
+    worker = r.served / 'worker.py'
+    worker.write_text(worker.read_text().replace('CLIENT_VERSION   = 54', 'CLIENT_VERSION   = 55', 1))
+    r.wait_for(lambda: 'Downloading newer version of Client' in log.read_text(errors='replace'), 90, 'the worker to be told to update')
+    r.wait_for(lambda: Machine.objects.get(pk=before.id).secret != before.secret and Machine.objects.get(pk=before.id).info.get('client_ver') == 55, 90,
+               'the updated worker to start a session as client 55')
+    after = Machine.objects.get(pk=before.id)
+    check('CLIENT_VERSION   = 55' in (r.temp / 'Client3' / 'worker.py').read_text(), 'its worker.py is not the new one')
+    check((r.temp / 'Client3' / 'worker.token').read_text() == token, 'the update changed its token')
+    check(Machine.objects.filter(name='smoke-update').count() == 1 and after.state == 'approved', 'the update made a row or lost its approval')
+    return 'a worker from the downloaded client updated to version 55 from here, kept its token, its row and its approval'
+
+
 def idle_then_quiet(r):
     # The worker has nothing to play: it polls, and the Machines page says idle. Stopped, it says nothing more, and
     # five minutes later the page says gone quiet (the clock is moved on, as five minutes is too long to wait)
@@ -725,7 +762,8 @@ SCENARIOS = [
     ('compile-killed', unclear(E(broken='killed'), B(), 'compile', "Dev's compile was killed, and no other worker has tried it", restart=True)),
     ('bench-wrong-both', unclear(E(bench=ENGINE_BENCH + 1), B(bench=ENGINE_BENCH + 1), 'bench', "Dev's bench doesn't match its commit, and no other worker has tried it")),
     ('bench-flip', later_workload),
-    ('idle', idle_then_quiet),     # last: it stops the worker
+    ('idle', idle_then_quiet),     # it stops the worker
+    ('client-update', client_update),     # last: it raises the client's version
 ]
 
 
@@ -788,13 +826,11 @@ def by_endpoint(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    parser.add_argument('--ob', default=str(next((p for p in (REPO.parent / 'openbench_eg', *(q.parent / 'openbench_eg' for q in REPO.parents)) if p.exists()), REPO.parent / 'openbench_eg')), help='a checkout of openbench_eg, whose Client/ plays (--client-ref)')
     parser.add_argument('--only', nargs='*', help='scenario names: ' + ', '.join(name for name, _ in SCENARIOS))
     parser.add_argument('--load', action='store_true', help='measure the load of --workers workers on a long test, instead of the scenarios')
     parser.add_argument('--load-games', type=int, default=120)
     parser.add_argument('--workers', type=int, default=1)
     parser.add_argument('--keep', action='store_true')
-    parser.add_argument('--client-ref', default=CLIENT_REF, help='the ref of openbench_eg whose Client/ plays (default %(default)s)')
     args = parser.parse_args()
 
     preflight()
