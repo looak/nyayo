@@ -5,8 +5,6 @@ from django.contrib import messages
 from django.db.models import Count, Sum
 from django.http import Http404
 from django.shortcuts import redirect, render
-from django.urls import reverse
-from django.utils.http import urlencode
 from django.views.decorators.http import require_POST
 
 from nyayo.actions.access import action_required
@@ -37,17 +35,13 @@ def holds(match):
             "test": test, "running": match.state == "running" or (test is not None and not test.finished)}
 
 
-def phrase_for(matches):
-    return removal.name_of(matches[0]) if len(matches) == 1 else "%d matches" % len(matches)
-
-
 def confirm(request):
     matches = chosen(request)
     if not matches:
         raise Http404("no match chosen")
     mode = request.GET.get("mode") if request.GET.get("mode") in MODES else "remove"
     return render(request, "matches/remove_confirm.html", {
-        "rows": [holds(m) for m in matches], "mode": mode, "phrase": phrase_for(matches), "blockers": removal.blockers(matches),
+        "rows": [holds(m) for m in matches], "mode": mode, "blockers": removal.blockers(matches),
         "many": len(matches) > 1, "total_games": sum(holds(m)["played"] for m in matches)})
 
 
@@ -68,9 +62,6 @@ def do(request):
             messages.error(request, sentence)
         return here
     if mode == "delete":
-        if request.POST.get("confirm", "").strip() != phrase_for(matches):
-            messages.error(request, "Nothing was deleted: the name typed was not “%s”." % phrase_for(matches))
-            return redirect("%s?%s" % (reverse("match_remove"), urlencode([("id", m.pk) for m in matches] + [("mode", "delete")])))
         done = removal.delete(matches, request.user)
         messages.success(request, "Deleted %d match%s with %s. They are gone for good." % (
             len(done), "" if len(done) == 1 else "es", "its games" if len(done) == 1 else "their games"))

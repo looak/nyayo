@@ -9,8 +9,7 @@
     {% for action in buttons %}<button class="side-act {{ action }}" formaction="{% url 'test_action' test.id action %}" type="submit">{{ action|capfirst }}</button>{% endfor %}
   </form>{% endif %}
   <div class="side-links">
-    <a class="side-act remove" href="{% url 'match_remove' %}?id={{ match.pk|urlencode }}&amp;mode=remove">Remove…</a>
-    <a class="side-act delete" href="{% url 'match_remove' %}?id={{ match.pk|urlencode }}&amp;mode=delete">Delete…</a>
+    <a class="side-act delete" href="{% url 'match_remove' %}?id={{ match.pk|urlencode }}">Delete…</a>
   </div>
   {% endif %}
 </div>

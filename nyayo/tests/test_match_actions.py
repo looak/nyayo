@@ -59,8 +59,8 @@ class Sidebar(NyayoTestCase):
         self.assertNotIn('class="test-actions"', main)
         self.assertNotIn("Actions for this match", main)
         self.assertIn(reverse("test_action", args=[self.test.pk, "stop"]), nav)
-        self.assertIn("Remove…", nav)
         self.assertIn("Delete…", nav)
+        self.assertNotIn("Remove…", nav)
 
     def test_the_group_is_on_a_game_page_too(self):
         self.client.force_login(staff())
@@ -70,11 +70,11 @@ class Sidebar(NyayoTestCase):
         page = self.page(self.url + "/games/1")
         self.assertIn("Actions for this match", page)
 
-    def test_a_match_that_is_no_lab_test_still_offers_remove_and_delete_only(self):
+    def test_a_match_that_is_no_lab_test_still_offers_delete_only(self):
         Match.objects.create(id="gauntlet-1", subject=self.match.subject, kind="gauntlet", state="running", producer={"name": "uwanja"})
         self.client.force_login(staff())
         nav = self.page("/matches/gauntlet-1").split("<nav>")[1]
-        self.assertIn("Remove…", nav)
+        self.assertIn("Delete…", nav)
         self.assertNotIn("/tests/", nav)
 
     def test_what_is_offered_follows_the_state(self):
@@ -145,8 +145,13 @@ class Remove(GameTestCase):
 
     def test_the_confirm_page_says_what_will_go(self):
         page = self.client.get(reverse("match_remove"), {"id": self.match.pk, "mode": "delete"}).content.decode()
-        for expected in ("Remove, keep the games", "Delete with the games", "comes back as a new match", "type <b>%s</b>" % (self.match.name or self.match.pk), "1 game file"):
+        for expected in ("Delete, keep the games", "Delete with the games", "comes back as a new match", "This cannot be undone", "Approve", "Cancel", "1 game file"):
             self.assertIn(expected, page)
+        self.assertNotIn("type <b>", page)
+        self.assertNotIn("confirm-text", page)
+        default = self.client.get(reverse("match_remove"), {"id": self.match.pk}).content.decode()
+        self.assertIn('value="remove" checked', default)
+        self.assertIn('id="forever" hidden', default)
 
     def test_remove_hides_it_everywhere_but_keeps_its_games(self):
         self.assertEqual(self.remove(self.match.pk).status_code, 302)
@@ -182,17 +187,16 @@ class Remove(GameTestCase):
         self.assertEqual(self.put_match(gauntlet()).status_code, 200)
         self.assertTrue(Match.objects.get(pk=self.match.pk).hidden)
 
-    def test_delete_asks_for_the_name(self):
-        wrong = self.remove(self.match.pk, mode="delete", confirm="no")
-        self.assertEqual(wrong.status_code, 302)
-        self.assertTrue(Match.objects.filter(pk=self.match.pk).exists())
-        self.assertIn("mode=delete", wrong["Location"])
+    def test_cancel_changes_nothing(self):
+        page = self.client.get(reverse("match_remove"), {"id": self.match.pk, "mode": "delete"}).content.decode()
+        self.assertIn('>Cancel</a>', page)
+        self.assertTrue(Match.objects.filter(pk=self.match.pk, hidden=False).exists())
+        self.assertEqual(self.client.get("/matches/%s" % self.match.pk).status_code, 200)
 
     def test_delete_with_games_leaves_nothing_but_a_tombstone(self):
         archive = archive_path(self.match.pk)
         self.assertTrue(archive.exists())
-        name = self.match.name or self.match.pk
-        self.remove(self.match.pk, mode="delete", confirm=name)
+        self.remove(self.match.pk, mode="delete")
         self.assertFalse(Match.objects.filter(pk="gauntlet-test-1").exists())
         self.assertEqual(Game.objects.count(), 0)
         self.assertFalse(self.path().exists())
@@ -205,11 +209,11 @@ class Remove(GameTestCase):
         self.assertEqual(self.client.get("/matches/gauntlet-test-1/games/1").status_code, 404)
 
     def test_a_rebuild_does_not_bring_it_back(self):
-        self.remove(self.match.pk, mode="delete", confirm=self.match.name or self.match.pk)
+        self.remove(self.match.pk, mode="delete")
         self.assertFalse(list(self.archive.rglob("gauntlet-test-1*")))
 
     def test_the_producer_sending_it_again_makes_it_anew(self):
-        self.remove(self.match.pk, mode="delete", confirm=self.match.name or self.match.pk)
+        self.remove(self.match.pk, mode="delete")
         self.assertEqual(self.put_match(gauntlet()).status_code, 201)
         self.assertFalse(Tombstone.objects.exists())
         self.assertEqual(Game.objects.count(), 0)
@@ -220,12 +224,12 @@ class Remove(GameTestCase):
         Upload.objects.create(match=self.match, name="1.0", bytes=1, sha256="a" * 64, state="done")
         self.remove(self.match.pk)
         self.assertEqual((Batch.objects.count(), Upload.objects.count()), (1, 1))
-        self.remove(self.match.pk, mode="delete", confirm=self.match.name or self.match.pk)
+        self.remove(self.match.pk, mode="delete")
         self.assertEqual((Batch.objects.count(), Upload.objects.count()), (0, 0))
 
     def test_an_upload_still_being_read_makes_it_wait(self):
         Upload.objects.create(match=self.match, name="1.0", bytes=1, sha256="b" * 64, state="pending")
-        response = self.remove(self.match.pk, mode="delete", confirm=self.match.name or self.match.pk, )
+        response = self.remove(self.match.pk, mode="delete")
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Match.objects.filter(pk=self.match.pk).exists())
         page = self.client.get(reverse("match_remove"), {"id": self.match.pk, "mode": "delete"}).content.decode()
@@ -235,17 +239,17 @@ class Remove(GameTestCase):
         other = Match.objects.create(id="gauntlet-2", subject=self.match.subject, kind="gauntlet", state="finished", producer={"name": "uwanja"})
         self.remove(self.match.pk, other.pk)
         self.assertEqual(Match.objects.filter(hidden=True).count(), 2)
-        self.remove(self.match.pk, other.pk, mode="delete", confirm="2 matches")
+        self.remove(self.match.pk, other.pk, mode="delete")
         self.assertEqual(Match.objects.count(), 0)
 
     def test_the_list_has_boxes_only_for_someone_signed_in(self):
         page = self.client.get("/matches").content.decode()
         self.assertIn('name="id" value="gauntlet-test-1"', page)
-        self.assertIn("Delete with games", page)
+        self.assertIn("Delete…", page)
         self.client.logout()
         page = self.client.get("/matches").content.decode()
         self.assertNotIn('class="pick"', page)
-        self.assertNotIn("Delete with games", page)
+        self.assertNotIn("Delete…", page)
 
 
 class DeleteALabTest(NyayoTestCase):
@@ -254,7 +258,7 @@ class DeleteALabTest(NyayoTestCase):
         machine = make_machine("hunt")
         result = Result.objects.create(test=test, machine=machine, workloads=1, games=0)
         self.client.force_login(staff())
-        self.client.post(reverse("match_remove"), {"id": match.pk, "mode": "delete", "confirm": "doomed"})
+        self.client.post(reverse("match_remove"), {"id": match.pk, "mode": "delete", })
         self.assertFalse(Test.objects.filter(pk=test.pk).exists())
         self.assertFalse(Result.objects.filter(test_id=test.pk).exists())
         self.assertFalse(LogEvent.objects.filter(test_id=test.pk).exists())

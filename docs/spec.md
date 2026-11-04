@@ -386,20 +386,21 @@ with OpenBench's notice. Tunes and datagens come later.
   `steps.restart_walks`), *Approve* (superusers only, while not approved) and *Unapprove* (superusers only, for an approved test
   that is still running and has **no games played**: it goes back to not approved, no worker is given it, and one already on it
   is told to stop by `clientHeartbeat` and `clientSubmitResults`; with games played *Stop* is the way and *Unapprove* is not
-  offered, and `POST` of it is a `409`). For any match it also holds *Remove…* and *Delete…*, links to the confirm page. A match of
-  an old OpenBench test, which has no `Test`, shows no link to OpenBench's server and only those two.
-- **Taking matches away** (`nyayo/matches/removal.py`, `removal_views.py`; staff only): `GET /matches-remove?id=…&mode=remove|delete`
-  (any number of `id`) is the confirm page, listing what is on each match, with the two choices; `POST` does it.
-  *Remove, keep the games* (the default) sets `Match.hidden`: the match and its test leave the lists, the dashboard, the live count
+  offered, and `POST` of it is a `409`). For any match it also holds *Delete…*, a link to the confirm page. A match of
+  an old OpenBench test, which has no `Test`, shows no link to OpenBench's server and only that.
+- **Taking matches away** (`nyayo/matches/removal.py`, `removal_views.py`; staff only): `GET /matches-remove?id=…` (any number of `id`; `mode=delete`
+  preselects the second choice) is the confirm page of the one *Delete* action, in two steps: *Delete…*, then *Approve* or *Cancel*
+  (Cancel changes nothing). It lists what is on each match and offers *keep the games* (the default) or *with the games*, saying
+  plainly next to Approve that the second cannot be undone; `POST` does it.
+  *Delete, keep the games* (the default; the code and the flag are still called remove / `hidden`) sets `Match.hidden`: the match and its test leave the lists, the dashboard, the live count
   and its own page (a 404 saying it was removed), and a running test is stopped first. Its games stay in Games and the exports,
   and their pages work, saying *from a removed match*. A producer that goes on reporting goes on updating it, and it stays removed.
-  `/matches-removed` lists them, with *Bring it back* (`POST /matches-restore`). *Delete with the games* needs the match's name
-  typed (`N matches` for several), stops a running test, then removes the match's rows, its batches with their cards, its uploads and
+  `/matches-removed` lists them, with *Bring it back* (`POST /matches-restore`). *Delete with the games* stops a running test, then removes the match's rows, its batches with their cards, its uploads and
   their files, its game files, its archive and the lab test with its results, steps and events; nothing brings it back, a rebuild
   from the archive included. A `matches.Tombstone` (id, name, day) is kept so a link to it says it was deleted, and goes if the
   producer sends the match again, which makes it anew. A match with an upload still being processed waits (the page says so). Test
-  ids are not reused. The Matches list has a checkbox per row, for staff only, with *Remove* and *Delete with games* going to the same
-  confirm page for all that are chosen.
+  ids are not reused. The Matches list has a checkbox per row, for staff only, with one *Delete…* going to the same
+  confirm page for all that are chosen. The sidebar group has the same one *Delete…*.
 
 ### Lab: the worker's API
 

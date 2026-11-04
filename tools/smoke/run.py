@@ -486,7 +486,7 @@ def unapprove_and_delete(r):
     r.wait_for(lambda: r.test(test_id).games > 0, 90, 'test %d to play' % (test_id))
     check(r.owner.act(test_id, 'unapprove') == 409, 'a test with games was unapproved')
     match = r.match(test_id)
-    reply = r.owner.post('/matches-remove', id=match.pk, mode='delete', confirm=match.name or match.pk)
+    reply = r.owner.post('/matches-remove', id=match.pk, mode='delete')
     check(reply.status_code == 302, 'deleting the match answered %d' % (reply.status_code))
     check(not Test.objects.filter(pk=test_id).exists() and not Match.objects.filter(pk=match.pk).exists(), 'the test or its match is still there')
     check(Tombstone.objects.filter(pk=match.pk).exists(), 'no tombstone')
