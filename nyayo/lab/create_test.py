@@ -63,12 +63,14 @@ def engine_table():
         }
     return table
 
+DEFAULT_BASE = 'main'
+
 def default_values(config):
 
     # What the form starts with: the engine, its defaults, its first preset
     names  = preset_names(config)
     values = {
-        'engine' : config.name, 'dev_branch' : '', 'base_branch' : 'main', 'name' : '', 'test_kind' : 'gain',
+        'engine' : config.name, 'dev_branch' : '', 'base_branch' : DEFAULT_BASE, 'name' : '', 'test_kind' : 'gain',
         'preset' : names[0] if names else '', 'dev_repo' : config.source, 'base_repo' : config.source,
         'dev_bench' : '', 'base_bench' : '', 'dev_network' : '', 'base_network' : '',
         'dev_options' : 'Threads=1 Hash=8', 'base_options' : 'Threads=1 Hash=8', 'dev_tc' : '8.0+0.08', 'base_tc' : '8.0+0.08',

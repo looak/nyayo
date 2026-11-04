@@ -47,7 +47,7 @@
 {% if errors %}<div class="errors"><b>This test can't be created yet.</b>
   <ul>{% for field, problem in errors.items %}<li>{{ problem }}</li>{% endfor %}</ul></div>{% endif %}
 
-<form method="post" id="workload" action="{% url 'create_test' %}" data-lookup="{% url 'create_test_lookup' %}">{% csrf_token %}
+<form method="post" id="workload" action="{% url 'create_test' %}" data-lookup="{% url 'create_test_lookup' %}" data-branches="{% url 'create_test_branches' %}">{% csrf_token %}
 {% if behind %}<div class="warned"><b>{{ behind.dev }} is {{ behind.commits }} commit{{ behind.commits|pluralize }} behind {{ behind.base }}.</b>
   The test would measure those commits as well as the patch, so a rebase comes first.
   <div class="actions-row"><button class="act warn" name="anyway" value="1">Create it anyway</button></div></div>{% endif %}

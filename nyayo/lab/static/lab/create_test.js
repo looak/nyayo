@@ -53,6 +53,26 @@
     }, 400);
   }
 
+  // the suggestions for both branch fields: the source's real branches (a datalist only suggests, so a sha or any other
+  // name still works, and with GitHub down the list stays empty)
+  var listed = null;
+  function fillBranches() {
+    var repo = field("dev_repo").value;
+    if (listed === repo) return;
+    listed = repo;
+    var list = document.getElementById("branches");
+    list.textContent = "";
+    fetch(form.dataset.branches + "?" + new URLSearchParams({ repo: repo }), { credentials: "same-origin" })
+      .then(function (r) { return r.json(); }).then(function (data) {
+        if (listed !== repo) return;
+        (data.branches || []).forEach(function (name) {
+          var option = document.createElement("option");
+          option.value = name;
+          list.appendChild(option);
+        });
+      }).catch(function () { if (listed === repo) listed = null; });
+  }
+
   function show(data, dev) {
     if (data.error) { fact("r-subject", data.error, "bad"); return; }
     var d = data.dev || {}, b = data.base || {};
@@ -86,7 +106,10 @@
     var engine = engines[field("engine").value];
     if (engine) { field("dev_repo").value = engine.source; field("base_repo").value = engine.source; field("scale_nps").value = engine.nps; }
     applyPreset();
+    fillBranches();
   });
+  field("dev_repo").addEventListener("change", fillBranches);
   summarize();
+  fillBranches();
   if (field("dev_branch").value.trim()) lookup();
 })();

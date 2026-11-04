@@ -300,3 +300,73 @@ class Landing(TestCase):
         self.assertEqual(Match.objects.get(pk=test.match_id()).state, "stopped")
         self.client.post(reverse("test_action", args=[test.pk, "restart"]))
         self.assertEqual(Match.objects.get(pk=test.match_id()).state, "waiting")
+
+
+class BranchList(Reports):
+    """The branch names the page suggests: paged, kept a minute, refused for a repository that is no engine's."""
+
+    def setUp(self):
+        super().setUp()
+        github._branch_cache.clear()
+        self.addCleanup(github._branch_cache.clear)
+        self.client.force_login(self.owner)
+
+    def listing(self, pages, calls=None):
+        def api_get(url, timeout=10):
+            if calls is not None:
+                calls.append(url)
+            page = int(url.rsplit("page=", 1)[1])
+            return 200, [{"name": name} for name in pages[page - 1]] if page <= len(pages) else []
+        return api_get
+
+    def ask(self, repo=REPO):
+        return self.client.get(reverse("create_test_branches"), {"repo": repo}).json()
+
+    def test_pages_are_followed_until_a_short_one(self):
+        full = ["b%03d" % n for n in range(100)]
+        calls = []
+        with mock.patch.object(github, "api_get", self.listing([full, full[:0] + ["zeta", "main"]], calls)):
+            data = self.ask()
+        self.assertEqual(len(calls), 2)
+        self.assertIn("page=2", calls[1])
+        self.assertEqual(len(data["branches"]), 102)
+        self.assertNotIn("error", data)
+
+    def test_the_default_base_comes_first_then_alphabetical(self):
+        with mock.patch.object(github, "api_get", self.listing([["zeta", "alpha", "main", "beta"]])):
+            self.assertEqual(self.ask()["branches"], ["main", "alpha", "beta", "zeta"])
+
+    def test_the_answer_is_kept_for_a_minute(self):
+        calls = []
+        with mock.patch.object(github, "api_get", self.listing([["main"]], calls)):
+            self.ask()
+            self.ask()
+            self.assertEqual(len(calls), 1)
+            with mock.patch.object(github.time, "monotonic", return_value=github.time.monotonic() + 61):
+                self.ask()
+        self.assertEqual(len(calls), 2)
+
+    def test_a_repository_that_is_no_engines_is_refused_without_asking(self):
+        calls = []
+        with mock.patch.object(github, "api_get", self.listing([["main"]], calls)):
+            data = self.ask("https://github.com/a/b")
+        self.assertEqual(data["branches"], [])
+        self.assertIn("error", data)
+        self.assertEqual(calls, [])
+
+    def test_github_being_down_is_an_empty_list_and_the_reason(self):
+        with mock.patch.object(github, "api_get", fake_github(down=True)):
+            response = self.client.get(reverse("create_test_branches"), {"repo": REPO})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["branches"], [])
+        self.assertIn("no route", response.json()["error"])
+
+    def test_a_failure_is_not_kept(self):
+        with mock.patch.object(github, "api_get", fake_github(down=True)):
+            self.ask()
+        with mock.patch.object(github, "api_get", self.listing([["main"]])):
+            self.assertEqual(self.ask()["branches"], ["main"])
+
+    def test_signed_out_goes_to_sign_in(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse("create_test_branches"), {"repo": REPO}).status_code, 302)
