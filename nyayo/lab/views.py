@@ -92,8 +92,8 @@ def branches(request):
         return JsonResponse({'branches': [], 'error': "That source isn't the source of an engine."})
     try:
         names = sorted(set(github.branches(repo)))
-    except github.GithubDown as error:
-        return JsonResponse({'branches': [], 'error': str(error)})
+    except github.GithubDown:
+        return JsonResponse({'branches': [], 'error': 'GitHub did not answer.'})
     names.sort(key=lambda name: name != creating.DEFAULT_BASE)
     return JsonResponse({'branches': names})
 

@@ -354,11 +354,11 @@ with OpenBench's notice. Tunes and datagens come later.
 - **Worked out for you**: as a branch is typed the page asks `/create/test/lookup` (staff only), which asks GitHub for
   the commit's sha, subject, bench and name, and how far the branch is behind the base. The same is asked again, and
   decides, when the form is posted.
-- **Branch suggestions.** Both branch fields have a datalist filled from `/create/test/branches?repo=` (staff only; the
+- **Branch suggestions.** Both branch fields are comboboxes (a small script, no library: an arrow, a list that opens on a click, filters by substring as you type, takes the arrow keys, Enter and Escape) over the names from `/create/test/branches?repo=` (staff only; the
   repository must be an engine's source, else the list is empty with an `error`): GitHub's `/branches`, all pages up to
   ten, kept a minute per repository (`github.branches`, as anonymous callers get sixty requests an hour), `main` first and
-  the rest alphabetical. It never fails: GitHub down is an empty list and the reason. A datalist only suggests, so a sha or
-  any other name still works. It is asked on load and when the engine or source changes.
+  the rest alphabetical. It never fails: GitHub down is an empty list and the reason. While loading the list says so, and when
+  empty it says why. The text stays free, so a sha or any other name still works. It is asked on load and when the engine or source changes.
 - **The commit** is a branch, a tag or a full sha (`collect_github_info`). A sha is named by the branch that has it
   as its head, else the pull request's branch, else the commit's first line (`branch_of_sha`); `Test.name` is the typed
   name, else that first line, else empty (the match is then named from the branches). The bench is typed under

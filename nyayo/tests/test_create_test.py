@@ -359,7 +359,7 @@ class BranchList(Reports):
             response = self.client.get(reverse("create_test_branches"), {"repo": REPO})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["branches"], [])
-        self.assertIn("no route", response.json()["error"])
+        self.assertEqual(response.json()["error"], "GitHub did not answer.")
 
     def test_a_failure_is_not_kept(self):
         with mock.patch.object(github, "api_get", fake_github(down=True)):
