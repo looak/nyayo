@@ -30,7 +30,8 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.db.models import CharField, IntegerField, BigIntegerField, BooleanField, FloatField
 from django.db.models import JSONField, ForeignKey, DateTimeField, OneToOneField, TextField, UniqueConstraint
-from django.db.models import CASCADE, PROTECT, Model, TextChoices
+from django.db.models import CASCADE, PROTECT, SET_NULL, Model, TextChoices
+from django.utils import timezone
 
 from nyayo.lab.ids import match_id
 
@@ -127,9 +128,18 @@ class ServerState(Model):
 
 class Machine(Model):
 
-    # A worker, as OpenBench's Client reports it. Not runs.Machine, which is a token that reports runs.
-    # The worker signs in as its user; the owner makes one with createsuperuser.
-    user      = ForeignKey(User, PROTECT, related_name='owner')
+    # A worker, one row for each across its restarts: found by the hash of the token it was given when it said hello
+    # (lab/registration.py), with no user and no password. Not runs.Machine, which is a token that reports runs.
+    # `state` is pending (said hello, not approved), approved, or turned_away; `enabled` is the owner's switch on an
+    # approved worker, which lets a workload it has finish but hands it no new one. `secret` and `described` are of the
+    # session, and a restart changes them, not the row. `user` is empty but on rows from before there were tokens.
+    user      = ForeignKey(User, PROTECT, related_name='owner', null=True, blank=True)
+    name       = CharField(max_length=100, blank=True, default='', db_index=True)
+    token_hash = CharField(max_length=64, unique=True, null=True, blank=True, editable=False)
+    state      = CharField(max_length=12, default='pending', db_index=True)
+    enabled    = BooleanField(default=True)
+    first_seen = DateTimeField(default=timezone.now)
+    described  = BooleanField(default=False)
     mnps      = FloatField(default=0.00)
     dev_mnps  = FloatField(default=0.00)
     base_mnps = FloatField(default=0.00)
@@ -143,7 +153,20 @@ class Machine(Model):
     rtt_ms    = FloatField(null=True, blank=True)
 
     def __str__(self):
-        return '[%d] %s' % (self.id, self.user.username)
+        return '[%d] %s' % (self.id, self.name or 'unnamed')
+
+class JoinCode(Model):
+
+    # A code that approves a worker on hello, once: made on the Machines page, shown once, kept as a hash, and gone after
+    # `expires`. `used_by` is the worker it approved.
+    code_hash  = CharField(max_length=64, unique=True)
+    created    = DateTimeField(default=timezone.now)
+    expires    = DateTimeField()
+    made_by    = CharField(max_length=128, blank=True)
+    used_by    = ForeignKey('Machine', SET_NULL, null=True, blank=True, related_name='joined_with')
+
+    def __str__(self):
+        return '%s..., until %s' % (self.code_hash[:8], self.expires)
 
 class Place(Model):
 

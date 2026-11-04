@@ -6,7 +6,7 @@
 <div class="pagehead"><h1>{{ name }}</h1>
   <span>{% if worker %}<span class="tag worker">worker</span> {% endif %}{% if token %}<span class="tag token{% if not token.active %} revoked{% endif %}">{% if token.active %}token{% else %}token revoked{% endif %}</span>{% endif %}</span>
   {% if worker %}{% include "lab/_status.html" with health=row.health %}
-  <span class="muted">{% include "lab/_os_icon.html" with kind=info.os_kind wsl=info.wsl title=info.os_ver %} {{ machine.user.username }}{% if sessions > 1 %} · started {{ sessions }} times, the newest shown{% endif %}</span>{% endif %}</div>
+  <span class="muted">{% include "lab/_os_icon.html" with kind=info.os_kind wsl=info.wsl title=info.os_ver %} {{ machine.user.username }}</span>{% endif %}</div>
 
 {% if place %}<p class="place-line"><span class="muted">Where</span> {{ place }}</p>{% endif %}
 {% if may_act and nameable %}
@@ -23,6 +23,9 @@
 {% elif not nameable %}<p class="muted">This worker has no name (<code>-I</code>), so a place cannot be kept for it.</p>{% endif %}
 
 {% if worker %}
+{% if may_act %}<div class="card" style="margin-top: 1rem"><h3 class="box-title">Registration</h3>
+  <p class="muted">First heard from {{ machine.first_seen|date:"D j M H:i" }}. {% if machine.state == "approved" %}Approved{% if not machine.enabled %}, switched off{% endif %}.{% elif machine.state == "pending" %}Waiting for approval.{% else %}Turned away.{% endif %}</p>
+  {% include "lab/_worker_actions.html" with r=row back="machine" %}</div>{% endif %}
 <div class="card" style="margin-top: 1rem">
   <h3 class="box-title">Now</h3>
   <dl class="chips">

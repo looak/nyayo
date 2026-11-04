@@ -21,5 +21,8 @@ urlpatterns = [
     path("books", views.stub("books"), name="books"),
     path("machines", machines_views.machines_page, name="machines"),
     path("machine-place", machines_views.machine_place, name="machine_place"),
+    path("machine-action", machines_views.machine_action, name="machine_action"),
+    path("machine-join-code", machines_views.machine_join_code, name="machine_join_code"),
+    path("machine-code-revoke", machines_views.machine_code_revoke, name="machine_code_revoke"),
     path("machines/<path:name>", machines_views.machine_page, name="machine"),
 ]

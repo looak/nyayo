@@ -4,8 +4,10 @@ from . import worker_api as api
 
 # The worker's endpoints, at the paths OpenBench's Client has always used
 urlpatterns = [
+    path("clientHello/", api.client_hello),
     path("clientVersionRef/", api.client_version_ref),
     path("clientMatchRunnerVersionRef/", api.client_match_runner_version_ref),
+    path("clientFastchess/<str:version>/<str:name>", api.client_fastchess),
     path("clientGetBuildInfo/", api.client_get_build_info),
     path("clientWorkerInfo/", api.client_worker_info),
     path("clientGetWorkload/", api.client_get_workload),

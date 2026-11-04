@@ -1,5 +1,7 @@
 """Makes a test, a machine and a result the way the shell does, for the lab's tests."""
 
+import secrets
+
 from django.contrib.auth.models import User
 
 from nyayo.lab.models import Engine, Machine, Result, Test
@@ -18,13 +20,14 @@ def make_test(**fields):
     return Test.objects.create(**values)
 
 
-def make_machine(name="hunt", **info):
-    user = User.objects.get_or_create(username=name)[0]
-    base = dict(machine_name=name, client_ver=54, concurrency=2, sockets=1, physical_cores=2, syzygy_max=0,
-                cpu_flags=["POPCNT"], compilers={"Elephant": "g++"}, tokens={}, os_name="Linux",
+def make_machine(name="hunt", state="approved", enabled=True, described=True, **info):
+    """An approved worker, as one that said hello and described itself is: a row of its own, named, with a token's hash."""
+    base = dict(client_ver=54, concurrency=2, sockets=1, physical_cores=2, syzygy_max=0,
+                cpu_flags=["POPCNT"], toolchains={"g++": "13.3.0", "gcc": "13.3.0", "make": "4.3"}, tokens={}, os_name="Linux",
                 supported=["Elephant"])
     base.update(info)
-    return Machine.objects.create(user=user, info=base, secret="s" * 8)
+    return Machine.objects.create(name=name, token_hash=secrets.token_hex(32), state=state, enabled=enabled, described=described,
+                                  info=base, secret="s" * 8)
 
 
 def make_result(test, machine):
