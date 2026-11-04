@@ -527,6 +527,30 @@ def later_workload(r):
     return 'test %d: bench right, then wrong on a later workload, %d games kept, error' % (test_id, r.test(test_id).games)
 
 
+def idle_then_quiet(r):
+    # The worker has nothing to play: it polls, and the Machines page says idle. Stopped, it says nothing more, and
+    # five minutes later the page says gone quiet (the clock is moved on, as five minutes is too long to wait)
+    import datetime
+    from django.utils import timezone
+    from nyayo.lab.models import Machine, Test
+    r.wait_for(lambda: not Test.objects.filter(finished=False).exists(), 60, 'every test to have ended')
+    r.wait_for(lambda: Machine.objects.filter(info__machine_name='smoke-0').exists(), 60, 'the worker to sign in')
+    before = Machine.objects.filter(info__machine_name='smoke-0').order_by('-id').first().updated
+    r.wait_for(lambda: Machine.objects.filter(info__machine_name='smoke-0').order_by('-id').first().updated > before, 30,
+               'the idle worker to be heard from')
+    check('<span class="muted">idle</span>' in r.page('/machines'), 'the page does not say idle: %s' % (
+        re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', re.sub(r'(?s)<style.*?</style>', '', r.page('/machines'))))[:600]))
+    stop(r.clients.pop())
+    time.sleep(RETRY + 1)
+    machine = Machine.objects.filter(info__machine_name='smoke-0').order_by('-id').first()
+    time.sleep(RETRY + 1)
+    check(Machine.objects.get(pk=machine.pk).updated == machine.updated, 'a stopped worker was heard from')
+    check('<span class="muted">idle</span>' in r.page('/machines'), 'a worker stopped a moment ago is not idle yet')
+    Machine.objects.filter(pk=machine.pk).update(updated=timezone.now() - datetime.timedelta(minutes=6))
+    check('<span class="worse">gone quiet</span>' in r.page('/machines'), 'the page does not say gone quiet')
+    return 'idle while it polled with nothing to play, silent once stopped, gone quiet after 5 minutes'
+
+
 E = lambda **kw: (lambda r: r.engine('dev', **kw))
 B = lambda **kw: (lambda r: r.engine('base', **kw))
 
@@ -549,6 +573,7 @@ SCENARIOS = [
     ('compile-killed', unclear(E(broken='killed'), B(), 'compile', "Dev's compile was killed, and no other worker has tried it", restart=True)),
     ('bench-wrong-both', unclear(E(bench=ENGINE_BENCH + 1), B(bench=ENGINE_BENCH + 1), 'bench', "Dev's bench doesn't match its commit, and no other worker has tried it")),
     ('bench-flip', later_workload),
+    ('idle', idle_then_quiet),     # last: it stops the worker
 ]
 
 
@@ -620,6 +645,9 @@ def main():
     args = parser.parse_args()
 
     preflight()
+    # a stop from outside still stops the server and the workers
+    for signum in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signum, lambda *_: sys.exit(1))
     rig = Rig(args)
     failures, ran, began = 0, 0, time.time()
     try:

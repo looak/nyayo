@@ -398,7 +398,7 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
 - **Scheduling** (`get_workload.py`, OpenBench's `workloads/get_workload.py`, names only): a worker is handed an approved,
   unfinished, undeleted test it can play (the engines it can build, its threads, syzygy, `--only`, `--focus`, `--noisy`, its
   blacklist, and the tests it left after a failure nobody could place), of the highest priority, balanced by threads against
-  throughput. Handing out makes the `Result`, starts the machine's walk and reports the test.
+  throughput. Handing out makes the `Result`, starts the machine's walk and reports the test. A worker that asks and is given nothing is waiting, not gone: that it was heard from (`Machine.updated`) is recorded, with one small write, and the workload it had is let go (and that test told), so the Machines page's *idle* is a worker that polls and *gone quiet* one silent for 5 minutes. OpenBench wrote nothing then.
 - **Results** (`utils.update_test`, from OpenBench's `utils.py`): the counts are added to the test and the result, an SPRT's
   LLR is recomputed with `stats.py` and ends the test on a bound, a games test at `max_games`, a tune moves its parameters
   within their bounds. The answer is `{}` or `{"stop": true}`.
@@ -423,7 +423,7 @@ The smoke test, `tools/smoke/run.py` (WSL or Linux; its docstring says how to se
 timers. A toy engine, a book and a stand-in for the part of GitHub's API that the create page asks (`NYAYO_GITHUB_API`, which
 replaces `https://api.github.com/repos`) are served from the harness, and every test is made through the real create page,
 signed in as the owner. It checks a games test (named, a base bench typed in, the walk, games put away, the pages), an SPRT to a
-result, what the page refuses, approval by the owner, stop and restart, crashes, two tests at once, and each failure of the
+result, what the page refuses, approval by the owner, stop and restart, crashes, two tests at once, an idle worker that the Machines page says is idle and, once stopped, gone quiet, and each failure of the
 verdict table it can stage (a compile error, a wrong, slow or silent bench on dev; the machine's own failures; a killed
 compiler and a wrong bench on both, which hold the test; a bench that is right and then wrong). After each, the match agrees
 with its test on everything fixed and on the counts, and no report was refused. A full run takes about two to three minutes

@@ -32,16 +32,18 @@ import sys
 
 from nyayo.lab import config, steps, utils
 from nyayo.lab.document import report_test
-from nyayo.lab.models import Book, EngineConfig, Result, Test
+from nyayo.lab.models import Book, EngineConfig, Machine, Result, Test
 from nyayo.lab.spsa_utils import spsa_workload_assignment_dict
 
 from django.db import transaction
 from django.db import IntegrityError
+from django.utils import timezone
 
 def get_workload(request, machine):
 
     # Select a workload from the possible ones, if we can
     if not (test := select_workload(request, machine)):
+        heard(machine)
         return {}
 
     # Avoid creating duplicate Result objects
@@ -66,6 +68,16 @@ def get_workload(request, machine):
     transaction.on_commit(lambda: report_test(test.id))
 
     return { 'workload' : workload }
+
+def heard(machine):
+
+    # A worker that asks for work and is given none is waiting, not gone: that it was heard from is recorded, so
+    # that idle is a worker that polls and gone quiet one that has not for 5 minutes. A worker asks only when it has
+    # finished what it was on, so the workload it had is let go (OpenBench left both alone, which was harmless there).
+    # One write of two columns, never the info blob; the test it left is told, as it is no longer being played.
+    Machine.objects.filter(pk=machine.pk).update(updated=timezone.now(), workload=0)
+    if machine.workload:
+        transaction.on_commit(lambda test_id=machine.workload: report_test(test_id))
 
 def select_workload(request, machine):
 
