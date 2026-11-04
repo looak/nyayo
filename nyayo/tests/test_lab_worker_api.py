@@ -5,9 +5,14 @@ import json
 import tempfile
 from pathlib import Path
 
+import datetime
+
 from django.contrib.auth.models import User
+from django.db import connection
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from nyayo.lab.models import EngineConfig, LogEvent, Machine, Result, ServerState, Step, Test
 from nyayo.matches.models import Match, Upload
@@ -194,6 +199,55 @@ class Scheduling(Api):
         self.assertEqual(workload['reporting_type'], 'BATCHED')
         self.assertEqual(set(workload['spsa']), {'Aspiration'})
         self.assertEqual(workload['distribution']['runner-count'], 2)
+
+
+class Waiting(Api):
+    def old(self, **delta):
+        import datetime
+        from django.utils import timezone
+        Machine.objects.filter(pk=self.machine_id).update(updated=timezone.now() - datetime.timedelta(**delta))
+
+    def test_asking_for_work_and_getting_none_is_being_heard_from(self):
+        self.sign_in()
+        self.old(minutes=20)
+        Machine.objects.filter(pk=self.machine_id).update(mnps=1.5)
+        self.assertEqual(self.worker('clientGetWorkload').json(), {})
+        machine = Machine.objects.get(pk=self.machine_id)
+        self.assertGreater(machine.updated, timezone.now() - datetime.timedelta(seconds=30))
+        self.assertEqual(machine.mnps, 1.5)
+        self.assertEqual(machine.info['machine_name'], 'hunt')
+
+    def test_a_poll_costs_one_small_write(self):
+        self.sign_in()
+        with CaptureQueriesContext(connection) as queries:
+            self.worker('clientGetWorkload')
+        writes = [q['sql'] for q in queries if q['sql'].lstrip().upper().startswith(('UPDATE', 'INSERT', 'DELETE'))]
+        self.assertEqual(len(writes), 1, writes)
+        self.assertNotIn('"info"', writes[0])
+
+    def test_the_workload_it_has_left_is_let_go_and_that_test_told(self):
+        test = make_test(name='first')
+        self.handed_out(test)
+        self.assertEqual(Machine.objects.get(pk=self.machine_id).workload, test.id)
+        self.assertTrue(Match.objects.get(pk=test.match_id()).machines[0]['active'])
+        Test.objects.filter(pk=test.id).update(finished=True)
+        self.assertEqual(self.worker('clientGetWorkload').json(), {})
+        self.assertEqual(Machine.objects.get(pk=self.machine_id).workload, 0)
+
+    def test_a_machine_that_still_has_a_test_is_not_made_idle_by_asking_while_it_gets_work(self):
+        test = make_test()
+        self.handed_out(test)
+        self.assertEqual(self.worker('clientGetWorkload').json()['workload']['test']['id'], test.id)
+        self.assertEqual(Machine.objects.get(pk=self.machine_id).workload, test.id)
+
+    def test_the_page_says_idle_then_gone_quiet(self):
+        self.sign_in()
+        self.old(minutes=20)
+        self.assertEqual(self.client.get('/machines').context['rows'][0]['state'], 'quiet')
+        self.worker('clientGetWorkload')
+        self.assertEqual(self.client.get('/machines').context['rows'][0]['state'], 'idle')
+        self.old(minutes=6)
+        self.assertEqual(self.client.get('/machines').context['rows'][0]['state'], 'quiet')
 
 
 class Results(Api):
