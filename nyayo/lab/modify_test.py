@@ -3,11 +3,30 @@
 # approve. Delete, restore and modify are not on the page yet. Who may act is nyayo/actions/access.py's business; the
 # one thing decided here is that approving is for superusers, who are the approvers OpenBench's Profile had.
 
+import re
 from importlib import import_module
 
-from .models import LogEvent, Test
+from django.conf import settings
+from django.db.models import Sum
 
-ACTIONS = ('stop', 'restart', 'approve')
+from .models import LogEvent, Result, Test
+
+ACTIONS = ('stop', 'restart', 'approve', 'unapprove')
+
+OPENBENCH_ID = re.compile(r'^openbench-(?P<instance>.+)-(?P<number>\d+)$')
+
+
+def test_of(match):
+
+    # The lab's test a match is the document of, or None: an old match, from OpenBench's own server, has none.
+    found = OPENBENCH_ID.match(match.pk)
+    if not found or found['instance'] != settings.NYAYO_INSTANCE:
+        return None
+    return Test.objects.filter(pk=int(found['number'])).first()
+
+
+def games_played(test):
+    return (Result.objects.filter(test=test).aggregate(n=Sum('games'))['n'] or 0) + (test.games or 0)
 
 def report(test):
 
@@ -16,7 +35,7 @@ def report(test):
     import_module('nyayo.lab.document').report_test(test)
 
 def may(user, action):
-    return user.is_superuser if action == 'approve' else True
+    return user.is_superuser if action in ('approve', 'unapprove') else True
 
 def apply(user, test, action):
 
@@ -24,6 +43,10 @@ def apply(user, test, action):
     if action == 'approve':
         test.approved = True
         message = 'Test was approved.'
+
+    elif action == 'unapprove':
+        test.approved = False # A worker on it is told to stop at its next report or heartbeat (utils.update_test, clientHeartbeat)
+        message = 'Test was unapproved.'
 
     elif action == 'restart':
         import_module('nyayo.lab.steps').restart_walks(test) # Every worker's walk starts over; a hold is released
@@ -43,6 +66,7 @@ def offers(test):
     # The buttons a test has now: stop while it runs, restart once it has stopped, approve until someone has
     out = []
     if not test.approved: out.append('approve')
+    elif not test.finished and not games_played(test): out.append('unapprove') # With games played, stop is the way
     if test.finished or test.passed or test.failed: out.append('restart')
     if not test.finished: out.append('stop')
     return out

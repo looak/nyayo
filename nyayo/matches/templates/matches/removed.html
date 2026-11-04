@@ -1,0 +1,17 @@
+{% extends "runs/base.html" %}
+{% block title %}Removed matches · nyayo{% endblock %}
+{% block crumb %}Testing › Matches › Removed{% endblock %}
+{% block content %}
+<h1>Removed matches</h1>
+<p class="muted">Taken out of the lists and the dashboard. Their games stay in <a href="{% url 'games' %}">Games</a> and the exports. <a href="{% url 'matches' %}">Back to the matches</a>.</p>
+{% if matches %}
+<div class="card"><div class="scroll"><table>
+  <thead><tr><th>Match</th><th>Kind</th><th>State</th><th class="num">Games</th><th>Last report</th><th></th></tr></thead>
+  <tbody>{% for r in matches %}<tr>
+    <td>{{ r.name }}</td><td><span class="tier">{{ r.match.kind }}</span></td><td><span class="badge {{ r.match.state }}">{{ r.match.state }}</span></td>
+    <td class="num">{{ r.played }}</td><td class="nowrap">{{ r.match.updated_at|date:"Y-m-d H:i" }}</td>
+    <td><form method="post" action="{% url 'match_restore' %}">{% csrf_token %}<input type="hidden" name="id" value="{{ r.match.pk }}"><button class="act" type="submit">Bring it back</button></form>
+      <a href="{% url 'match_remove' %}?id={{ r.match.pk|urlencode }}&amp;mode=delete">Delete…</a></td></tr>{% endfor %}</tbody>
+</table></div></div>
+{% else %}<p class="muted">None are removed.</p>{% endif %}
+{% endblock %}

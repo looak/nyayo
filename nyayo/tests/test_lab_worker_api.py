@@ -538,3 +538,14 @@ class Uploads(Api):
             self.upload(workload, self.games(1))
             with self.assertLogs('nyayo.lab.worker_api', 'ERROR'):
                 self.assertEqual(self.upload(workload, self.games(2)).json(), {})
+
+
+class Unapproved(Results):
+    def test_a_worker_on_a_test_that_is_unapproved_is_told_to_stop_by_a_heartbeat_and_by_its_results(self):
+        test = make_test()
+        workload = self.handed_out(test)
+        self.assertEqual(self.worker('clientHeartbeat', test_id=test.id).json(), {})
+        Test.objects.filter(pk=test.id).update(approved=False)
+        self.assertEqual(self.worker('clientHeartbeat', test_id=test.id).json(), {'stop': True})
+        self.assertEqual(self.submit(workload, penta='0 1 2 1 0', trinomial='2 4 2'), {'stop': True})
+        self.assertEqual(Test.objects.get().games, 0)

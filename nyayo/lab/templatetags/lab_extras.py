@@ -10,26 +10,21 @@ from ..models import Test
 
 register = template.Library()
 
-OPENBENCH_ID = re.compile(r'^openbench-(?P<instance>.+)-(?P<number>\d+)$')
-
-
-def test_of(match):
-    """The lab's test a match is the document of, or None: an old match, from OpenBench's own server, has none."""
-    found = OPENBENCH_ID.match(match.pk)
-    if not found or found['instance'] != settings.NYAYO_INSTANCE:
-        return None
-    return Test.objects.filter(pk=int(found['number'])).first()
+OPENBENCH_ID = modify_test.OPENBENCH_ID
+test_of = modify_test.test_of
 
 
 @register.simple_tag(takes_context=True)
-def test_actions(context, match):
-    """Stop, restart and approve, on the page of a match that is a lab test's, for the people who may act."""
+def match_actions(context, match):
+    """The group *Actions for this match* at the bottom of the sidebar, on a match page and its game pages, for the people who
+    may act: what `modify_test.offers` allows for a lab test's match (stop, restart, approve, unapprove, each a POST), and for
+    any match *Remove* and *Delete*, which go to a page that says what will go. A removed match offers *Bring it back*."""
     request = context.get('request')
-    test = test_of(match)
-    if test is None or request is None or not may_act(request.user):
+    if request is None or not may_act(request.user):
         return ''
-    buttons = [action for action in modify_test.offers(test) if modify_test.may(request.user, action)]
-    return template.loader.render_to_string('lab/_test_actions.html', {'test': test, 'buttons': buttons}, request)
+    test = test_of(match)
+    buttons = [] if test is None or match.hidden else [a for a in modify_test.offers(test) if modify_test.may(request.user, a)]
+    return template.loader.render_to_string('lab/_match_actions.html', {'match': match, 'test': test, 'buttons': buttons}, request)
 
 
 def producer_link(match):

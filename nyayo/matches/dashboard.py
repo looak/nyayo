@@ -168,21 +168,21 @@ def database():
 
 def playing():
     """The second tile: the matches being played, or with none, the one played last."""
-    running = Match.objects.filter(state="running")
+    running = Match.objects.filter(state="running", hidden=False)
     kinds = dict(running.values_list("kind").annotate(n=Count("pk")).order_by())
     last = None
     if not kinds:
-        last = Match.objects.exclude(state="running").order_by(
+        last = Match.objects.exclude(state="running").exclude(hidden=True).order_by(
             Coalesce("finished_at", "updated_at").desc()).first()
     return {"running": sum(kinds.values()), "kinds": sorted(kinds.items()),
-            "in_play": Game.objects.filter(result="*", match__state="running").count(),
+            "in_play": Game.objects.filter(result="*", match__state="running", match__hidden=False).count(),
             "last": last, "last_at": (last.finished_at or last.updated_at) if last else None}
 
 
 def latest_sprt():
     """The third tile: the SPRT that came to a verdict last, else the latest one at all, with its Elo and the faults
     of the engine under test in it (crashes, time losses, illegal moves)."""
-    sprts = Match.objects.filter(kind="sprt").exclude(sprt=None).select_related("subject")
+    sprts = Match.objects.filter(kind="sprt", hidden=False).exclude(sprt=None).select_related("subject")
     match = (sprts.filter(sprt__result__in=["passed", "failed"]).order_by(
         Coalesce("finished_at", "updated_at").desc()).first() or sprts.order_by("-updated_at").first())
     if match is None:

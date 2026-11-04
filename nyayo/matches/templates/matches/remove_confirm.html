@@ -1,0 +1,56 @@
+{% extends "runs/base.html" %}
+{% block title %}{% if mode == "delete" %}Delete{% else %}Remove{% endif %} {% if many %}{{ rows|length }} matches{% else %}{{ rows.0.name }}{% endif %} · nyayo{% endblock %}
+{% block crumb %}Testing › Matches › {% if mode == "delete" %}Delete{% else %}Remove{% endif %}{% endblock %}
+{% block head %}<style>
+  .confirm { max-width: 46rem; }
+  .confirm .what { margin: .4rem 0 1rem; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .5rem; }
+  .confirm .what li { padding: .55rem .8rem; background: var(--card); border-radius: 3px; border-left: 3px solid var(--line); }
+  .confirm .what b { color: var(--bright); } .confirm .what .muted { display: block; font-size: .85rem; }
+  .choice { display: block; margin: .5rem 0; padding: .7rem .9rem; background: var(--card); border: 1px solid var(--line); border-radius: 3px; cursor: pointer; }
+  .choice:has(input:checked) { border-color: var(--link); }
+  .choice.del:has(input:checked) { border-color: var(--danger); }
+  .choice input { margin-right: .5rem; } .choice .muted { display: block; margin: .2rem 0 0 1.5rem; font-size: .85rem; }
+  .typed { margin: .8rem 0; } .typed input { width: 100%; max-width: 24rem; min-height: 40px; }
+  .confirm .buttons { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1rem; }
+  .confirm .buttons button, .confirm .buttons a { min-height: 44px; padding: 0 1.2rem; display: inline-flex; align-items: center; border-radius: 3px; border: 0; font: inherit; cursor: pointer; color: #fff; }
+  .confirm .buttons .go { background: var(--accent); } .confirm .buttons .go.del { background: var(--danger); }
+  .confirm .buttons a { background: #4b545c; }
+  .confirm .typed[hidden] { display: none; }
+</style>{% endblock %}
+{% block content %}
+<div class="confirm">
+<h1>{% if many %}Take away {{ rows|length }} matches{% else %}Take away {{ rows.0.name }}{% endif %}</h1>
+{% for sentence in blockers %}<p class="flash error">{{ sentence }}</p>{% endfor %}
+<p>What is on them now:</p>
+<ul class="what">
+  {% for r in rows %}<li><b><a href="{% url 'match' r.match.pk %}">{{ r.name }}</a></b> <span class="tier">{{ r.match.kind }}</span> <span class="badge {{ r.match.state }}">{{ r.match.state }}</span>
+    <span class="muted">{{ r.played }} game{{ r.played|pluralize }} counted · {{ r.game_rows }} game file{{ r.game_rows|pluralize }} · {{ r.batches }} batch{{ r.batches|pluralize:"es" }} ({{ r.batch_games }} games) · {{ r.uploads }} upload{{ r.uploads|pluralize }}{% if r.test %} · lab test {{ r.test.id }}{% endif %}</span>
+    {% if r.running %}<span class="muted">Its test is still open: it is stopped first, and no worker gets more of it.</span>{% endif %}</li>{% endfor %}
+</ul>
+<form method="post" action="{% url 'match_remove' %}">{% csrf_token %}
+  {% for r in rows %}<input type="hidden" name="id" value="{{ r.match.pk }}">{% endfor %}
+  <label class="choice"><input type="radio" name="mode" value="remove" {% if mode != "delete" %}checked{% endif %} onchange="document.getElementById('typed').hidden = true">
+    <b>Remove, keep the games</b>
+    <span class="muted">{% if many %}They leave{% else %}It leaves{% endif %} the lists and the dashboard, with the test{% if many %}s{% endif %}. The games stay in Games and the exports, and their pages work, saying they are from a removed match. They can be brought back from <a href="{% url 'matches_removed' %}">the removed matches</a>.</span></label>
+  <label class="choice del"><input type="radio" name="mode" value="delete" {% if mode == "delete" %}checked{% endif %} onchange="document.getElementById('typed').hidden = false">
+    <b>Delete with the games</b>
+    <span class="muted">Everything of {% if many %}them{% else %}it{% endif %} goes for good: the match, its test, results and steps, its batches and cards, its uploads, its game files and its archive. Nothing can bring {% if many %}them{% else %}it{% endif %} back, and links to {% if many %}them{% else %}it{% endif %} become a page saying so. If the producer (uwanja, OpenBench) sends {% if many %}one{% else %}it{% endif %} again, {% if many %}that one{% else %}it{% endif %} comes back as a new match, with only what is sent then.</span></label>
+  <div class="typed" id="typed" {% if mode != "delete" %}hidden{% endif %}>
+    <label for="confirm-text">To delete, type <b>{{ phrase }}</b></label><br>
+    <input type="text" id="confirm-text" name="confirm" autocomplete="off" placeholder="{{ phrase }}">
+  </div>
+  <div class="buttons">
+    <button class="go {% if mode == 'delete' %}del{% endif %}" type="submit" {% if blockers %}disabled{% endif %}>Do it</button>
+    <a href="{% if rows|length == 1 %}{% url 'match' rows.0.match.pk %}{% else %}{% url 'matches' %}{% endif %}">Keep {% if many %}them{% else %}it{% endif %}</a>
+  </div>
+</form>
+</div>
+<script>
+  (function () {
+    var go = document.querySelector('.confirm .go');
+    document.querySelectorAll('.confirm input[name=mode]').forEach(function (r) {
+      r.addEventListener('change', function () { go.classList.toggle('del', r.value === 'delete' && r.checked); });
+    });
+  })();
+</script>
+{% endblock %}

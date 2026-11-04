@@ -2,6 +2,7 @@
 {% load lab_extras static runs_extras matches_extras %}
 {% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
 {% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% if show_workers %}<script defer src="{% static 'matches/workers.js' %}"></script>{% endif %}{% endblock %}
+{% block side_actions %}{% match_actions match %}{% endblock %}
 {% block content %}
 <div class="pagehead">
   <h1>{{ match.name|default:match.pk }}</h1>
@@ -71,7 +72,7 @@
     {% elif sprt.result %}<span class="outcome fail card-state">{{ sprt.result }}</span>
     {% elif silent %}<span class="outcome silent card-state">silent</span>
     {% else %}<span class="outcome {{ match.state }} card-state">{{ match.state|statename }}</span>{% endif %}
-    {% test_actions match %}</span>
+</span>
   </div>
 
   {% if not unstarted %}
