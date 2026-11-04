@@ -1,5 +1,6 @@
 from django.urls import path
 
+from nyayo.lab import machines_views
 from nyayo.lab import views as lab
 
 from . import views
@@ -18,5 +19,6 @@ urlpatterns = [
     path("gauntlet", views.stub("gauntlet"), name="gauntlet"),
     path("engines", views.stub("engines"), name="engines"),
     path("books", views.stub("books"), name="books"),
-    path("machines", views.stub("machines"), name="machines"),
+    path("machines", machines_views.machines_page, name="machines"),
+    path("machines/<path:name>", machines_views.machine_page, name="machine"),
 ]

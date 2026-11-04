@@ -19,7 +19,6 @@ STUBS = {
     "gauntlet": ("Run gauntlet", 4, "The gauntlet page: the file to copy and run on a machine that plays it, as uwanja takes it.", True),
     "engines": ("Engines", 6, "What to build: a repository, a ref, build options, the reference NPS and the date it was set. A test copies its engine's values when it is created.", True),
     "books": ("Books", 6, "The opening books a test may use.", True),
-    "machines": ("Machines", 6, "The workers and the machines that report: each worker with its threads, last report and what it is playing, joined by name to the tokens in the admin.", False),
 }
 
 

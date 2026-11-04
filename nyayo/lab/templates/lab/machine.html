@@ -1,0 +1,70 @@
+{% extends "runs/base.html" %}
+{% block title %}{{ name }} · Machines · nyayo{% endblock %}
+{% block crumb %}Lab › <a href="{% url 'machines' %}">Machines</a> › {{ name }}{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ name }}</h1>
+  <span>{% if worker %}<span class="tag worker">worker</span> {% endif %}{% if token %}<span class="tag token{% if not token.active %} revoked{% endif %}">{% if token.active %}token{% else %}token revoked{% endif %}</span>{% endif %}</span>
+  {% if worker %}<span class="muted">{{ machine.user.username }}{% if sessions > 1 %} · started {{ sessions }} times, the newest shown{% endif %}</span>{% endif %}</div>
+
+{% if worker %}
+<div class="card">
+  <h3 class="box-title">Now</h3>
+  <dl class="chips">
+    <div><dt>Status</dt><dd>{% if row.state == "playing" %}playing <a href="{% url 'match' row.match %}">{{ row.label }}</a>{% elif row.state == "idle" %}idle{% else %}<span class="worse">gone quiet</span>{% endif %}</dd></div>
+    <div><dt>Last heard</dt><dd>{{ machine.updated|date:"D j M H:i" }} <span class="muted">{{ ago }}</span></dd></div>
+    <div><dt>MNPS dev / base</dt><dd>{% if machine.dev_mnps or machine.base_mnps %}{{ machine.dev_mnps|floatformat:2 }}M / {{ machine.base_mnps|floatformat:2 }}M{% else %}<span class="muted">–</span>{% endif %}</dd></div>
+    <div><dt>Games</dt><dd>{{ row.games }}</dd></div>
+    <div><dt>Tests</dt><dd>{{ row.tests }}</dd></div>
+  </dl>
+</div>
+
+{% if trouble %}
+<div class="card">
+  <h3 class="box-title">Trouble now</h3>
+  {% for t in trouble %}
+  <p><span class="pill st-{{ t.step.blame }}">{{ t.step.blame }}</span> {{ t.where }} on <a href="{% url 'match' t.match %}">{{ t.label }}</a>: {{ t.step.detail }}
+    <span class="muted">· {{ t.step.tries }} {% if t.step.tries == 1 %}try{% else %}tries{% endif %}{% if t.step.retry_at %}, next try {{ t.step.retry_at|date:"H:i:s" }}{% endif %}</span></p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 class="box-title">Engines</h3>
+  <div class="scroll"><table><thead><tr><th>Engine</th><th>Plays it</th><th>Compiler</th></tr></thead><tbody>
+  {% for engine, ok, why, compiler in supported %}<tr><td>{{ engine }}</td>
+    <td>{% if ok %}yes{% else %}<span class="worse">no</span> <span class="muted">{{ why|join:"; " }}</span>{% endif %}</td>
+    <td>{{ compiler|default:"–" }}</td></tr>{% empty %}<tr><td colspan="3" class="muted">No engine is set up.</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if info.token_engines %}<p class="muted">Has an access token for {{ info.token_engines|join:", " }}.</p>{% endif %}
+</div>
+
+<div class="card">
+  <h3 class="box-title">System</h3>
+  <dl class="chips">
+    <div><dt>System</dt><dd>{{ row.os|default:"–" }}{% if info.os_ver %} {{ info.os_ver }}{% endif %}</dd></div>
+    {% for label, value in info.system %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+  </dl>
+  <p class="muted flags"><b>CPU flags</b> {% if info.flags %}{{ info.flags|join:" " }}{% else %}–{% endif %}</p>
+</div>
+
+<div class="card">
+  <h3 class="box-title">Recent tests</h3>
+  {% if recent %}
+  <div class="scroll"><table><thead><tr><th>Test</th><th class="num">Games</th><th class="num">Workloads</th><th class="num">Crashes</th><th class="num">Time losses</th><th class="num">Failed steps</th><th>Last</th></tr></thead><tbody>
+  {% for t in recent %}<tr><td><a href="{% url 'match' t.match %}">{{ t.label }}</a></td><td class="num">{{ t.games }}</td><td class="num">{{ t.workloads }}</td>
+    <td class="num{% if t.crashes %} worse{% endif %}">{{ t.crashes }}</td><td class="num{% if t.timeloss %} worse{% endif %}">{{ t.timeloss }}</td>
+    <td class="num{% if t.failures %} worse{% endif %}">{{ t.failures }}</td><td class="nowrap">{{ t.updated|date:"D j M H:i" }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">It has not played a test.</p>{% endif %}
+</div>
+{% endif %}
+
+{% if token %}
+<div class="card">
+  <h3 class="box-title">Token</h3>
+  <p>{% if token.active %}Active{% else %}<span class="worse">Revoked</span>{% endif %}. Made {{ token.created|date:"Y-m-d" }}.
+    {% if token.last %}Last reported {{ token.last|date:"D j M H:i" }}{% if token.runs %}, runs{% endif %}{% if token.matches %}{% if token.runs %} and{% endif %}, matches{% endif %}.{% else %}Has not reported.{% endif %}
+    <a href="{% url 'admin:runs_machine_changelist' %}">In the admin</a>.</p>
+</div>
+{% endif %}
+{% endblock %}
