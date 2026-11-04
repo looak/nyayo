@@ -1,16 +1,140 @@
 {% extends "runs/base.html" %}
+{% load runs_extras %}
 {% block title %}{{ name }} · Machines · nyayo{% endblock %}
 {% block crumb %}Lab › <a href="{% url 'machines' %}">Machines</a> › {{ name }}{% endblock %}
-{% block head %}{% include "lab/_machine_bits.html" %}{% endblock %}
+{% block head %}{% include "lab/_machine_bits.html" %}{% include "lab/_worker_page_style.html" %}{% endblock %}
 {% block content %}
 <div class="pagehead"><h1>{{ name }}</h1>
+  {% if worker %}<span class="os-badge">{% include "lab/_os_icon.html" with kind=info.os_kind wsl=info.wsl title=info.os_ver %} {{ info.os|default:"System unknown" }}</span>{% endif %}
   <span>{% if worker %}<span class="tag worker">worker</span> {% endif %}{% if token %}<span class="tag token{% if not token.active %} revoked{% endif %}">{% if token.active %}token{% else %}token revoked{% endif %}</span>{% endif %}</span>
-  {% if worker %}{% include "lab/_status.html" with health=row.health %}
-  <span class="muted">{% include "lab/_os_icon.html" with kind=info.os_kind wsl=info.wsl title=info.os_ver %} {{ machine.user.username }}{% if sessions > 1 %} · started {{ sessions }} times, the newest shown{% endif %}</span>{% endif %}</div>
+  {% if place %}<span class="muted">{{ place }}</span>{% endif %}
+  {% if worker and sessions > 1 %}<span class="muted">started {{ sessions }} times, the newest shown</span>{% endif %}</div>
 
-{% if place %}<p class="place-line"><span class="muted">Where</span> {{ place }}</p>{% endif %}
+{% if worker %}
+{% with g=graph %}
+<section class="card top-active graph" aria-labelledby="graph-title">
+  <div class="graph-head">
+    <h3 id="graph-title">Last 48 hours</h3>
+    <div class="legend">
+      <span><i class="sw bar"></i>Games each hour</span>
+      {% if g.has_rtt %}<span><i class="sw line"></i>Response time</span>{% endif %}
+      <span><i class="sw on"></i>Online</span>
+      <span><i class="sw part"></i>Some of the hour</span>
+      <span><i class="sw off"></i>Offline</span>
+    </div>
+  </div>
+  <div class="graph-scroll">
+    <div class="graph-body" id="hours" tabindex="0" role="group"
+         aria-label="Games played each hour over the last 48 hours: {{ g.games_48 }} in all{% if g.has_rtt %}, with the response time{% endif %} and whether it was online. Use the left and right arrow keys to read one hour at a time.">
+      <div class="y y-left"><span>{{ g.top }}</span><span>{{ g.half }}</span><span>0</span></div>
+      <div class="plot">
+        <div class="mid"></div>
+        <div class="cols">{% for c in g.cols %}<div class="col {{ c.look }}" data-i="{{ forloop.counter0 }}" data-tip="{{ c.tip }}" title="{{ c.tip }}"><i class="bar" style="height: {{ c.pct }}%"></i></div>{% endfor %}</div>
+        {% if g.has_rtt %}<svg viewBox="0 0 480 100" preserveAspectRatio="none" aria-hidden="true">{% for l in g.lines %}<polyline points="{{ l }}" fill="none" stroke="var(--wip)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>{% endfor %}</svg>{% endif %}
+      </div>
+      <div class="y y-right">{% if g.has_rtt %}<span>{{ g.rtt_top }} ms</span><span>{{ g.rtt_half }} ms</span><span>0</span>{% endif %}</div>
+      <div class="y-label">Online</div>
+      <div class="strip">{% for c in g.cols %}<div class="cell {{ c.look }}" data-i="{{ forloop.counter0 }}" title="{{ c.tip }}"></div>{% endfor %}</div>
+      <div></div>
+      <div></div>
+      <div class="xs"><span>48 h ago</span><span>36 h</span><span>24 h</span><span>12 h</span><span>now</span></div>
+      <div></div>
+    </div>
+  </div>
+  <p class="readout" id="readout" aria-live="polite">Point at an hour, or tap it, for its details.</p>
+  <p class="muted graph-note">
+    {% if g.empty %}Nothing is on record for this machine yet: the graph fills in from the first time it is heard from, and the hours before are left blank.
+    {% elif g.little %}Only {{ g.recorded }} hour{{ g.recorded|pluralize }} of history so far, since {{ g.since|date:"D j M H:i" }}. The hours before that are blank, not offline.
+    {% else %}{{ g.games_48 }} game{{ g.games_48|pluralize }} in 48 hours, {{ g.average }} an hour on average.{% endif %}
+    An hour with no games is a quiet one, not a broken one.
+    {% if not g.has_rtt %}No response time is shown: it is measured from the server's connection to the worker, and nothing has measured it (a development server cannot).{% endif %}
+  </p>
+</section>
+
+<div class="tiles worker-tiles">
+  <div class="tile {% if row.health.look == 'ok' %}success{% elif row.health.look == 'warn' %}warning{% else %}grey{% endif %}">
+    <svg class="wifi" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 9.5a14 14 0 0 1 18 0"/><path d="M6.5 13a9 9 0 0 1 11 0"/><path d="M10 16.5a4 4 0 0 1 4 0"/><circle cx="12" cy="20" r="0.6"/>{% if row.health.look == 'offline' %}<path d="M3 3l18 18"/>{% endif %}</svg>
+    <div class="inner"><h4>Connection</h4>
+      <div class="big{% if row.health.label|length > 8 %} mid{% endif %}">{{ row.health.label }}</div>
+      <div class="sub">{% if g.up_for %}Up {{ g.up_for }}{% if g.up_pct is not None %} · {{ g.up_pct }}% of {% if g.little %}the {{ g.recorded }} h on record{% else %}48 h{% endif %}{% endif %}{% else %}No history yet{% endif %}{% if rtt is not None %} · {% if rtt < 10 %}{{ rtt|floatformat:1 }}{% else %}{{ rtt|floatformat:0 }}{% endif %} ms{% endif %} · {% if row.state == "quiet" %}last heard {{ ago }}{% else %}heard from {{ ago }}{% endif %}</div>
+      {% if row.health.look == 'warn' %}{% for why in row.health.reasons %}<div class="sub why">{{ why }}</div>{% endfor %}{% endif %}
+    </div>
+  </div>
+  <div class="tile info">{% include "runs/_tile_icon.html" with icon="chess-board" %}
+    <div class="inner"><h4>Games, all time</h4>
+      <div class="big">{{ totals.games|floatformat:"0g" }}</div>
+      <div class="sub">on {{ totals.tests }} test{{ totals.tests|pluralize }}{% if g.per_hour is not None %} · {{ g.per_hour }} an hour lately{% endif %} · <span{% if totals.crashes %} class="hot"{% endif %}>{{ totals.crashes }} crash{{ totals.crashes|pluralize:"es" }}</span>, {{ totals.timeloss }} time loss{{ totals.timeloss|pluralize:"es" }}</div>
+    </div>
+  </div>
+  <div class="tile warning ink">
+    <div class="inner"><h4>Last workload</h4>
+      {% if last %}<div class="big small"><a href="{% url 'match' last.match %}">{{ last.label }}</a></div>
+      <div class="sub">{{ last.kind }} against {{ last.against }} · {{ last.workloads }} workload{{ last.workloads|pluralize }}, {{ last.games }} game{{ last.games|pluralize }} on it · {{ last.ago }}</div>
+      <div class="sub">Contributed to {% for kind, n in kinds %}{{ n }} {{ kind }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
+      {% else %}<div class="big small">None yet</div><div class="sub">It has not played a test.</div>{% endif %}
+    </div>
+  </div>
+  <div class="tile grey">
+    <div class="inner"><h4>Approval</h4>
+      {% if approval %}<div class="big">{{ approval.state|capfirst }}</div>
+      {% if approval.enabled is not None %}<div class="sub">{% if approval.enabled %}Enabled: takes work{% else %}Disabled: takes no work{% endif %}</div>{% endif %}
+      {% else %}<div class="big small">Not kept yet</div>
+      <div class="sub">Approval and the switch to stop it taking work arrive with worker registration.</div>
+      {% if token %}<div class="sub">Its token is {% if token.active %}active{% else %}revoked{% endif %}.</div>{% endif %}{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if trouble %}
+<div class="card top-worker">
+  <h3 class="box-title">Trouble now</h3>
+  {% for t in trouble %}
+  <p><span class="pill st-{{ t.step.blame }}">{{ t.step.blame }}</span> {{ t.where }} on <a href="{% url 'match' t.match %}">{{ t.label }}</a>: {{ t.step.detail }}
+    <span class="muted">· {{ t.step.tries }} {% if t.step.tries == 1 %}try{% else %}tries{% endif %}{% if t.step.retry_at %}, next try {{ t.step.retry_at|date:"H:i:s" }}{% endif %}</span></p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="worker-grid">
+  <section class="card">
+    <h3 class="box-title">Hardware</h3>
+    <dl class="kv">{% for k, v in hardware %}<dt>{{ k }}</dt><dd>{{ v }}</dd>{% endfor %}</dl>
+    <div class="flags">
+      <div class="muted">CPU flags{% if pills %} <span class="count">{{ pills|length }}</span>{% endif %}</div>
+      {% if pills %}<div class="flagpills">
+        {% for flag, what in pills %}{% if what %}<span class="tip flagpill known" tabindex="0" role="button" aria-label="{{ flag }}: {{ what }}">{{ flag }}<span class="tip-text" role="tooltip"><b>{{ flag }}</b>: {{ what }}</span></span>{% else %}<span class="flagpill">{{ flag }}</span>{% endif %}{% endfor %}
+      </div>{% else %}<p class="muted">none reported</p>{% endif %}
+    </div>
+  </section>
+
+  <section class="card">
+    <h3 class="box-title">Toolchains</h3>
+    {% if toolchains.rows %}<ul class="tools">{% for t in toolchains.rows %}
+      <li{% if not t.found %} class="missing"{% endif %}><span class="lang lang-{% if t.found %}{{ t.cls }}{% else %}gone{% endif %}">{{ t.lang }}</span><span class="tool">{{ t.name }}</span><span class="ver">{% if t.found %}{{ t.version }}{% elif toolchains.complete %}not found{% else %}version not reported{% endif %}</span></li>{% endfor %}
+    </ul>{% else %}<p class="muted">The worker has reported no tools.</p>{% endif %}
+    {% if not toolchains.complete %}<p class="muted">Only what the worker reported with each engine is listed; the tools it was not asked about are not shown as missing. Registration will record every toolchain it looks for.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h3 class="box-title">Software</h3>
+    <dl class="kv">{% for k, v in software %}<dt>{{ k }}</dt><dd>{{ v }}</dd>{% empty %}<dt>System</dt><dd class="muted">not reported</dd>{% endfor %}</dl>
+  </section>
+
+  <section class="card">
+    <h3 class="box-title">Engines</h3>
+    <div class="scroll"><table><thead><tr><th>Engine</th><th>Plays it</th><th>Compiler</th></tr></thead><tbody>
+    {% for engine, ok, why, compiler in supported %}<tr><td>{{ engine }}</td>
+      <td>{% if ok %}yes{% else %}<span class="worse">no</span> <span class="muted">{{ why|join:"; " }}</span>{% endif %}</td>
+      <td>{{ compiler|default:"–" }}</td></tr>{% empty %}<tr><td colspan="3" class="muted">No engine is set up.</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% if info.token_engines %}<p class="muted">Has an access token for {{ info.token_engines|join:", " }}.</p>{% endif %}
+  </section>
+</div>
+{% endwith %}
+{% endif %}
+
 {% if may_act and nameable %}
-<div class="card">
+<div class="card" style="margin-top: 1rem">
   <h3 class="box-title">Where it is</h3>
   <form method="post" action="{% url 'machine_place' %}" class="place-form">{% csrf_token %}
     <input type="hidden" name="name" value="{{ name }}">
@@ -23,66 +147,15 @@
 {% elif not nameable %}<p class="muted">This worker has no name (<code>-I</code>), so a place cannot be kept for it.</p>{% endif %}
 
 {% if worker %}
-<div class="card" style="margin-top: 1rem">
-  <h3 class="box-title">Now</h3>
-  <dl class="chips">
-    <div><dt>Status</dt><dd>{% if row.state == "playing" %}playing <a href="{% url 'match' row.match %}">{{ row.label }}</a>{% elif row.state == "idle" %}idle{% else %}<span class="worse">gone quiet</span>{% endif %}</dd></div>
-    <div><dt>Last heard</dt><dd>{{ machine.updated|date:"D j M H:i" }} <span class="muted">{{ ago }}</span></dd></div>
-    <div><dt>MNPS dev / base</dt><dd>{% if machine.dev_mnps or machine.base_mnps %}{{ machine.dev_mnps|floatformat:2 }}M / {{ machine.base_mnps|floatformat:2 }}M{% else %}<span class="muted">–</span>{% endif %}</dd></div>
-    <div><dt>Response</dt><dd>{% if rtt is not None %}{% if rtt < 10 %}{{ rtt|floatformat:1 }}{% else %}{{ rtt|floatformat:0 }}{% endif %} ms <span class="muted">network round trip</span>{% else %}<span class="muted">–</span>{% endif %}</dd></div>
-    <div><dt>Games</dt><dd>{{ row.games }}</dd></div>
-    <div><dt>Tests</dt><dd>{{ row.tests }}</dd></div>
-  </dl>
-</div>
-
-{% if trouble %}
-<div class="card" style="margin-top: 1rem">
-  <h3 class="box-title">Trouble now</h3>
-  {% for t in trouble %}
-  <p><span class="pill st-{{ t.step.blame }}">{{ t.step.blame }}</span> {{ t.where }} on <a href="{% url 'match' t.match %}">{{ t.label }}</a>: {{ t.step.detail }}
-    <span class="muted">· {{ t.step.tries }} {% if t.step.tries == 1 %}try{% else %}tries{% endif %}{% if t.step.retry_at %}, next try {{ t.step.retry_at|date:"H:i:s" }}{% endif %}</span></p>
-  {% endfor %}
-</div>
-{% endif %}
-
-<div class="card" style="margin-top: 1rem">
-  <h3 class="box-title">Engines</h3>
-  <div class="scroll"><table><thead><tr><th>Engine</th><th>Plays it</th><th>Compiler</th></tr></thead><tbody>
-  {% for engine, ok, why, compiler in supported %}<tr><td>{{ engine }}</td>
-    <td>{% if ok %}yes{% else %}<span class="worse">no</span> <span class="muted">{{ why|join:"; " }}</span>{% endif %}</td>
-    <td>{{ compiler|default:"–" }}</td></tr>{% empty %}<tr><td colspan="3" class="muted">No engine is set up.</td></tr>{% endfor %}
-  </tbody></table></div>
-  {% if info.token_engines %}<p class="muted">Has an access token for {{ info.token_engines|join:", " }}.</p>{% endif %}
-</div>
-
-<div class="sect-grid" style="margin-top: 1rem">
-  {% for title, items in info.sections %}
-  <div class="card">
-    <h3 class="box-title">{{ title }}</h3>
-    {% if title == "GPU" %}
-      {% if items %}<dl>{% for name, detail in items %}<dt>{{ forloop.counter }}</dt><dd>{{ name }}{% if detail %} <span class="muted">{{ detail }}</span>{% endif %}</dd>{% endfor %}</dl>
-      {% else %}<p class="muted">none reported</p>{% endif %}
-    {% elif items %}<dl>{% for label, value in items %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
-    {% else %}<p class="muted">not reported</p>{% endif %}
-  </div>
-  {% endfor %}
-</div>
-
-<div class="card" style="margin-top: 1rem">
-  <h3 class="box-title">CPU flags <span class="right muted">{{ pills|length }}</span></h3>
-  {% if pills %}<div class="flagpills">
-    {% for flag, what in pills %}{% if what %}<span class="tip flagpill known" tabindex="0" role="button" aria-label="{{ flag }}: {{ what }}">{{ flag }}<span class="tip-text" role="tooltip"><b>{{ flag }}</b>: {{ what }}</span></span>{% else %}<span class="flagpill">{{ flag }}</span>{% endif %}{% endfor %}
-  </div>{% else %}<p class="muted">none reported</p>{% endif %}
-</div>
-
-<div class="card" style="margin-top: 1rem">
-  <h3 class="box-title">Recent tests</h3>
+<div class="card" style="margin-top: 1rem" id="tests">
+  <h3 class="box-title">Every test it has played <span class="right muted">{{ tests_page.paginator.count }}</span></h3>
   {% if recent %}
   <div class="scroll"><table><thead><tr><th>Test</th><th class="num">Games</th><th class="num">Workloads</th><th class="num">Crashes</th><th class="num">Time losses</th><th class="num">Failed steps</th><th>Last</th></tr></thead><tbody>
   {% for t in recent %}<tr><td><a href="{% url 'match' t.match %}">{{ t.label }}</a></td><td class="num">{{ t.games }}</td><td class="num">{{ t.workloads }}</td>
     <td class="num{% if t.crashes %} worse{% endif %}">{{ t.crashes }}</td><td class="num{% if t.timeloss %} worse{% endif %}">{{ t.timeloss }}</td>
     <td class="num{% if t.failures %} worse{% endif %}">{{ t.failures }}</td><td class="nowrap">{{ t.updated|date:"D j M H:i" }}</td></tr>{% endfor %}
   </tbody></table></div>
+  {% pager tests_page %}
   {% else %}<p class="muted">It has not played a test.</p>{% endif %}
 </div>
 {% endif %}
@@ -95,4 +168,5 @@
     <a href="{% url 'admin:runs_machine_changelist' %}">In the admin</a>.</p>
 </div>
 {% endif %}
+{% if worker %}{% include "lab/_worker_page_script.html" %}{% endif %}
 {% endblock %}

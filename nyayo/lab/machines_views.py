@@ -27,7 +27,7 @@ def machines_page(request):
 
 
 def machine_page(request, name):
-    page = machines.find(name)
+    page = machines.find(name, request=request)
     if page is None:
         raise Http404
     return render(request, 'lab/machine.html', {'here': 'machines', 'now': timezone.now(), 'may_act': may_act(request.user), **page})

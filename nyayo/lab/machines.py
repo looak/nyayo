@@ -11,18 +11,24 @@ Only what is listed in `SYSTEM` and `fields()` is ever read out of `Machine.info
 """
 
 import datetime
+import math
 from collections import defaultdict
 
+from django.core.paginator import Paginator
 from django.db.models import Count, Max, Sum
 from django.utils import timezone
 
-from nyayo.lab import cpuflags, steps as walk
+from nyayo.lab import cpuflags, hours, steps as walk
 from nyayo.lab.ids import match_id
 from nyayo.lab.models import EngineConfig, Machine, Place, Result, Step, Test
+from nyayo.paging import PAGE_SIZE, paginate
 from nyayo.runs.models import Machine as Token
 
 # A worker is on a test, or idle, while it was heard from this recently: the meaning of `active` in a match's document
 ACTIVE = datetime.timedelta(minutes=5)
+
+# what a test's mode is called where a box's contribution is counted
+KINDS = {'SPRT': 'SPRT', 'SPSA': 'SPSA', 'GAMES': 'games', 'DATAGEN': 'datagen'}
 
 NAME_KEY, MAC_KEY = 'info__machine_name', 'info__mac_address'
 
@@ -267,7 +273,172 @@ def listing(now=None):
     return rows
 
 
-def find(name, now=None):
+LANGUAGES = {'g++': 'C++', 'clang++': 'C++', 'c++': 'C++', 'gcc': 'C', 'clang': 'C', 'cc': 'C', 'cl': 'C++', 'python': 'Python',
+             'python3': 'Python', 'rustc': 'Rust', 'cargo': 'Rust', 'dotnet': 'C#', 'make': 'Build', 'cmake': 'Build', 'ninja': 'Build'}
+LANGUAGE_CLASSES = {'C++': 'cpp', 'C': 'c', 'C#': 'cs', 'Rust': 'rust', 'Python': 'python', 'Build': 'build'}
+
+
+def nice(top):
+    """The next round number at or above `top` for an axis: 1, 1.2, 1.5, 2, 3, 4, 5, 6, 8 times a power of ten."""
+    if top <= 0:
+        return 1
+    scale = 10 ** math.floor(math.log10(top))
+    for step in (1, 1.2, 1.5, 2, 3, 4, 5, 6, 8, 10):
+        if step * scale >= top - 1e-9:
+            return step * scale
+    return 10 * scale
+
+
+def plain(number):
+    return int(number) if number == int(number) else number
+
+
+def duration(seconds):
+    minutes = int(seconds // 60)
+    return '%d h %d min' % divmod(minutes, 60) if minutes >= 60 else '%d min' % minutes
+
+
+def shown_ms(value):
+    return ('%.1f' % value) if value < 10 else '%d' % round(value)
+
+
+def graph(rows, now, up):
+    """The 48-hour graph of a box as the page draws it, from `hours.last_hours`: a pillar of games for each hour, the
+    response time line (broken where there is none, and absent when no hour has one), and a strip of whether it was heard
+    from. An hour before the first one on record is *blank*, not offline: a new box has nothing to show for the time before
+    nyayo knew it, and an hour with no games is a quiet one, not a broken one."""
+    first = next((i for i, r in enumerate(rows) if r['has']), None)
+    top = nice(max([r['games'] for r in rows] + [4]))
+    measured = [r['rtt'] for r in rows if r['rtt'] is not None]
+    ceiling = nice(max(measured) * 1.3) if measured else None
+    cols, segments, run, online = [], [], [], 0
+    for i, r in enumerate(rows):
+        ago_h = len(rows) - 1 - i
+        when = timezone.localtime(r['hour']).strftime('%a %H:00')
+        heard = r['heard']
+        if first is None or i < first:
+            look, says = 'none', 'nothing on record yet'
+        elif heard >= 1800:
+            look, says = 'on', 'online'
+        elif heard > 0:
+            look, says = 'part', 'heard from for %s' % duration(heard)
+        else:
+            look, says = 'off', 'offline' if r['has'] else 'offline, nothing heard'
+        online += heard
+        label = 'this hour' if ago_h == 0 else '1 h ago' if ago_h == 1 else '%d h ago' % ago_h
+        bits = []
+        if look != 'none':
+            bits.append('%d game%s' % (r['games'], '' if r['games'] == 1 else 's'))
+            if r['rtt'] is not None:
+                bits.append('%s ms' % shown_ms(r['rtt']))
+        bits.append(says)
+        cols.append({'pct': round(r['games'] / top * 100, 1), 'look': look, 'games': r['games'],
+                     'tip': '%s, %s: %s' % (when, label, ', '.join(bits))})
+        if ceiling and r['rtt'] is not None:
+            run.append((i * 10 + 5, round(100 - r['rtt'] / ceiling * 100, 1)))
+        elif run:
+            segments.append(run)
+            run = []
+    if run:
+        segments.append(run)
+    lines = [' '.join('%s,%s' % p for p in (seg if len(seg) > 1 else [(seg[0][0] - 3, seg[0][1]), (seg[0][0] + 3, seg[0][1])]))
+             for seg in segments]
+
+    last24 = rows[-24:]
+    heard24 = sum(r['heard'] for r in last24)
+    games24 = sum(r['games'] for r in last24)
+    recorded = len(rows) - first if first is not None else 0
+    span = (now - rows[first]['hour']).total_seconds() if first is not None else 0
+    return {
+        'cols': cols, 'lines': lines, 'top': plain(top), 'half': plain(top / 2),
+        'rtt_top': plain(ceiling) if ceiling else None, 'rtt_half': plain(ceiling / 2) if ceiling else None, 'has_rtt': bool(measured),
+        'recorded': recorded, 'empty': first is None, 'little': first is None or recorded < len(rows),
+        'since': timezone.localtime(rows[first]['hour']) if first is not None else None,
+        'games_48': sum(r['games'] for r in rows), 'average': round(sum(r['games'] for r in rows) / len(rows)),
+        'up_for': duration(online) if first is not None else '', 'up_pct': min(100, round(online / span * 100)) if span > 0 else None,
+        'per_hour': round(games24 / (heard24 / 3600)) if heard24 >= 600 else None,
+        'rtt_now': measured[-1] if measured and up else None, 'up_now': up,
+    }
+
+
+def hardware(info):
+    """The rows of the Hardware box: what the worker reported of its processor, memory and graphics cards."""
+    sections = dict(info['sections'])
+    rows = []
+    if info['cpu']:
+        rows.append(('CPU', info['cpu']))
+    counted = []
+    if info['physical'] is not None:
+        counted.append('%s cores' % info['physical'])
+    if info['logical'] is not None:
+        counted.append('%s threads' % info['logical'])
+    if info['sockets'] is not None:
+        counted.append('%s socket%s' % (info['sockets'], '' if info['sockets'] == 1 else 's'))
+    if counted or info['threads'] is not None:
+        playing = ' · playing with %s' % info['threads'] if info['threads'] is not None else ''
+        rows.append(('Cores', ', '.join(counted) + playing))
+    if info['isa']:
+        rows.append(('Instruction set', info['isa']))
+    memory = ' · '.join(str(v) if label == 'RAM' else '%s huge pages' % v for label, v in sections.get('Memory') or [])
+    rows.append(('Memory', memory or 'not reported'))
+    gpus = sections.get('GPU') or []
+    rows.append(('GPU', ', '.join('%s (%s)' % (name, detail) if detail else name for name, detail in gpus) or 'none reported'))
+    return rows
+
+
+def software(info, machine):
+    """The rows of the Software box, the client's version said against the one the server wants."""
+    from nyayo.lab import config
+    rows = []
+    for label, value in dict(info['sections']).get('Software') or []:
+        if label == 'Client version':
+            try:
+                wanted = config.client_version()
+                value = '%s, %s' % (value, 'up to date' if str(value) == str(wanted) else 'the server wants %s' % wanted)
+            except Exception:
+                pass
+        rows.append((label, value))
+    rows += [(label, value) for label, value in dict(info['sections']).get('Compilers') or [] if label == 'C++ for fastchess']
+    return rows
+
+
+def toolchains(machine):
+    """{ rows: [{ lang, name, version, found }], complete } . Registration (step 12) records the toolchains a worker finds,
+    found or not (a dict of name to version or empty, or a list of {name, version}); until a worker has them the list is
+    what it reported with each engine (a compiler and its version) and its Python, and `complete` is False so the page
+    says so."""
+    kept = getattr(machine, 'toolchains', None)
+    found = []
+    if isinstance(kept, dict) and kept:
+        found = [(str(name), str(version) if version else '') for name, version in kept.items()]
+    elif isinstance(kept, list) and kept:
+        found = [(str(item['name']), str(item.get('version') or '')) for item in kept if isinstance(item, dict) and item.get('name')]
+    complete = bool(found)
+    if not found:
+        seen = {}
+        for text in fields(machine)['compilers'].values():
+            parts = text.split()
+            if parts:
+                seen.setdefault(parts[0], parts[1] if len(parts) > 1 else '')
+        python = machine.info.get('python_ver') if isinstance(machine.info, dict) else ''
+        if python:
+            seen.setdefault('python3', str(python))
+        found = list(seen.items())
+    rows = []
+    for name, version in found:
+        lang = LANGUAGES.get(name.lower(), 'Tool')
+        rows.append({'lang': lang, 'cls': LANGUAGE_CLASSES.get(lang, 'tool'), 'name': name, 'version': version, 'found': bool(version)})
+    return {'rows': rows, 'complete': complete}
+
+
+def approval(machine):
+    """What registration (step 12) keeps of a worker's approval, or None while the model has none."""
+    if not hasattr(machine, 'state'):
+        return None
+    return {'state': machine.state, 'enabled': getattr(machine, 'enabled', None)}
+
+
+def find(name, now=None, request=None):
     """The box called this (a name, or `machine N` for the session N of one with none), or None, with all that its
     page shows."""
     now = now or timezone.now()
@@ -294,35 +465,46 @@ def find(name, now=None):
     page.update(place=places().get(box['name'].lower(), '') if box['name'] else '', nameable=bool(box['name']),
                 info=info, machine=machine, ago=ago(machine.updated, now), rtt=None if row and row['state'] == 'quiet' else machine.rtt_ms, supported=[(c.name, c.name in info['supported'], lacks(machine.info, c), info['compilers'].get(c.name, '')) for c in configs])
 
-    # every session's results, newest test first
+    # every session's results: the totals and the kinds in a query each, the tests a page at a time
     ids = [i for i, user_id, name, mac in Machine.objects.values_list('id', 'user_id', NAME_KEY, MAC_KEY)
            if box_key(clean_name(name), user_id, mac) == box['key']]
-    results = list(Result.objects.filter(machine_id__in=ids).select_related('test', 'test__dev', 'test__base').order_by('-updated'))
-    by_test = {}
-    for result in results:
-        t = by_test.setdefault(result.test_id, {'test': result.test, 'label': test_label(result.test), 'match': match_id(result.test_id),
-                                                'games': 0, 'crashes': 0, 'timeloss': 0, 'workloads': 0, 'updated': result.updated, 'result_ids': []})
-        t['games'] += result.games
-        t['crashes'] += result.crashes
-        t['timeloss'] += result.timeloss
-        t['workloads'] += result.workloads
-        t['result_ids'].append(result.id)
-    recent = list(by_test.values())[:20]
-    steps = Step.objects.filter(result_id__in=[i for t in recent for i in t['result_ids']], state='failed').select_related('result')
-    failed = defaultdict(list)
-    for step in steps:
-        failed[step.result.test_id].append(step)
-    for t in recent:
-        t['failures'] = len(failed[t['test'].id])
-    page['recent'] = recent
+    mine = Result.objects.filter(machine_id__in=ids)
+    sums = mine.aggregate(games=Sum('games'), crashes=Sum('crashes'), timeloss=Sum('timeloss'), tests=Count('test', distinct=True))
+    page['totals'] = {k: v or 0 for k, v in sums.items()}
+    kinds = {row['test__test_mode']: row['n'] for row in mine.values('test__test_mode').annotate(n=Count('test', distinct=True))}
+    page['kinds'] = [(KINDS.get(mode, mode), kinds[mode]) for mode in sorted(kinds, key=lambda m: -kinds[m])]
+    last = mine.select_related('test', 'test__dev', 'test__base').order_by('-updated').first()
+    page['last'] = None if last is None else {
+        'label': test_label(last.test), 'match': match_id(last.test_id), 'kind': KINDS.get(last.test.test_mode, last.test.test_mode),
+        'against': last.test.base.name, 'workloads': last.workloads, 'games': last.games, 'ago': ago(last.updated, now),
+        'finished': last.test.finished}
+
+    listing_rows = mine.values('test_id').annotate(games=Sum('games'), crashes=Sum('crashes'), timeloss=Sum('timeloss'),
+                                                  workloads=Sum('workloads'), updated=Max('updated')).order_by('-updated', '-test_id')
+    page['tests_page'] = paginate(listing_rows, request) if request is not None else Paginator(listing_rows, PAGE_SIZE).get_page(1)
+    shown = list(page['tests_page'])
+    tests = {t.id: t for t in Test.objects.filter(id__in=[r['test_id'] for r in shown]).select_related('dev', 'base')}
+    failed = defaultdict(int)
+    for count in Step.objects.filter(result__machine_id__in=ids, result__test_id__in=list(tests), state='failed')             .values('result__test_id').annotate(n=Count('id')):
+        failed[count['result__test_id']] = count['n']
+    page['recent'] = [{'test': tests[r['test_id']], 'label': test_label(tests[r['test_id']]), 'match': match_id(r['test_id']),
+                       'games': r['games'], 'crashes': r['crashes'], 'timeloss': r['timeloss'], 'workloads': r['workloads'],
+                       'updated': r['updated'], 'failures': failed[r['test_id']]} for r in shown if r['test_id'] in tests]
     page['pills'] = cpuflags.pills(info['flags'])
 
     # trouble now: a failed step the worker itself is blamed for (or unclear) on a test that has not ended
     trouble = []
-    for step in Step.objects.filter(result_id__in=[r.id for r in results if not r.test.finished], state='failed',
-                                    blame__in=('worker', 'unclear')).select_related('result', 'result__test'):
+    for step in Step.objects.filter(result__machine_id__in=ids, result__test__finished=False, state='failed',
+                                    blame__in=('worker', 'unclear')).select_related('result', 'result__test', 'result__test__dev', 'result__test__base'):
         trouble.append({'step': step, 'where': '%s %s' % (step.step, step.side) if step.side else step.step,
                         'match': match_id(step.result.test_id), 'label': test_label(step.result.test)})
     page['trouble'] = trouble
     page['sessions'] = len(ids)
+
+    # the graph, the figures that come from it, and the sections the mock has
+    page['graph'] = graph(hours.last_hours(hours.box_of(machine), now), now, up=row is not None and row['state'] != 'quiet')
+    page['hardware'] = hardware(info)
+    page['software'] = software(info, machine)
+    page['toolchains'] = toolchains(machine)
+    page['approval'] = approval(machine)
     return page
