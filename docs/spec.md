@@ -258,7 +258,8 @@ book map among them) and record. No filter form yet.
 
 A match with an `sprt` block gets **its own page**: an SPRT is a test of one change, not a field of opponents, so it
 doesn't share the gauntlet's. Everything on it is the producer's; nyayo computes no SPRT. The top card has the games
-played, the Elo with its error (the producer's, else nyayo's from the counts), the LLR with its bounds, the time
+played (the results' count, which is what the test was decided on, with the pace made of it; the games kept may be more, as a worker
+uploads its whole file with the games it played after its last report, or fewer, and the page then says so under *Games*), the Elo with its error (the producer's, else nyayo's from the counts), the LLR with its bounds, the time
 (started, elapsed, pace, games and time to go), the test (time control, UCI options, book, Elo bounds, alpha, beta,
 model) and both engines. A block in the testers' layout (Elo, SPRT, LLR, Games, Penta, as OpenBench's and fishtest's
 pages show it) can be copied with a button. The results follow with the pentanomial as pillars, time losses, crashes

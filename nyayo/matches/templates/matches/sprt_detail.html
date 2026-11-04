@@ -230,6 +230,7 @@
 
 {% if entries %}
 <h2 id="games">Games</h2>
+{% if games_note %}<p class="muted games-note">The results count {{ games_note.counted }} games, which is what the figures above are made of; {{ games_note.kept }} are kept here{% if games_note.kept > games_note.counted %}, the extra ones played after the last report the results had{% endif %}.</p>{% endif %}
 {% include "matches/_games_table.html" with entries=groups.playing title="Playing" count=totals.playing %}
 {% include "matches/_games_table.html" with entries=groups.unfinished title="Cut off" count=totals.unfinished %}
 {% include "matches/_games_table.html" with entries=groups.finished title="Finished" count=totals.finished %}
