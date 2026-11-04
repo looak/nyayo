@@ -138,10 +138,9 @@ class Machine(Model):
     info      = JSONField()
     workload  = IntegerField(default=0)
 
-    # How long the worker's last call took, as it measured it (a worker that does not say leaves both empty), and a
-    # running average of the calls, weighted to the recent
-    rtt_ms     = FloatField(null=True, blank=True)
-    rtt_avg_ms = FloatField(null=True, blank=True)
+    # The network's round trip to the worker in ms, as the kernel measured it on its last poll or heartbeat (lab/rtt.py);
+    # empty when it could not be read
+    rtt_ms    = FloatField(null=True, blank=True)
 
     def __str__(self):
         return '[%d] %s' % (self.id, self.user.username)

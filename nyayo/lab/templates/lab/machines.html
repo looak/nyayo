@@ -33,7 +33,7 @@
       {% if r.worker %}<td data-label="Threads" class="num">{{ r.threads|default_if_none:"–" }}{% if r.sockets and r.sockets > 1 %} <span class="muted">/ {{ r.sockets }} sockets</span>{% endif %}</td>
       <td data-label="Now">{% if r.state == "playing" %}<a href="{% url 'match' r.match %}">{{ r.label }}</a>{% elif r.state == "idle" %}<span class="muted">idle</span>{% else %}<span class="worse">gone quiet</span>{% endif %}</td>
       <td data-label="MNPS dev / base" class="num nowrap">{% if r.dev_mnps or r.base_mnps %}{{ r.dev_mnps|floatformat:2 }}M / {{ r.base_mnps|floatformat:2 }}M{% else %}<span class="muted">–</span>{% endif %}</td>
-      <td data-label="Response" class="num nowrap">{% if r.rtt is not None %}{{ r.rtt|floatformat:0 }} ms{% if r.rtt_avg is not None %} <span class="muted">avg {{ r.rtt_avg|floatformat:0 }}</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td data-label="Response" class="num nowrap">{% if r.rtt is not None %}{% if r.rtt < 10 %}{{ r.rtt|floatformat:1 }}{% else %}{{ r.rtt|floatformat:0 }}{% endif %} ms{% else %}<span class="muted">–</span>{% endif %}</td>
       {% else %}<td class="num muted na">–</td><td><span class="muted">doesn't play</span></td><td class="num muted na">–</td><td class="num muted na">–</td>{% endif %}
       <td data-label="Last heard" class="nowrap">{% if r.updated %}{% if r.state == "quiet" %}<span class="worse">{{ r.ago }}</span>{% else %}{{ r.ago }}{% endif %}{% else %}<span class="muted">never</span>{% endif %}</td>
       <td data-label="Games" class="num">{% if r.worker %}{{ r.games }}{% else %}<span class="muted">–</span>{% endif %}</td>

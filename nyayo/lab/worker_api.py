@@ -289,9 +289,6 @@ def client_submit_error(request, machine):
 def client_submit_results(request, machine):
 
     # Returns {}, or { 'stop' : True }
-    rtt.note(request, machine)
-    if rtt.changed(machine):
-        machine.save(update_fields=['updated', *rtt.changed(machine)])
     return JsonResponse(utils.update_test(request, machine))
 
 @csrf_exempt

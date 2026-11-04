@@ -29,7 +29,7 @@
     <div><dt>Status</dt><dd>{% if row.state == "playing" %}playing <a href="{% url 'match' row.match %}">{{ row.label }}</a>{% elif row.state == "idle" %}idle{% else %}<span class="worse">gone quiet</span>{% endif %}</dd></div>
     <div><dt>Last heard</dt><dd>{{ machine.updated|date:"D j M H:i" }} <span class="muted">{{ ago }}</span></dd></div>
     <div><dt>MNPS dev / base</dt><dd>{% if machine.dev_mnps or machine.base_mnps %}{{ machine.dev_mnps|floatformat:2 }}M / {{ machine.base_mnps|floatformat:2 }}M{% else %}<span class="muted">–</span>{% endif %}</dd></div>
-    <div><dt>Response</dt><dd>{% if machine.rtt_ms is not None %}{{ machine.rtt_ms|floatformat:0 }} ms{% if machine.rtt_avg_ms is not None %} <span class="muted">avg {{ machine.rtt_avg_ms|floatformat:0 }} ms</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</dd></div>
+    <div><dt>Response</dt><dd>{% if rtt is not None %}{% if rtt < 10 %}{{ rtt|floatformat:1 }}{% else %}{{ rtt|floatformat:0 }}{% endif %} ms <span class="muted">network round trip</span>{% else %}<span class="muted">–</span>{% endif %}</dd></div>
     <div><dt>Games</dt><dd>{{ row.games }}</dd></div>
     <div><dt>Tests</dt><dd>{{ row.tests }}</dd></div>
   </dl>

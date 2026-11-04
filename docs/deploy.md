@@ -364,3 +364,9 @@ makes the next sync upload everything again.
 If nyayo moves behind nginx or Caddy at a path such as `https://bobby.home/nyayo`, set `NYAYO_SCRIPT_NAME=/nyayo`,
 have the proxy strip that prefix before forwarding to port 8001, and add the new origin to
 `NYAYO_CSRF_TRUSTED_ORIGINS`.
+
+The *Response* on the Machines pages is the kernel's round-trip estimate of the connection a worker's call arrived on
+(`nyayo/lab/rtt.py`). Behind a proxy that connection is the proxy's, so the figure would be the proxy to nyayo, a few
+microseconds on one machine, and not the worker's network at all. Until it is measured another way (the proxy passing a
+measured time on in a header, which nyayo does not read), expect it to say nothing useful there. It is also empty under
+`runserver` and on Windows, and for a box that is offline.

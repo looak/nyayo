@@ -373,7 +373,12 @@ def passing_games(r):
     check('Smoke: eight games' in page and '<dt>Ended</dt>' in page, 'the match page lacks its name or its end: %s' % (
         re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', re.sub(r'(?s)<style.*?</style>', '', page)))[:1200]))
     check(match.pk in r.page('/matches'), 'the match is not on the list')
-    return 'test %d: 8 games, named, base bench typed, the walk passed, %d games put away, pages answer' % (test_id, kept)
+    # the round trip, read from the kernel's TCP_INFO of the connection the worker's calls came in on, under gunicorn
+    from nyayo.lab.models import Machine
+    rtt = Machine.objects.filter(info__machine_name='smoke-0').order_by('-id').first().rtt_ms
+    check(rtt is not None and 0 < rtt < 1000, "the worker's round trip was not measured: %s" % (rtt))
+    check('%s ms' % ('%.1f' % rtt if rtt < 10 else '%.0f' % rtt) in r.page('/machines'), 'the Machines page does not show %s ms' % (rtt))
+    return 'test %d: 8 games, named, base bench typed, the walk passed, %d games put away, pages answer, round trip %.3f ms' % (test_id, kept, rtt)
 
 
 def sprt_to_result(r):

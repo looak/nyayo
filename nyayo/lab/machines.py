@@ -248,7 +248,7 @@ def listing(now=None):
         rows.append({
             'health': health(state, ago(machine.updated, now), trouble.get(machine.id, []), supports, configs, missing),
             'place': where.get(box['name'].lower(), '') if box['name'] else '', 'nameable': bool(box['name']),
-            'rtt': machine.rtt_ms, 'rtt_avg': machine.rtt_avg_ms, 'os_kind': info['os_kind'], 'wsl': info['wsl'],
+            'rtt': None if state == 'quiet' else machine.rtt_ms, 'os_kind': info['os_kind'], 'wsl': info['wsl'],
             'name': name, 'user': machine.user.username, 'os': info['os'], 'os_ver': info['os_ver'],
             'cpu': info['cpu'], 'threads': info['threads'], 'sockets': info['sockets'],
             'state': state, 'test': test, 'match': match_id(test.id) if test else '', 'label': test_label(test) if test else '',
@@ -261,7 +261,7 @@ def listing(now=None):
             rows.append({'name': token['name'], 'worker': False, 'token': token, 'state': 'token', 'updated': token['last'], 'ago': token['ago'],
                          'games': 0, 'tests': 0, 'sessions': 0, 'supports': [], 'missing': [], 'user': '', 'os': '', 'os_ver': '', 'cpu': '',
                          'threads': None, 'sockets': None, 'test': None, 'match': '', 'label': '', 'id': None, 'health': None,
-                         'place': where.get(key, ''), 'nameable': True, 'rtt': None, 'rtt_avg': None, 'os_kind': '', 'wsl': False})
+                         'place': where.get(key, ''), 'nameable': True, 'rtt': None, 'os_kind': '', 'wsl': False})
     order = {'playing': 0, 'idle': 1, 'quiet': 2, 'token': 3}
     rows.sort(key=lambda r: (order[r['state']], -(r['updated'].timestamp() if r['updated'] else 0), r['name'].lower()))
     return rows
@@ -292,7 +292,7 @@ def find(name, now=None):
     info = fields(machine)
     configs = list(EngineConfig.objects.filter(enabled=True).order_by('name'))
     page.update(place=places().get(box['name'].lower(), '') if box['name'] else '', nameable=bool(box['name']),
-                info=info, machine=machine, ago=ago(machine.updated, now), supported=[(c.name, c.name in info['supported'], lacks(machine.info, c), info['compilers'].get(c.name, '')) for c in configs])
+                info=info, machine=machine, ago=ago(machine.updated, now), rtt=None if row and row['state'] == 'quiet' else machine.rtt_ms, supported=[(c.name, c.name in info['supported'], lacks(machine.info, c), info['compilers'].get(c.name, '')) for c in configs])
 
     # every session's results, newest test first
     ids = [i for i, user_id, name, mac in Machine.objects.values_list('id', 'user_id', NAME_KEY, MAC_KEY)

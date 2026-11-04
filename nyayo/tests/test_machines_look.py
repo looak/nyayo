@@ -151,26 +151,45 @@ class Place_(TestCase):
 
 
 class ResponseTime(TestCase):
-    def test_it_is_shown_when_the_worker_sent_it_and_a_dash_when_it_did_not(self):
+    def test_it_is_shown_when_it_was_measured_and_a_dash_when_it_was_not(self):
         make_machine("hunt")
         self.assertEqual(row(self.client)["rtt"], None)
         self.assertIn('data-label="Response" class="num nowrap"><span class="muted">–</span>', text(self.client))
-        Machine.objects.update(rtt_ms=12.4, rtt_avg_ms=14.6)
-        self.assertIn("12 ms <span class=\"muted\">avg 15</span>", text(self.client))
-        self.assertIn("12 ms", text(self.client, "/machines/hunt"))
+        Machine.objects.update(rtt_ms=12.4)
+        self.assertIn(">12 ms<", text(self.client))
+        Machine.objects.update(rtt_ms=0.8)
+        self.assertIn(">0.8 ms<", text(self.client))
+        self.assertIn("0.8 ms", text(self.client, "/machines/hunt"))
 
-    def test_note_keeps_the_latest_and_a_short_average_and_ignores_nonsense(self):
-        class Request:
-            def __init__(self, value):
-                self.POST = {} if value is None else {"rtt_ms": value}
+    def test_a_box_that_is_offline_shows_no_number(self):
+        machine = make_machine("hunt")
+        Machine.objects.filter(pk=machine.pk).update(rtt_ms=12.4)
+        age(machine, minutes=9)
+        self.assertEqual(row(self.client)["rtt"], None)
+        self.assertNotIn("12 ms", text(self.client))
+        self.assertNotIn("12 ms", text(self.client, "/machines/hunt"))
 
+
+class Measuring(SimpleTestCase):
+    def test_the_round_trip_is_microseconds_at_byte_68_in_ms(self):
+        from .test_lab_worker_api import FakeSocket
+        self.assertEqual(rtt_module.measure(FakeSocket(12500)), 12.5)
+        self.assertEqual(rtt_module.measure(FakeSocket(1)), 0.001)
+
+    def test_anything_wrong_is_none(self):
+        from .test_lab_worker_api import FakeSocket
+        for sock in (FakeSocket(0), FakeSocket(raises=OSError()), FakeSocket(raises=AttributeError()), FakeSocket(short=True),
+                     FakeSocket(4000 * 1000 * 1000), object(), None):
+            self.assertIsNone(rtt_module.measure(sock))
+
+    def test_note_reads_the_sockets_in_the_environ_and_names_the_field(self):
+        from types import SimpleNamespace
+        from .test_lab_worker_api import FakeSocket
         machine = Machine()
-        for value, expected in ((None, None), ("nan", None), ("-3", None), ("x", None), ("99999999", None), ("10", 10.0)):
-            rtt_module.note(Request(value), machine)
-            self.assertEqual(machine.rtt_ms, expected, value)
-        rtt_module.note(Request("20"), machine)
-        self.assertEqual((machine.rtt_ms, machine.rtt_avg_ms), (20.0, 12.0))
-        self.assertEqual(rtt_module.changed(machine), ["rtt_ms", "rtt_avg_ms"])
+        rtt_module.note(SimpleNamespace(META={"gunicorn.socket": FakeSocket(2000)}), machine)
+        self.assertEqual((machine.rtt_ms, rtt_module.changed(machine), rtt_module.values(machine)), (2.0, ["rtt_ms"], {"rtt_ms": 2.0}))
+        rtt_module.note(SimpleNamespace(META={}), machine)  # runserver has none
+        self.assertEqual(rtt_module.changed(machine), [])
         self.assertEqual(rtt_module.changed(Machine()), [])
 
 
