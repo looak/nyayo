@@ -8,7 +8,6 @@
   <span class="tier">{{ match.kind }}</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state }}</span>{% endif %}
   <span class="muted">{% if settings.runner %}{{ settings.runner.name }} {{ settings.runner.version }}{% else %}{{ match.producer_name }}{% endif %}{% if host.name %} on {{ host.name }}{% endif %}{% if settings.concurrency %} · {{ settings.concurrency }} at a time{% endif %} · last report {{ match.updated_at|date:"H:i:s" }}</span>
 </div>
-{% test_actions match %}
 
 {# the figures a glance needs, as Pi-hole's tiles #}
 <div class="tiles">
@@ -42,8 +41,10 @@
   <div class="card-head">
     <h3>Schedule</h3>
     <span class="muted">{{ settings.tc }}{% if settings.concurrency %} · {{ settings.concurrency }} at a time{% endif %}</span>
-    {% if silent %}<span class="outcome silent card-state">silent</span>{% else %}<span class="outcome {{ match.state }} card-state">{{ match.state }}</span>{% endif %}
+    <span class="card-end">
     {% if timing.elapsed is not None %}<span class="timing muted">{% if timing.running %}running for{% else %}ran for{% endif %} {{ timing.elapsed|seconds }}</span>{% endif %}
+    {% if silent %}<span class="outcome silent card-state">silent</span>{% else %}<span class="outcome {{ match.state }} card-state">{{ match.state }}</span>{% endif %}
+    {% test_actions match %}</span>
   </div>
   <div class="score">
     <div class="score-row">

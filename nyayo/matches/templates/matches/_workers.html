@@ -48,7 +48,7 @@
   {% if w.kind == "quiet" and w.quiet_since %}<p class="wnote">Not heard from since {{ w.quiet_since|date:"H:i" }}.</p>
   {% elif w.kind == "elsewhere" %}<p class="wnote">Working on another test now. Its steps and games stay here.</p>{% endif %}
   {% for f in w.failures %}
-  <div class="fail">
+  <div class="case-fail">
     <div class="fail-head"><span class="pill st-{{ f.look }}">{{ f.blame }}</span> <span class="muted">{{ f.where }}</span> <span class="fail-detail">{{ f.detail }}</span>{% if f.tries and f.tries > 1 %} <span class="muted">· {{ f.tries }} tries</span>{% endif %}</div>
     {% for e in f.evidence %}<div class="evidence"><span class="toward st-{{ e.toward }}">{{ e.toward }}</span><span>{{ e.text }}</span></div>{% endfor %}
     {% if f.effect %}<div class="effect"><b>What happens:</b> {{ f.effect }}{% if f.retry_at %} <span class="muted">Next try {{ f.retry_at|date:"H:i:s" }}.</span>{% endif %}</div>{% endif %}

@@ -8,7 +8,6 @@
   <span class="tier">sprt</span> {% if silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state|statename:"long" }}</span>{% endif %}
   <span class="muted">{% if subject_link %}<a href="{{ subject_link }}">{{ subject_line }}</a>{% else %}{{ subject_line }}{% endif %} <span class="vs">against</span> {% if base_link %}<a href="{{ base_link }}">{{ base_line }}</a>{% else %}{{ base_line }}{% endif %}{% if producer_url %} · <a href="{{ producer_url }}">{{ match.producer_name }}</a>{% endif %}</span>
 </div>
-{% test_actions match %}
 
 {% if headline %}
 <section class="card verdict top-{{ headline.look }}">
@@ -67,10 +66,12 @@
   <div class="card-head">
     <h3>SPRT</h3>
     <span class="muted">{{ tc_text }}{% if options_text %} · {{ options_text }}{% endif %}</span>
+    <span class="card-end">
     {% if sprt.result == "passed" %}<span class="outcome pass card-state">passed</span>
     {% elif sprt.result %}<span class="outcome fail card-state">{{ sprt.result }}</span>
     {% elif silent %}<span class="outcome silent card-state">silent</span>
     {% else %}<span class="outcome {{ match.state }} card-state">{{ match.state|statename }}</span>{% endif %}
+    {% test_actions match %}</span>
   </div>
 
   {% if not unstarted %}
