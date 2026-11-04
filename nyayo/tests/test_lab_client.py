@@ -111,3 +111,11 @@ class ClientsOwnTests(SimpleTestCase):
         folder = Path(__file__).resolve().parent / 'client'
         run = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider', str(folder)], capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stdout[-3000:] + run.stderr[-1000:])
+
+
+class OnTheMachinesPage(TestCase):
+    def test_the_box_is_on_the_list_with_this_servers_address(self):
+        page = self.client.get('/machines').content.decode()
+        self.assertIn('Get a worker going', page)
+        self.assertIn('client.py --server http://testserver', page)
+        self.assertEqual(self.client.post('/machine-join-code').status_code, 302)

@@ -178,6 +178,21 @@ class Place(Model):
     def __str__(self):
         return '%s: %s' % (self.name, self.text)
 
+class MachineHour(Model):
+
+    # What one box did in one hour, for the 48-hour graph on its page (lab/hours.py): the games it reported, the seconds
+    # it was heard from, and the round trips measured (their sum and count, so an average can be made). Kept by the box's
+    # name, not by session, so a restart goes on in the same row; pruned after 30 days.
+    box     = CharField(max_length=150)
+    hour    = DateTimeField()
+    games   = IntegerField(default=0)
+    heard   = IntegerField(default=0)
+    rtt_sum = FloatField(default=0.0)
+    rtt_n   = IntegerField(default=0)
+
+    class Meta:
+        constraints = [UniqueConstraint(fields=['box', 'hour'], name='one_row_per_box_hour')]
+
 class Result(Model):
 
     test     = ForeignKey('Test', PROTECT, related_name='test')

@@ -194,14 +194,14 @@ class Measuring(SimpleTestCase):
 
 
 class SystemInSections(TestCase):
-    def test_the_five_sections(self):
+    def test_the_boxes_of_the_page(self):
         make_machine("hunt", cpu_name="Ryzen 9", isa_name="x86-64-avx2", logical_cores=24, physical_cores=12, ram_total_mb=30914,
                      huge_pages="madvise", python_ver="3.12.3", fastchess_ver="1.8.2", os_ver="6.8", cxx_comp="g++",
                      toolchains={"clang": "18.1.3", "make": "4.3", "python3": "3.12.3"})
         page = text(self.client, "/machines/hunt")
-        for heading in ("Hardware", "Memory", "GPU", "Software", "Compilers"):
+        for heading in ("Hardware", "Toolchains", "Software", "Engines"):
             self.assertIn(">%s</h3>" % heading, page)
-        for expected in ("Ryzen 9", "12 physical / 24 logical", "x86-64-avx2", "30.2 GB (30,914 MB)", "madvise", "3.12.3", "1.8.2",
+        for expected in ("Ryzen 9", "12 cores, 24 threads", "x86-64-avx2", "30.2 GB (30,914 MB)", "madvise", "3.12.3", "1.8.2",
                          "Linux 6.8", "Elephant", "clang 18.1.3", "C++ for fastchess"):
             self.assertIn(expected, page)
         self.assertIn("none reported", page)
@@ -213,7 +213,7 @@ class SystemInSections(TestCase):
         self.assertIn("Radeon", page)
         self.assertIn("16 GB", page)
         self.assertNotIn("NOT-SHOWN", page)
-        self.assertNotIn("none reported</p>\n  </div>\n  <div", page.split(">GPU</h3>")[1][:60])
+        self.assertNotIn("GPU</dt><dd>none reported", page)
 
 
 class FlagPills(SimpleTestCase):

@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 
 from nyayo.actions.access import action_required, may_act
 
-from . import machines, registration
+from . import client_views, machines, registration
 from .models import JoinCode, Machine, Place
 
 
@@ -20,7 +20,7 @@ def list_context(request, now, **extra):
     workers = [r for r in rows if r['worker']]
     heard = [r for r in workers if r['state'] in ('playing', 'idle')]
     return {
-        'here': 'machines', 'rows': rows, 'now': now, 'may_act': may_act(request.user),
+        'here': 'machines', 'rows': rows, 'now': now, 'may_act': may_act(request.user), 'server': client_views.server_address(request),
         'playing': sum(1 for r in workers if r['state'] == 'playing'), 'workers': len(workers),
         'threads': sum(r['threads'] for r in heard if isinstance(r['threads'], int)),
         'tokens': sum(1 for r in rows if r['token'] and r['token']['active']),
@@ -39,7 +39,7 @@ def machines_page(request):
 
 
 def machine_page(request, name):
-    page = machines.find(name)
+    page = machines.find(name, request=request)
     if page is None:
         raise Http404
     return render(request, 'lab/machine.html', {'here': 'machines', 'now': timezone.now(), 'may_act': may_act(request.user), **page})
