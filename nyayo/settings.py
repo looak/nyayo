@@ -6,6 +6,7 @@ repository root; see .env.example.
 
 import json
 import os
+import sys
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -197,6 +198,13 @@ USE_TZ = True
 STATIC_URL = f"{FORCE_SCRIPT_NAME.rstrip('/')}/static/" if FORCE_SCRIPT_NAME else "/static/"
 STATIC_ROOT = DATA_DIR / "static"
 STATIC_ROOT.mkdir(exist_ok=True)
+# Deployed, static files get a hash in their name (collectstatic, run by deploy/update.sh, makes the manifest), so a
+# browser can't keep an old script after an update. Not in debug, and not under the tests, which have no manifest.
+if not DEBUG and "test" not in sys.argv:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

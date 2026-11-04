@@ -59,6 +59,8 @@ gunicorn nyayo.wsgi:application --bind 0.0.0.0:8001 --workers 2
 
 Browse to http://172.16.100.11:8001/ and stop it with Ctrl-C.
 
+With `NYAYO_DEBUG` off the static files are served with a hash in their name (`/static/lab/create_test.06376fbc7d38.js`), made by `collectstatic`, so a browser never keeps an old script or style sheet after an update; run `collectstatic` after every update (`deploy/update.sh` does). A page that names a file `collectstatic` didn't find is an error, not a broken link.
+
 ### As a service
 
 ```bash
