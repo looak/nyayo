@@ -166,6 +166,7 @@ class Rig:
 
     def start_nyayo(self):
         self.run('manage.py', 'migrate', '-v0')
+        self.run('manage.py', 'collectstatic', '--noinput', '-v0')    # static files have hashed names when deployed
         os.environ.update(self.env)
         sys.path[:0] = [str(self.temp), str(REPO)]
         import django
