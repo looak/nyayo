@@ -417,8 +417,10 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
   - A pending or turned-away worker is refused every other call of a session with `403` and `{ error, state, enabled }`: no test,
     source or setting. A disabled approved one is let through, so a workload it has finishes. `clientGetNetwork` takes the
     `token` of an approved worker. `clientGetBuildInfo` (the engines' compilers, CPU flags, systems and build path: no test and
-    no source) is open to a call with no token, as the client asks before it knows whether it is approved, and refused to a
-    token that is not approved. `clientVersionRef`, `clientMatchRunnerVersionRef` and the fastchess file need nothing.
+    no source) is the one exception, open to a call with no token: the client asks before it knows whether it is approved, and needs it
+    for the CPU flags it reports. It only tells a worker what to look for, and holds exactly `path`, `compilers`, `cpuflags`,
+    `systems` and `private` of each engine (a test checks the keys): no source URL, no token, no setting of the server. A
+    token that is sent and is not approved is refused it. `clientVersionRef`, `clientMatchRunnerVersionRef` and the fastchess file need nothing.
   - On Machines (behind the gate, each an event of `LogEvent` with who did it and the worker's id): *Approve*, *Turn away*,
     *Enable*, *Disable* (`POST /machine-action`, `id` and `action`), and join codes (`POST /machine-join-code`, `hours` 1 to 336,
     24 by default; shown once; kept as a sha256; one use; `POST /machine-code-revoke`).
