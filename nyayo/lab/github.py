@@ -34,7 +34,9 @@ def api_get(url, timeout=10):
         raise GithubDown(str(error))
 
 def api_base(repo):
-    return repo.strip().replace('github.com', 'api.github.com/repos')
+    # NYAYO_GITHUB_API stands in for https://api.github.com/repos, for the smoke test's own GitHub
+    root = os.environ.get('NYAYO_GITHUB_API', '').strip().rstrip('/') or 'https://api.github.com/repos'
+    return re.sub(r'^https://github\.com', root, repo.strip())
 
 def is_sha(ref):
     return bool(re.search('^[0-9a-fA-F]{40}$', ref))
