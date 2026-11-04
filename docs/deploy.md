@@ -119,7 +119,7 @@ activate the env first.
 ## The lab: OpenBench's workers
 
 From nyayo 2.0 nyayo is OpenBench's server: it makes the tests, hands the workers their work, and takes their results.
-The worker that plays is OpenBench's own `Client/` (looak/openbench_eg, `master`), unchanged. OpenBench itself is no longer
+The worker that plays is OpenBench's own `Client/` (looak/openbench_eg, `master`), with the registration of *Workers register themselves* below: no username and no password. OpenBench itself is no longer
 run on bobby: its service is stopped and disabled, and its checkout has the merged code, whose `migrate` refuses its old
 database, so it cannot just be started again. Going back means nyayo goes back (see the checklist in the pull request),
 and SPRTs stay off until the 2.0 code is fixed forward. Bringing OpenBench back would take a `git reset` of its checkout
@@ -149,16 +149,27 @@ to the commit before the merge, enabling its service again and a matching client
 address the worker uses. From the worker's machine:
 
 ```bash
-curl -s -X POST -d username=<worker user> -d password=<its password> http://172.16.100.11:8001/clientVersionRef/
+curl -s http://172.16.100.11:8001/clientVersionRef/
 ```
 
-answers `{"client_version": 54, "client_repo_url": "https://github.com/looak/openbench_eg", "client_repo_ref": "master"}`.
-There is no path prefix for a worker to get wrong: with `NYAYO_SCRIPT_NAME` set it would have to be part of `-S`.
+answers `{"client_version": 54, "client_repo_url": "https://github.com/looak/openbench_eg", "client_repo_ref": "master"}`
+(`clientVersionRef` needs nothing, so a client can always update itself). There is no path prefix for a worker to get wrong:
+with `NYAYO_SCRIPT_NAME` set it would have to be part of `-S`.
+
+**Workers register themselves.** There is no worker user and no password. A worker says hello (`POST /clientHello/`) with
+its name (`-I`, else the host's) and is given a token, once, which it keeps in `worker.token` beside `client.py` (an update of
+the client does not remove it); nyayo keeps only the token's hash. It then describes itself, and is **pending** until the
+owner approves it on Machines (*Approve*), or it came with a join code (`--join CODE`, made on Machines: one worker, once, an
+hour to two weeks, shown once). Every call after the hello is the worker's session; a restart makes a new session on the same
+row, so a worker is one row under Lab, Machines however often it starts. The owner can *Turn away* a worker (it is told to
+wait, and its name is refused a new token), and *Disable* an approved one (it finishes a workload it has and is given no new
+one) and *Enable* it again; each is an event, with who did it. A pending worker is told what to describe, then to wait, and
+is refused everything else: no test, no source, no network. At most 20 workers may be pending, and one that has played
+nothing and has not been approved in 7 days is removed. The token goes over plain HTTP, as a password did: fine on the LAN, and
+HTTPS beyond it. An approved worker runs what the server sends it, so a client is pointed only at a server its owner trusts.
 
 **People.** The owner is the superuser (`python manage.py createsuperuser`): the one who signs in to `/sign-in`, makes and
-approves tests, and uses `/admin/`. A worker signs in as a user too: in the admin, Authentication and Authorization, Users,
-add one for the workers (a username and a password; not staff, not superuser). Nothing else is needed on the user; a
-worker is a machine that the user's name and password let in, and each time one starts it is a new row under Lab, Machines.
+approves tests, approves workers, and uses `/admin/`. That is the only user to make.
 
 **What it seeds.** The first migration of the lab adds the Elephant engine (source `https://github.com/looak/elephant`,
 built with `ob_build`, compilers `g` and `clang`, presets STC, LTC, SMP STC and SMP LTC with time controls such as
@@ -166,31 +177,43 @@ built with `ob_build`, compilers `g` and `clang`, presets STC, LTC, SMP STC and 
 pages in the sidebar are not built yet).
 
 **What a worker needs** (hunt): Python 3 with the packages in `Client/requirements.txt` (`requests`, `psutil`,
-`py-cpuinfo`, `zstandard`); `make` and a C++ compiler, `g++` or `clang++` (it builds fastchess with whichever it finds, the
-first time and when nyayo asks for a newer one); and access to `github.com` and `raw.githubusercontent.com`, from where it
-downloads its own client, fastchess, the engine's source as an archive and the books. To build Elephant it also needs one of
-the compilers in the engine's configuration, `g` or `clang`: the worker runs `<name> --version` for each in turn and uses the
-first that answers. There is no program called `g`, so it is `clang` that has to answer; the worker's start-up output says
-which it found (`Elephant | clang (18.1.3)`), or `Missing ['g', 'clang']` when neither did, and then it cannot play Elephant:
-nyayo hands a worker only the tests of engines it can build, which also needs the CPU flag `POPCNT` and the operating system
-to be Linux or Windows. A test no worker can play stays *waiting for a worker*.
-(The names are as OpenBench's `Engines/elephant.json` had them; they are editable under Lab, Engine configs.) It starts with
+`py-cpuinfo`, `zstandard`), and access to `github.com` and `raw.githubusercontent.com`, from where it downloads its own client,
+the engine's source as an archive and the books. To build Elephant it needs `make` and a C and C++ compiler. When it has
+described itself the server judges what it can build: the engine's compilers, `g` and `clang`, are `g++` or `gcc`, and `clang`
+or `clang++` (a `>=` minimum is kept), and `make` is needed too. The tools the worker is asked about are `gcc`, `g++`,
+`clang`, `clang++`, `dotnet`, `rustc`, `cargo`, `python3` and `make`; only C and C++ are scheduled for now, so an engine that
+builds with Rust or C# is handed to no worker. The page of a worker says what it found and what it plays; one that plays
+nothing says what is missing (`Missing ['g', 'clang']`, `Missing make`, a missing CPU flag such as `POPCNT`, an operating
+system the engine is not built for). A test no worker can play stays *waiting for a worker*. It starts with
 
 ```bash
-python3 client.py -U <worker user> -P <its password> -S http://172.16.100.11:8001 -T <threads> -N <sockets> -I hunt
+python3 client.py -S http://172.16.100.11:8001 -T <threads> -N <sockets> -I hunt
 ```
 
-(`-S` is the whole address, no path; the username, password and server may instead be in `OPENBENCH_USERNAME`,
-`OPENBENCH_PASSWORD` and `OPENBENCH_SERVER`). If the worker's start is automatic, only `-S` and the credentials change
-from what was run against OpenBench. A worker plays for one server at a time: stop it before it is pointed elsewhere.
+(`-S` is the whole address, no path; the server may instead be in `OPENBENCH_SERVER`. Add `--join CODE` to be approved on
+hello.) If the worker's start is automatic, only `-S` changes from what was run against OpenBench, and the credentials go.
+Its first run says *waiting for approval*; the page of Machines shows it as *Waiting for approval* with *Approve* and *Turn
+away*. A worker plays for one server at a time: stop it before it is pointed elsewhere.
+
+**Fastchess from the server.** nyayo can hand a worker the official fastchess release's file for its system, so a worker
+needs no compiler for it: `python manage.py fetch_fastchess <tag>` (`v1.8.1-alpha` or `1.8.1-alpha`) downloads that release
+of `Disservin/fastchess` (AndyGrant's has no commits of its own over it), every file with its sha256, into
+`DATA_DIR/fastchess/<tag>/`, with a `manifest.json`. `clientMatchRunnerVersionRef` then names the file for the system and
+architecture a worker asks with (`os_name`, `arch`), with its sha256, if its release is at least `NYAYO_FASTCHESS_MIN_VERSION`;
+the worker downloads it from `/clientFastchess/<tag>/<file>`, checks the sha256 and runs its version, and builds from source
+where there is no file or it will not run. Any worker may fetch it, approved or not. Run the command once per release, on
+bobby, as the user the service runs as; nothing restarts.
 
 **Elephant's `main` has no `Bench:` line** in its commit message, which the create page needs to know a commit's bench.
 Under *Advanced* on Create test, type the base's bench (and the dev's, if its commit has none either) in *Base bench*:
 the node count `bench` prints for that commit. The page says "Unable to parse a Bench" until it is.
 
 **The smoke test** (`tools/smoke/run.py`; its docstring has the setup) is how to see all of this work before a real test:
-nyayo as deployed, openbench_eg's worker at the commit `master` is at, a toy engine and a GitHub of its own, tests made
-through the real create page, the engine's failures staged. Linux or WSL, `make` and `g++`, about two to three minutes.
+nyayo as deployed, openbench_eg's worker (`--client-ref`, the registration branch until it is on `master`) started with no
+username and no password, a toy engine and a GitHub of its own, tests made through the real create page, the engine's failures
+staged. It checks hello, pending (told to wait, nothing played), describe, approve and play, disable and enable, a join code, a
+turned-away worker refused by name, a restart keeping its row and its games, and fastchess from the server. Linux or WSL,
+`make` and `g++`, about three to four minutes.
 
 ## Game threads
 
