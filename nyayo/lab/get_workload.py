@@ -30,7 +30,7 @@ import random
 import re
 import sys
 
-from nyayo.lab import config, steps, utils
+from nyayo.lab import config, rtt, steps, utils
 from nyayo.lab.document import report_test
 from nyayo.lab.models import Book, EngineConfig, Machine, Result, Test
 from nyayo.lab.spsa_utils import spsa_workload_assignment_dict
@@ -58,7 +58,7 @@ def get_workload(request, machine):
     # to avoid re-serializing the (large) info blob on every workload request
     machine.workload = test.id;
     machine.mnps = machine.dev_mnps = machine.base_mnps = 0.00
-    machine.save(update_fields=['workload', 'mnps', 'dev_mnps', 'base_mnps', 'updated'])
+    machine.save(update_fields=['workload', 'mnps', 'dev_mnps', 'base_mnps', 'updated', *rtt.changed(machine)])
     result.workloads += 1; result.save(update_fields=['workloads'])
     steps.start_walk(result)
 
@@ -75,7 +75,7 @@ def heard(machine):
     # that idle is a worker that polls and gone quiet one that has not for 5 minutes. A worker asks only when it has
     # finished what it was on, so the workload it had is let go (OpenBench left both alone, which was harmless there).
     # One write of two columns, never the info blob; the test it left is told, as it is no longer being played.
-    Machine.objects.filter(pk=machine.pk).update(updated=timezone.now(), workload=0)
+    Machine.objects.filter(pk=machine.pk).update(updated=timezone.now(), workload=0, **rtt.values(machine))
     if machine.workload:
         transaction.on_commit(lambda test_id=machine.workload: report_test(test_id))
 

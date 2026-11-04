@@ -250,6 +250,52 @@ class Waiting(Api):
         self.assertEqual(self.client.get('/machines').context['rows'][0]['state'], 'quiet')
 
 
+class ResponseTime(Api):
+    def latest(self):
+        machine = Machine.objects.get(pk=self.machine_id)
+        return machine.rtt_ms, machine.rtt_avg_ms
+
+    def test_it_is_kept_from_a_poll_that_gets_nothing(self):
+        self.sign_in()
+        self.worker('clientGetWorkload', rtt_ms='12.5')
+        self.assertEqual(self.latest(), (12.5, 12.5))
+        self.worker('clientGetWorkload', rtt_ms='22.5')
+        self.assertEqual(self.latest(), (22.5, 14.5))
+
+    def test_it_is_kept_from_a_poll_that_is_given_work(self):
+        test = make_test()
+        self.sign_in()
+        self.assertTrue(self.worker('clientGetWorkload', rtt_ms='30').json()['workload'])
+        self.assertEqual(self.latest()[0], 30.0)
+        self.assertEqual(Machine.objects.get(pk=self.machine_id).workload, test.id)
+
+    def test_it_is_kept_from_a_heartbeat_and_from_results(self):
+        test = make_test()
+        self.sign_in()
+        workload = self.worker('clientGetWorkload').json()['workload']
+        self.worker('clientHeartbeat', test_id=test.id, rtt_ms='7')
+        self.assertEqual(self.latest()[0], 7.0)
+        self.worker('clientSubmitResults', test_id=test.id, result_id=workload['result']['id'], crashes=0, timelosses=0,
+                    illegals=0, trinomial='0 0 0', pentanomial='0 0 0 0 0', rtt_ms='9')
+        self.assertEqual(self.latest()[0], 9.0)
+
+    def test_a_worker_that_sends_none_or_nonsense_leaves_it_alone(self):
+        self.sign_in()
+        self.worker('clientGetWorkload')
+        self.assertEqual(self.latest(), (None, None))
+        for value in ('abc', '-1', 'nan', '1e12'):
+            self.worker('clientGetWorkload', rtt_ms=value)
+        self.assertEqual(self.latest(), (None, None))
+
+    def test_a_poll_is_still_one_small_write_with_it(self):
+        self.sign_in()
+        with CaptureQueriesContext(connection) as queries:
+            self.worker('clientGetWorkload', rtt_ms='5')
+        writes = [q['sql'] for q in queries if q['sql'].lstrip().upper().startswith(('UPDATE', 'INSERT', 'DELETE'))]
+        self.assertEqual(len(writes), 1, writes)
+        self.assertNotIn('"info"', writes[0])
+
+
 class Results(Api):
     def submit(self, workload, penta='0 0 0 0 0', trinomial='0 0 0', **extra):
         return self.worker('clientSubmitResults', test_id=workload['test']['id'], result_id=workload['result']['id'],
