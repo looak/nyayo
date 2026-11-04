@@ -200,7 +200,7 @@ class SystemInSections(TestCase):
                      toolchains={"clang": "18.1.3", "make": "4.3", "python3": "3.12.3"})
         page = text(self.client, "/machines/hunt")
         for heading in ("Hardware", "Toolchains", "Software", "Engines"):
-            self.assertIn(">%s</h3>" % heading, page)
+            self.assertIn(">%s</h2>" % heading, page)
         for expected in ("Ryzen 9", "12 cores, 24 threads", "x86-64-avx2", "30.2 GB (30,914 MB)", "madvise", "3.12.3", "1.8.2",
                          "Linux 6.8", "Elephant", "clang 18.1.3", "C++ for fastchess"):
             self.assertIn(expected, page)

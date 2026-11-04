@@ -14,4 +14,4 @@ class Command(BaseCommand):
         if not settings.DEBUG:
             raise CommandError("seed_demo makes up results; it only runs with NYAYO_DEBUG=true")
         for match_id in demo.seed():
-            self.stdout.write(f"/matches/{match_id}")
+            self.stdout.write(match_id if match_id.startswith("/") else f"/matches/{match_id}")
