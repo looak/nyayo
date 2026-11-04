@@ -238,8 +238,10 @@ class Waiting(Api):
         with CaptureQueriesContext(connection) as queries:
             self.worker('clientGetWorkload')
         writes = [q['sql'] for q in queries if q['sql'].lstrip().upper().startswith(('UPDATE', 'INSERT', 'DELETE'))]
-        self.assertEqual(len(writes), 1, writes)
-        self.assertNotIn('"info"', writes[0])
+        # the machine's own write, and the one small upsert of its hour for the graph (lab/hours.py)
+        self.assertEqual(len(writes), 2, writes)
+        self.assertEqual(sum('lab_machinehour' in w for w in writes), 1, writes)
+        self.assertTrue(all('"info"' not in w for w in writes))
 
     def test_the_workload_it_has_left_is_let_go_and_that_test_told(self):
         test = make_test(name='first')
@@ -317,8 +319,10 @@ class ResponseTime(Api):
         with CaptureQueriesContext(connection) as queries:
             self.poll(socket=FakeSocket(5000))
         writes = [q['sql'] for q in queries if q['sql'].lstrip().upper().startswith(('UPDATE', 'INSERT', 'DELETE'))]
-        self.assertEqual(len(writes), 1, writes)
-        self.assertNotIn('"info"', writes[0])
+        # the machine's own write, and the one small upsert of its hour for the graph (lab/hours.py)
+        self.assertEqual(len(writes), 2, writes)
+        self.assertEqual(sum('lab_machinehour' in w for w in writes), 1, writes)
+        self.assertTrue(all('"info"' not in w for w in writes))
 
 
 class Results(Api):

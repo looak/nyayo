@@ -33,6 +33,7 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
+from nyayo.lab import hours
 from nyayo.lab.document import report_test
 from nyayo.lab.models import Machine, Result, SPSAParameter, Test
 from nyayo.lab.stats import TrinomialSPRT, PentanomialSPRT
@@ -305,6 +306,9 @@ def update_test(request, machine):
         Machine.objects.filter(id=machine_id).update(
             updated=timezone.now()
         )
+
+    # The hour of the box's graph, outside the transaction: a failure there must not undo the results
+    hours.note(machine, games=games)
 
     # Reported once the Result is updated too: the report's counts are the Result rows' sums
     transaction.on_commit(lambda: report_test(test.id))

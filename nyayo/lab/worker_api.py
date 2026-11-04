@@ -37,7 +37,7 @@ from django.http import FileResponse, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from nyayo.lab import config, rtt, steps, utils
+from nyayo.lab import config, hours, rtt, steps, utils
 from nyayo.lab.document import report_test
 from nyayo.lab.get_workload import get_workload
 from nyayo.lab.ids import match_id
@@ -196,6 +196,7 @@ def client_get_network(request, engine, name):
 @verify_worker
 def client_get_workload(request, machine):
     rtt.note(request, machine)
+    hours.note(machine)
     try:
         return JsonResponse(get_workload(request, machine))
     except IntegrityError as error:
@@ -254,6 +255,7 @@ def client_submit_nps(request, machine):
     machine.mnps      = float(request.POST['nps'     ]) / 1e6
     machine.dev_mnps  = float(request.POST['dev_nps' ]) / 1e6
     machine.base_mnps = float(request.POST['base_nps']) / 1e6
+    hours.note(machine)
     machine.save(update_fields=['mnps', 'dev_mnps', 'base_mnps', 'updated'])
 
     # Pass back an empty JSON response
@@ -297,6 +299,7 @@ def client_heartbeat(request, machine):
 
     # Force a refresh of the updated timestamp
     rtt.note(request, machine)
+    hours.note(machine)
     machine.save(update_fields=['updated', *rtt.changed(machine)])
 
     # Include a 'stop' header iff the test was finished
