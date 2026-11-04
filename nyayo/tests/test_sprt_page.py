@@ -208,3 +208,55 @@ class Workers(MatchTestCase):
 
     def test_no_machines_no_section(self):
         self.assertNotIn("<h2>Workers</h2>", self.page([]))
+
+
+PGN = """[Event "x"]
+[White "Elephant 1.0.0"]
+[Black "Elephant 0.9.0"]
+[Result "1-0"]
+
+1. e4 e5 1-0
+"""
+
+
+class GamesCounted(MatchTestCase):
+    """The Games tile and the pace are the results' count, the one the test was decided on; the games kept may be more."""
+
+    def put_games(self, count):
+        for number in range(1, count + 1):
+            raw = PGN.encode()
+            response = self.client.put(f"/api/matches/{ID}/games/{number}", data=raw, content_type="application/x-chess-pgn",
+                                       headers={"Authorization": f"Bearer {self.token}"})
+            self.assertIn(response.status_code, (200, 201), response.content)
+
+    def document(self, games=3):
+        document = example_document()
+        document["results"][0].update(games=games, wins=1, draws=games - 2, losses=1, penta=[0, 0, 0, 0, 0])
+        return document
+
+    def test_more_games_kept_than_the_results_count_do_not_change_the_tile_or_the_pace(self):
+        self.assertIn(self.put_match(self.document()).status_code, (200, 201))
+        self.put_games(5)
+        reply = self.client.get(f"/matches/{ID}")
+        page = reply.content.decode()
+        self.assertEqual(reply.context["timing"]["finished"], 3)
+        self.assertIn('<div class="big">3</div>', page)
+        self.assertIn("W 1 · D 1 · L 1", page)
+        if reply.context["timing"]["per_hour"] is not None:
+            self.assertAlmostEqual(reply.context["timing"]["per_hour"], 3 / reply.context["timing"]["elapsed"] * 3600)
+        self.assertIn("The results count 3 games", page)
+        self.assertIn("5 are kept here, the extra ones played after the last report the results had", page)
+
+    def test_fewer_games_kept_are_noted_and_the_tile_is_still_the_results(self):
+        self.assertIn(self.put_match(self.document()).status_code, (200, 201))
+        self.put_games(2)
+        reply = self.client.get(f"/matches/{ID}")
+        self.assertEqual(reply.context["timing"]["finished"], 3)
+        self.assertIn("2 are kept here.", reply.content.decode())
+
+    def test_the_same_number_needs_no_note(self):
+        self.assertIn(self.put_match(self.document()).status_code, (200, 201))
+        self.put_games(3)
+        page = self.client.get(f"/matches/{ID}").content.decode()
+        self.assertIn('<div class="big">3</div>', page)
+        self.assertNotIn("The results count", page)

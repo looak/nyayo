@@ -455,15 +455,22 @@ def match_detail(request, match_id):
     view = chosen if chosen in RESULT_VIEWS else request.COOKIES.get(VIEW_COOKIE)
     view = view if view in RESULT_VIEWS else RESULT_VIEWS[0]
     summary = stats.summarize(match.results.all(), excluded)
-    if not match.schedule and total is None:
-        # no schedule to count (an SPRT): the games played are the results'
-        played = max(len(groups["finished"]), stats.summarize(match.results.all()).overall.games)
+    kept = len(groups["finished"])
+    games_note = None
+    if not match.schedule and total is None and match.results.exists():
+        # no schedule to count (an SPRT): the games played are the results', which is what the test was decided on, and what
+        # the tile and the pace are made of. The games kept may be more (a worker uploads its whole file, with the games it
+        # played after its last report) or fewer; they are shown as they are, with a note
+        played = summary.overall.games
+        games_note = {"kept": kept, "counted": played} if kept != played else None
+    elif not match.schedule and total is None:
+        played = kept
     else:
-        played = len(groups["finished"])
+        played = kept
     subject_name = engine_label(match.subject)
     context = {
         "view": view, "match": match, "silent": is_silent(match, silent_cutoff()), "silent_minutes": settings.NYAYO_SILENT_AFTER, "boards": live_boards(match, groups["playing"]),
-        "summary": summary, "excluded": excluded,
+        "summary": summary, "excluded": excluded, "games_note": games_note,
         "summary_clipboard": summary_clipboard_text(match, subject_name, summary, match.settings or {}),
         "sprt": sprt_view(match), **sprt_progress(match),
         "timing": timing.summarize(
