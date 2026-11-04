@@ -58,17 +58,20 @@
   .side nav .count.red { background: var(--danger); }
   /* a match's actions, last in the nav so that no other link moves as buttons come and go; stuck to the bottom of the window
      while the nav is taller than it */
-  .side-actions { position: sticky; bottom: 0; background: var(--side); border-top: 1px solid #111; padding-bottom: .5rem; }
-  .side-actions form, .side-actions .side-links { display: flex; flex-wrap: wrap; gap: .4rem; padding: .45rem .8rem 0; }
-  .side-actions .side-note { margin: .4rem .8rem 0; font-size: .75rem; color: var(--muted); }
-  .side nav a.side-act, .side-act { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 .8rem;
-    border: 1px solid transparent; border-radius: 3px; font: inherit; font-size: .85rem; color: #fff; cursor: pointer; background: var(--accent);
-    border-left: 1px solid transparent; }
-  .side-act.stop { background: var(--danger); } .side-act.restart { background: var(--warning); color: #1d2125; }
-  .side-act.approve, .side-act.bring { background: var(--success); } .side-act.unapprove { background: #4b545c; }
-  .side nav a.side-act.remove, .side nav a.side-act.delete { background: transparent; border-color: #4b545c; color: #c2c9cf; }
-  .side nav a.side-act.delete { color: #f1a89f; border-color: var(--danger); }
-  .side nav a.side-act:hover { text-decoration: none; filter: brightness(1.15); background-color: inherit; }
+  .side-actions { position: sticky; bottom: 0; background: var(--side); border-top: 1px solid #111; }
+  .side-actions form { margin: 0; padding: 0; }
+  .side-actions .side-note { margin: 0; padding: .4rem .9rem; font-size: .75rem; color: var(--muted); }
+  /* each action is a bar like the nav's links (same height, padding, font and icon), with a colour of its own; the buttons are
+     reset to look like the links, hover and keyboard focus included */
+  .side .side-bar { display: flex; align-items: center; gap: .65rem; width: 100%; margin: 0; padding: .62rem .9rem; border: 0; border-left: 3px solid transparent;
+    border-radius: 0; font: inherit; line-height: inherit; text-align: left; white-space: nowrap; color: #fff; cursor: pointer; --bar: var(--accent); background: var(--bar); }
+  .side .side-bar svg { width: 15px; height: 15px; flex: none; opacity: .85; }
+  .side .side-bar:hover, .side nav a.side-bar:hover { text-decoration: none; color: #fff; background: var(--bar); filter: brightness(1.15); }
+  .side .side-bar:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+  .side .side-bar.stop { --bar: var(--danger); } .side .side-bar.restart { --bar: var(--warning); }
+  .side .side-bar.restart, .side .side-bar.restart:hover, .side nav a.side-bar.restart:hover { color: #1d2125; }
+  .side .side-bar.approve, .side .side-bar.bring { --bar: var(--success); } .side .side-bar.unapprove { --bar: #4b545c; }
+  .side .side-bar.delete { --bar: #7a2e26; }
   .flash { margin: 0 0 .75rem; padding: .55rem .8rem; border-left: 4px solid var(--success); border-radius: 3px; background: var(--card); }
   .flash.error { border-left-color: var(--danger); background: var(--error-bg); }
   .topbar { height: 50px; display: flex; align-items: center; gap: 1rem; padding: 0 1rem; background: var(--bg);
@@ -133,7 +136,7 @@
     #nav-toggle:focus-visible ~ aside.side .menu-toggle { outline: 2px solid var(--accent); outline-offset: -2px; }
     .side nav { display: none; border-top: 1px solid #111; }
     #nav-toggle:checked ~ aside.side nav { display: block; }
-    .side nav a { padding: .5rem .9rem; }
+    .side nav a, .side .side-bar { padding: .5rem .9rem; }
     .topbar { gap: .6rem; padding: 0 .75rem; }
     .topbar .host { display: none; }
     .topbar .crumb { flex: 1 1 auto; min-width: 0; }
