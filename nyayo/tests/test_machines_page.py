@@ -155,7 +155,7 @@ class Detail(TestCase):
         Result.objects.filter(pk=result.pk).update(games=40, crashes=2, timeloss=1)
         Step.objects.create(result=result, step="bench", side="dev", state="failed", blame="engine")
         text = page(self.client, "/machines/hunt")
-        for expected in ("Ryzen 9", "POPCNT AVX2", "clang 18.1.3", "1.8.1", "6.8"):
+        for expected in ("Ryzen 9", ">POPCNT<", ">AVX2<", "clang 18.1.3", "1.8.1", "6.8"):
             self.assertIn(expected, text)
         self.assertIn('<a href="/matches/%s">lmr</a>' % match_id(test.id), text)
         recent = self.client.get("/machines/hunt").context["recent"][0]

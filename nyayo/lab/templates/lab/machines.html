@@ -1,7 +1,8 @@
 {% extends "runs/base.html" %}
 {% block title %}Machines · nyayo{% endblock %}
 {% block crumb %}Lab › Machines{% endblock %}
-{% block head %}<style>
+{% block head %}{% include "lab/_machine_bits.html" %}<style>
+  table.machines td { vertical-align: middle; }
   @media (max-width: 700px) {
     table.machines thead { display: none; }
     table.machines, table.machines tbody, table.machines tr, table.machines td { display: block; }
@@ -24,22 +25,22 @@
   <h3 class="box-title">Machines <span class="right muted"><span class="tag worker">worker</span> plays what the server hands out · <span class="tag token">token</span> may report to nyayo</span></h3>
   {% if rows %}
   <div class="scroll"><table class="workers machines">
-    <thead><tr><th>Name</th><th>What it is</th><th>System</th><th class="num">Threads</th><th>Now</th><th class="num">MNPS dev / base</th><th>Last heard</th><th class="num">Games</th><th class="num">Tests</th><th>Engines</th></tr></thead>
+    <thead><tr><th>Status</th><th>Name</th><th>System</th><th class="num">Threads</th><th>Now</th><th class="num">MNPS dev / base</th><th class="num">Response</th><th>Last heard</th><th class="num">Games</th><th class="num">Tests</th></tr></thead>
     <tbody>{% for r in rows %}<tr>
-      <td class="nowrap"><b><a href="{% url 'machine' r.name %}">{{ r.name }}</a></b></td>
-      <td class="nowrap">{% if r.worker %}<span class="tag worker">worker</span> {% endif %}{% if r.token %}<span class="tag token{% if not r.token.active %} revoked{% endif %}">{% if r.token.active %}token{% else %}token revoked{% endif %}</span>{% endif %}</td>
-      <td data-label="System">{{ r.os|default:"–" }}</td>
+      <td data-label="Status" class="nowrap">{% if r.health %}{% include "lab/_status.html" with health=r.health %}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td class="nowrap"><b><a href="{% url 'machine' r.name %}">{{ r.name }}</a></b> {% if r.worker %}<span class="tag worker">worker</span> {% endif %}{% if r.token %}<span class="tag token{% if not r.token.active %} revoked{% endif %}">{% if r.token.active %}token{% else %}token revoked{% endif %}</span>{% endif %}{% if r.place %}<br><span class="place">{{ r.place }}</span>{% endif %}</td>
+      <td data-label="System" class="nowrap">{% if r.worker %}{% include "lab/_os_icon.html" with kind=r.os_kind wsl=r.wsl title=r.os_ver %} {{ r.os|default:"–" }}{% else %}<span class="muted">–</span>{% endif %}</td>
       {% if r.worker %}<td data-label="Threads" class="num">{{ r.threads|default_if_none:"–" }}{% if r.sockets and r.sockets > 1 %} <span class="muted">/ {{ r.sockets }} sockets</span>{% endif %}</td>
       <td data-label="Now">{% if r.state == "playing" %}<a href="{% url 'match' r.match %}">{{ r.label }}</a>{% elif r.state == "idle" %}<span class="muted">idle</span>{% else %}<span class="worse">gone quiet</span>{% endif %}</td>
       <td data-label="MNPS dev / base" class="num nowrap">{% if r.dev_mnps or r.base_mnps %}{{ r.dev_mnps|floatformat:2 }}M / {{ r.base_mnps|floatformat:2 }}M{% else %}<span class="muted">–</span>{% endif %}</td>
-      {% else %}<td class="num muted na">–</td><td><span class="muted">doesn't play</span></td><td class="num muted na">–</td>{% endif %}
+      <td data-label="Response" class="num nowrap">{% if r.rtt is not None %}{% if r.rtt < 10 %}{{ r.rtt|floatformat:1 }}{% else %}{{ r.rtt|floatformat:0 }}{% endif %} ms{% else %}<span class="muted">–</span>{% endif %}</td>
+      {% else %}<td class="num muted na">–</td><td><span class="muted">doesn't play</span></td><td class="num muted na">–</td><td class="num muted na">–</td>{% endif %}
       <td data-label="Last heard" class="nowrap">{% if r.updated %}{% if r.state == "quiet" %}<span class="worse">{{ r.ago }}</span>{% else %}{{ r.ago }}{% endif %}{% else %}<span class="muted">never</span>{% endif %}</td>
       <td data-label="Games" class="num">{% if r.worker %}{{ r.games }}{% else %}<span class="muted">–</span>{% endif %}</td>
       <td data-label="Tests" class="num">{% if r.worker %}{{ r.tests }}{% else %}<span class="muted">–</span>{% endif %}</td>
-      <td data-label="Engines">{% if r.worker %}{% if r.supports %}{{ r.supports|join:", " }}{% else %}<span class="worse">none</span>{% endif %}{% else %}<span class="muted">–</span>{% endif %}</td>
     </tr>
     {% if r.worker and r.missing %}<tr class="spec-row"><td></td><td colspan="9" class="worse">{% if not r.supports %}Plays no engine. {% endif %}{% for engine, why in r.missing %}{{ engine }}: {{ why|join:"; " }}.{% if not forloop.last %} {% endif %}{% endfor %}</td></tr>{% endif %}
-    <tr class="spec-row"><td></td><td colspan="9" class="muted">{% if r.user %}{{ r.user }}{% else %}no worker{% endif %}{% if r.cpu %} · {{ r.cpu }}{% endif %}{% if r.os_ver %} · {{ r.os_ver }}{% endif %}{% if r.sessions > 1 %} · started {{ r.sessions }} times{% endif %}{% if r.token %} · token made {{ r.token.created|date:"Y-m-d" }}{% if r.token.last %}, last reported {{ r.token.ago }}{% else %}, has not reported{% endif %}{% endif %}</td></tr>
+    <tr class="spec-row"><td></td><td colspan="9" class="muted">{% if r.user %}{{ r.user }}{% else %}no worker{% endif %}{% if r.cpu %} · {{ r.cpu }}{% endif %}{% if r.os_ver %} · {{ r.os_ver }}{% endif %}{% if r.worker %} · plays {% if r.supports %}{{ r.supports|join:", " }}{% else %}nothing{% endif %}{% endif %}{% if r.sessions > 1 %} · started {{ r.sessions }} times{% endif %}{% if r.token %} · token made {{ r.token.created|date:"Y-m-d" }}{% if r.token.last %}, last reported {{ r.token.ago }}{% else %}, has not reported{% endif %}{% endif %}</td></tr>
     {% endfor %}</tbody>
   </table></div>
   {% else %}<p class="muted">No worker has started and no token has been made.</p>{% endif %}

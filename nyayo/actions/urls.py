@@ -20,5 +20,6 @@ urlpatterns = [
     path("engines", views.stub("engines"), name="engines"),
     path("books", views.stub("books"), name="books"),
     path("machines", machines_views.machines_page, name="machines"),
+    path("machine-place", machines_views.machine_place, name="machine_place"),
     path("machines/<path:name>", machines_views.machine_page, name="machine"),
 ]

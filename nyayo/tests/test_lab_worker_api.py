@@ -2,6 +2,7 @@
 
 import bz2
 import json
+import struct
 import tempfile
 from pathlib import Path
 
@@ -18,6 +19,21 @@ from nyayo.lab.models import EngineConfig, LogEvent, Machine, Result, ServerStat
 from nyayo.matches.models import Match, Upload
 
 from .lab_helpers import make_test
+
+class FakeSocket:
+    """What getsockopt(IPPROTO_TCP, TCP_INFO, 104) gives: bytes with tcpi_rtt, in microseconds, at offset 68."""
+
+    def __init__(self, micro=None, raises=None, short=False):
+        self.micro, self.raises, self.short = micro, raises, short
+
+    def getsockopt(self, level, option, size):
+        if self.raises:
+            raise self.raises
+        data = bytearray(size)
+        struct.pack_into('=I', data, 68, self.micro or 0)
+        struct.pack_into('=I', data, 72, 999)  # tcpi_rttvar, which must not be read as the rtt
+        return bytes(data[:40] if self.short else data)
+
 
 SYSTEM = {
     'client_ver': 54, 'machine_name': 'hunt', 'concurrency': 4, 'sockets': 1, 'physical_cores': 4, 'syzygy_max': 0,
@@ -248,6 +264,61 @@ class Waiting(Api):
         self.assertEqual(self.client.get('/machines').context['rows'][0]['state'], 'idle')
         self.old(minutes=6)
         self.assertEqual(self.client.get('/machines').context['rows'][0]['state'], 'quiet')
+
+
+class ResponseTime(Api):
+    def latest(self):
+        return Machine.objects.get(pk=self.machine_id).rtt_ms
+
+    def poll(self, path='clientGetWorkload', socket=None, **form):
+        extra = {} if socket is None else {'gunicorn.socket': socket}
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(f'/{path}/', {'machine_id': self.machine_id, 'secret': self.secret, **form}, **extra)
+
+    def test_it_is_the_kernels_round_trip_in_ms_from_a_poll_that_gets_nothing(self):
+        self.sign_in()
+        self.poll(socket=FakeSocket(12500))
+        self.assertEqual(self.latest(), 12.5)
+        self.poll(socket=FakeSocket(800))
+        self.assertEqual(self.latest(), 0.8)
+
+    def test_it_is_read_from_a_poll_that_is_given_work(self):
+        test = make_test()
+        self.sign_in()
+        self.assertTrue(self.poll(socket=FakeSocket(3000)).json()['workload'])
+        self.assertEqual(self.latest(), 3.0)
+        self.assertEqual(Machine.objects.get(pk=self.machine_id).workload, test.id)
+
+    def test_it_is_read_from_a_heartbeat(self):
+        test = make_test()
+        self.sign_in()
+        self.poll('clientHeartbeat', socket=FakeSocket(7000), test_id=test.id)
+        self.assertEqual(self.latest(), 7.0)
+
+    def test_what_the_worker_says_of_it_is_not_believed(self):
+        self.sign_in()
+        self.poll(rtt_ms='1')
+        self.assertIsNone(self.latest())
+
+    def test_a_request_that_cannot_be_measured_is_answered_all_the_same(self):
+        self.sign_in()
+        for sock in (None, FakeSocket(raises=OSError('closed')), FakeSocket(raises=AttributeError('TCP_INFO')), FakeSocket(0), FakeSocket(short=True)):
+            self.assertEqual(self.poll(socket=sock).json(), {})
+        self.assertIsNone(self.latest())
+
+    def test_one_that_cannot_be_measured_leaves_the_last_value(self):
+        self.sign_in()
+        self.poll(socket=FakeSocket(4000))
+        self.poll(socket=FakeSocket(raises=OSError('closed')))
+        self.assertEqual(self.latest(), 4.0)
+
+    def test_a_poll_is_still_one_small_write_with_it(self):
+        self.sign_in()
+        with CaptureQueriesContext(connection) as queries:
+            self.poll(socket=FakeSocket(5000))
+        writes = [q['sql'] for q in queries if q['sql'].lstrip().upper().startswith(('UPDATE', 'INSERT', 'DELETE'))]
+        self.assertEqual(len(writes), 1, writes)
+        self.assertNotIn('"info"', writes[0])
 
 
 class Results(Api):
