@@ -36,7 +36,7 @@ from django.http import FileResponse, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from nyayo.lab import config, fastchess, registration, rtt, steps, toolchains, utils
+from nyayo.lab import config, fastchess, hours, registration, rtt, steps, toolchains, utils
 from nyayo.lab.document import report_test
 from nyayo.lab.get_workload import get_workload, heard
 from nyayo.lab.ids import match_id
@@ -278,6 +278,7 @@ def client_get_workload(request, machine):
     # clientWorkerInfo, with `toolchains`); { 'wait' : reason } while it is pending, turned away or disabled, which tells
     # nothing of a test; then a workload for an approved, enabled worker
     rtt.note(request, machine)
+    hours.note(machine)
     if machine.state == 'turned_away':
         heard(machine)
         return JsonResponse({ 'wait' : 'turned away' })
@@ -345,6 +346,7 @@ def client_submit_nps(request, machine):
     machine.mnps      = float(request.POST['nps'     ]) / 1e6
     machine.dev_mnps  = float(request.POST['dev_nps' ]) / 1e6
     machine.base_mnps = float(request.POST['base_nps']) / 1e6
+    hours.note(machine)
     machine.save(update_fields=['mnps', 'dev_mnps', 'base_mnps', 'updated'])
 
     # Pass back an empty JSON response
@@ -388,6 +390,7 @@ def client_heartbeat(request, machine):
 
     # Force a refresh of the updated timestamp
     rtt.note(request, machine)
+    hours.note(machine)
     machine.save(update_fields=['updated', *rtt.changed(machine)])
 
     # Include a 'stop' header iff the test was finished

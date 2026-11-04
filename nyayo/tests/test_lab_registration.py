@@ -302,7 +302,7 @@ class OnThePage(TestCase):
         self.assertEqual((machine.state, machine.enabled), ('approved', False))
         page = self.client.get('/machines/newbie').content.decode()
         self.assertIn('value="enable"', page)
-        self.assertIn('Registration', page)
+        self.assertIn('Approval', page)
         self.assertEqual(self.act(machine, 'approve').status_code, 400)
         self.assertEqual(self.client.post('/machine-action', {'id': 9999, 'action': 'approve'}).status_code, 404)
         self.assertEqual(self.client.post('/machine-action', {'id': 'x', 'action': 'approve'}).status_code, 404)
