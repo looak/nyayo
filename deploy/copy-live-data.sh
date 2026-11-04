@@ -8,9 +8,14 @@
 #   NEW_DATA=/home/fischer/dev/nyayo-2-data deploy/copy-live-data.sh
 #
 # What is copied: the database (the online copy `backup` made, never the live file), `archive/` and `games/` (without
-# `games/batches`). Not copied: the batches and their index (see docs/deploy.md), `uploads/`, `datasets/`, `static/`, `backup/`.
+# `games/batches`), and, with WITH_INDEX=1, an online copy of the index of the games kept as data (which belongs to the batches:
+# give it only when the batches are copied too, docs/deploy.md). Not copied: the batches themselves, `uploads/`, `datasets/`,
+# `static/`, `backup/`.
 # It refuses a new data directory that already holds a database, an archive or games, and the current data directory itself.
 set -euo pipefail
+
+: "${NYAYO_CONDA_ENV:=nyayo2}"
+export NYAYO_CONDA_ENV
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 OLD_CHECKOUT="${OLD_CHECKOUT:-}"
@@ -25,13 +30,16 @@ command -v rsync >/dev/null 2>&1 || { echo "rsync is not installed (sudo apt ins
 case "$NEW_DATA" in /*) ;; *) echo "NEW_DATA must be an absolute path" >&2; exit 1 ;; esac
 
 # where the current nyayo keeps its data, as it will say itself (its .env is read)
-OLD_DATA="$(cd "$OLD_CHECKOUT" && "$OLD_BIN/python" -c "
+OLD_PATHS="$(cd "$OLD_CHECKOUT" && "$OLD_BIN/python" -c "
 import os, django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'nyayo.settings')
 django.setup()
 from django.conf import settings
 print(settings.DATA_DIR)
-" 2>/dev/null | tail -n 1)"
+print(settings.NYAYO_INDEX_DB)
+" 2>/dev/null | tail -n 2)"
+OLD_DATA="$(echo "$OLD_PATHS" | sed -n 1p)"
+OLD_INDEX="$(echo "$OLD_PATHS" | sed -n 2p)"
 [ -d "$OLD_DATA" ] || { echo "could not find the current data directory (got '$OLD_DATA')" >&2; exit 1; }
 [ "$(readlink -f "$OLD_DATA")" != "$(readlink -f "$NEW_DATA")" ] || { echo "NEW_DATA is the current nyayo's data directory" >&2; exit 1; }
 
@@ -56,9 +64,20 @@ for tree in archive games; do
     fi
 done
 
+if [ -n "${WITH_INDEX:-}" ]; then
+    [ -f "$OLD_INDEX" ] || { echo "no index at $OLD_INDEX to copy" >&2; exit 1; }
+    # an online copy: the current worker may be writing to it
+    (cd "$REPO_DIR" && "$NYAYO_BIN/python" -c "
+import sys
+from pathlib import Path
+from nyayo.backup import online_copy
+online_copy(Path(sys.argv[1]), Path(sys.argv[2]))
+" "$OLD_INDEX" "$NEW_DATA/index.sqlite3")
+fi
+
 echo
 echo "Copied into $NEW_DATA:"
-du -sh "$NEW_DATA"/nyayo.sqlite3 "$NEW_DATA"/archive "$NEW_DATA"/games 2>/dev/null | sed 's/^/    /'
+du -sh "$NEW_DATA"/nyayo.sqlite3 "$NEW_DATA"/archive "$NEW_DATA"/games "$NEW_DATA"/index.sqlite3 2>/dev/null | sed 's/^/    /'
 echo "    matches in the copy: $("$NYAYO_BIN/python" -c "
 import sqlite3, sys
 db = sqlite3.connect('$NEW_DATA/nyayo.sqlite3')

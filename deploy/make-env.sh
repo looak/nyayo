@@ -10,6 +10,8 @@
 #
 # NYAYO_BACKUP_REPO is given only with BACKUP_REPO=<checkout>, which is for the switch, not the trial.
 set -euo pipefail
+: "${NYAYO_CONDA_ENV:=nyayo2}"
+export NYAYO_CONDA_ENV
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 TARGET="$REPO_DIR/.env"
