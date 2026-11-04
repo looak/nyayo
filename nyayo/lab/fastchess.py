@@ -35,7 +35,7 @@ def normalize_os(value):
 
 
 def normalize_arch(value):
-    name = str(value or '').lower().replace('_', '-')
+    name = str(value or '').lower().replace('_', '-').replace('risc-v', 'riscv')
     if name in ('x86-64', 'amd64', 'x64', 'x86-64-v2', 'x86-64-v3', 'x86-64-v4') or name.startswith('x86-64'):
         return 'x86-64'
     if 'arm64' in name or 'aarch64' in name or (name.startswith('m') and name[1:].isdigit()):   # m1, m2: Apple silicon
@@ -47,7 +47,7 @@ def normalize_arch(value):
 
 def classify(file_name):
     """(os, arch) of a release file by its name, '' for what it cannot tell: fastchess-linux-x86-64.tar, -windows-..."""
-    name = file_name.lower().replace('_', '-')
+    name = file_name.lower().replace('_', '-').replace('risc-v', 'riscv')
     system = normalize_os(next((word for word in ('linux', 'windows', 'macos', 'darwin', 'mac') if word in name), ''))
     arch = normalize_arch(next((word for word in ('x86-64', 'amd64', 'aarch64', 'arm64', 'riscv64', 'riscv', 'm1') if word in name), ''))
     return system, arch

@@ -62,7 +62,11 @@ class Platforms(SimpleTestCase):
     def test_files_are_told_by_their_names(self):
         for name, expected in (('fastchess-linux-x86-64.tar', ('linux', 'x86-64')), ('fastchess-windows-x86-64.zip', ('windows', 'x86-64')),
                                ('fastchess-linux-aarch64.tar', ('linux', 'arm64')), ('fastchess-macos-m1.tar', ('macos', 'arm64')),
-                               ('fastchess-linux-riscv64.tar', ('linux', 'riscv64')), ('source.zip', ('', ''))):
+                               ('fastchess-linux-riscv64.tar', ('linux', 'riscv64')), ('source.zip', ('', '')),
+                               # as the official release names them
+                               ('fastchess-linux-risc-v.tar', ('linux', 'riscv64')), ('fastchess-mac-arm64.tar', ('macos', 'arm64')),
+                               ('fastchess-mac-x86-64.tar', ('macos', 'x86-64')), ('fastchess-windows-arm64.zip', ('windows', 'arm64')),
+                               ('fastchess-linux-arm64.tar', ('linux', 'arm64'))):
             self.assertEqual(fastchess.classify(name), expected, name)
 
     def test_a_workers_system_and_architecture_are_normalised(self):
