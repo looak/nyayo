@@ -37,7 +37,9 @@ Send it again after that long; it is never a refusal. Game requests are held to 
 reports always find one free, and a report is never answered `503` for being busy.
 
 Ids are `[A-Za-z0-9._-]`, starting with a letter or digit, at most 128 characters for a match and 64 for a game or a
-batch; they end up in URLs and file names. The match id `batches` is reserved (it is a directory of the games).
+batch; they end up in URLs and file names. The match id `batches` is reserved (it is a directory of the games), and so are the ids `sprt-<N>`, `games-<N>`,
+`tune-<N>` and `datagen-<N>` (N a number): they are the ids of the tests nyayo runs itself, and a request for one of them
+from a producer is `400`. Use any other id.
 
 ## The match document
 
@@ -492,10 +494,10 @@ batch of results and every action by hand:
 
 | Field | From the test |
 |:--|:--|
-| `match.id` | `openbench-<instance>-<test id>` (`NYAYO_INSTANCE`; bobby's is `openbench`) |
+| `match.id` | `<mode>-<test id>`: `sprt-1000`, `games-1001`, `tune-1002`, `datagen-1003`; before nyayo ran tests it was `openbench-<instance>-<test id>` |
 | `match.kind` | `sprt` for an SPRT, `games` for a fixed number of games |
 | `match.state` | finished (passed or failed), stopped (deleted, or stopped by hand), error (a bench mismatch), else running; `waiting`, `held` and `failed_prechecks` once OpenBench reports a test from its creation (*States*) |
-| `match.producer` | `{ "name": "OpenBench", "version": "<instance>", "url": "<absolute test page>" }` |
+| `match.producer` | `{ "name": "OpenBench", "version": "openbench", "url": "<absolute test page>" }` |
 | `match.started_at`, `finished_at` | the test's creation, and its end once finished |
 | `match.settings` | `tc` (dev's time control), `book`, `runner` `{ "name": "cutechess-ob" }`, `pgn_options` `[]`; OpenBench's own (`upload_pgns`, adjudication, syzygy, scaling, base's time control) under `openbench` |
 | `subject` | `name`: the engine (`Elephant`, OpenBench's engine name), `branch`: dev's branch, `commit`: dev's sha, `repo`, `bench`, `options` |

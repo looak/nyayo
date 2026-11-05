@@ -18,7 +18,6 @@ def make_test():
                                dev_time_control="8.0+0.08", base_time_control="8.0+0.08")
 
 
-@override_settings(NYAYO_INSTANCE="openbench")
 class Rule(SimpleTestCase):
     def test_with_no_matches_ids_start_at_one(self):
         self.assertEqual(ids.first_test_id([]), 1)
@@ -36,14 +35,23 @@ class Rule(SimpleTestCase):
 
     def test_any_instance_counts_whatever_the_setting_is(self):
         self.assertEqual(ids.first_test_id(["openbench-bobby-2500", "openbench-openbench-40"]), 3000)
-        with override_settings(NYAYO_INSTANCE="somethingelse"):
-            self.assertEqual(ids.first_test_id(["openbench-openbench-1234"]), 2000)
 
-    def test_a_match_id_is_built_from_the_instance(self):
-        self.assertEqual(ids.match_id(1234), "openbench-openbench-1234")
-        self.assertEqual(ids.match_id(7, instance="lab"), "openbench-lab-7")
-        with override_settings(NYAYO_INSTANCE="bobby"):
-            self.assertEqual(ids.match_id(7), "openbench-bobby-7")
+    def test_the_ids_of_tests_matches_count_too(self):
+        self.assertEqual(ids.first_test_id(["sprt-1234", "tune-40"]), 2000)
+        self.assertEqual(ids.first_test_id(["sprt-x", "gauntlet-5"]), 1)
+
+    def test_a_match_id_is_the_mode_and_the_test_id(self):
+        self.assertEqual(ids.match_id(1000, "SPRT"), "sprt-1000")
+        self.assertEqual(ids.match_id(1001, "GAMES"), "games-1001")
+        self.assertEqual(ids.match_id(1002, "SPSA"), "tune-1002")
+        self.assertEqual(ids.match_id(1003, "DATAGEN"), "datagen-1003")
+
+    def test_the_forms_are_told_apart(self):
+        self.assertEqual(ids.TEST_FORM.match("tune-7")["number"], "7")
+        for other in ("sprt-", "sprt-7-x", "tune7", "openbench-openbench-7", "SPRT-7", "sprt-07a"):
+            self.assertIsNone(ids.TEST_FORM.match(other), other)
+        self.assertEqual(ids.OLD_FORM.match("openbench-bobby-12")["number"], "12")
+        self.assertIsNone(ids.OLD_FORM.match("sprt-12"))
 
 
 class Starting(TestCase):
@@ -54,7 +62,7 @@ class Starting(TestCase):
         ids.start_test_ids(3000)
         first, second = make_test(), make_test()
         self.assertEqual((first.id, second.id), (3000, 3001))
-        self.assertEqual(first.match_id(), ids.match_id(3000))
+        self.assertEqual(first.match_id(), ids.match_id(3000, "SPRT"))
 
     def test_the_floor_never_lowers_an_id_already_passed(self):
         ids.start_test_ids(3000)

@@ -17,7 +17,6 @@ from django.db.models import Count, Max, Sum
 from django.utils import timezone
 
 from nyayo.lab import cpuflags, hours, toolchains, steps as walk
-from nyayo.lab.ids import match_id
 from nyayo.lab.models import EngineConfig, Machine, Place, Result, Step, Test
 from nyayo.paging import PAGE_SIZE, paginate
 from nyayo.runs.models import Machine as Token
@@ -251,7 +250,7 @@ def listing(now=None):
             'os': info['os'], 'os_ver': info['os_ver'],
             'cpu': info['cpu'], 'threads': info['threads'], 'sockets': info['sockets'],
             'state': state, 'registration': machine.state, 'enabled': machine.enabled,
-            'test': test, 'match': match_id(test.id) if test else '', 'label': test_label(test) if test else '',
+            'test': test, 'match': test.match_id() if test else '', 'label': test_label(test) if test else '',
             'dev_mnps': machine.dev_mnps, 'base_mnps': machine.base_mnps, 'updated': machine.updated, 'ago': ago(machine.updated, now),
             'first_seen': machine.first_seen, 'games': games, 'tests': played, 'supports': supports,
             'missing': missing, 'worker': True, 'token': token, 'id': machine.id,
@@ -490,7 +489,7 @@ def find(name, now=None, request=None):
     page['kinds'] = [(KINDS.get(mode, mode), kinds[mode]) for mode in sorted(kinds, key=lambda m: -kinds[m])]
     last = mine.select_related('test', 'test__dev', 'test__base').order_by('-updated').first()
     page['last'] = None if last is None else {
-        'label': test_label(last.test), 'match': match_id(last.test_id), 'kind': KINDS.get(last.test.test_mode, last.test.test_mode),
+        'label': test_label(last.test), 'match': last.test.match_id(), 'kind': KINDS.get(last.test.test_mode, last.test.test_mode),
         'against': last.test.base.name, 'workloads': last.workloads, 'games': last.games, 'ago': ago(last.updated, now),
         'finished': last.test.finished}
 
@@ -502,7 +501,7 @@ def find(name, now=None, request=None):
     failed = defaultdict(int)
     for count in Step.objects.filter(result__machine_id__in=ids, result__test_id__in=list(tests), state='failed')             .values('result__test_id').annotate(n=Count('id')):
         failed[count['result__test_id']] = count['n']
-    page['recent'] = [{'test': tests[r['test_id']], 'label': test_label(tests[r['test_id']]), 'match': match_id(r['test_id']),
+    page['recent'] = [{'test': tests[r['test_id']], 'label': test_label(tests[r['test_id']]), 'match': tests[r['test_id']].match_id(),
                        'games': r['games'], 'crashes': r['crashes'], 'timeloss': r['timeloss'], 'workloads': r['workloads'],
                        'updated': r['updated'], 'failures': failed[r['test_id']]} for r in shown if r['test_id'] in tests]
     page['pills'] = cpuflags.pills(info['flags'])
@@ -512,7 +511,7 @@ def find(name, now=None, request=None):
     for step in Step.objects.filter(result__machine_id__in=ids, result__test__finished=False, state='failed',
                                     blame__in=('worker', 'unclear')).select_related('result', 'result__test', 'result__test__dev', 'result__test__base'):
         trouble.append({'step': step, 'where': '%s %s' % (step.step, step.side) if step.side else step.step,
-                        'match': match_id(step.result.test_id), 'label': test_label(step.result.test)})
+                        'match': step.result.test.match_id(), 'label': test_label(step.result.test)})
     page['trouble'] = trouble
 
     # the graph, the figures that come from it, and the sections the mock has

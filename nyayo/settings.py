@@ -113,9 +113,6 @@ NYAYO_ARCHIVE_EVERY = int(os.environ.get("NYAYO_ARCHIVE_EVERY", 60))
 NYAYO_SILENT_AFTER = int(os.environ.get("NYAYO_SILENT_AFTER", 30))
 
 # The engine's repository on GitHub, owner/name: the dashboard links its commits there. Unset, nothing links out.
-# The name in the ids of the matches tests make, openbench-<instance>-<test id> (nyayo/lab/ids.py); bobby's is openbench.
-NYAYO_INSTANCE = os.environ.get("NYAYO_INSTANCE", "openbench").strip()
-
 NYAYO_GITHUB_REPO = os.environ.get("NYAYO_GITHUB_REPO", "").strip().strip("/")
 
 # A run's largest size once decompressed; uploads are gzipped and far smaller on the wire.
@@ -139,6 +136,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "nyayo.gamethreads.GameThreadsMiddleware",
+    "nyayo.matches.oldids.OldMatchIds",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",

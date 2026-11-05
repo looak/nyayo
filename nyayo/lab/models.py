@@ -359,7 +359,7 @@ class Test(Model):
         return '{0} vs {1} @ {2}'.format(self.dev.name, self.base.name, self.dev_time_control)
 
     def match_id(self):
-        return match_id(self.id)
+        return match_id(self.id, self.test_mode)
 
     def results(self):
         return self.as_tri() if self.use_tri else self.as_penta()

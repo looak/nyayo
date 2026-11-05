@@ -3,26 +3,26 @@
 # approve. Delete, restore and modify are not on the page yet. Who may act is nyayo/actions/access.py's business; the
 # one thing decided here is that approving is for superusers, who are the approvers OpenBench's Profile had.
 
-import re
 from importlib import import_module
 
-from django.conf import settings
 from django.db.models import Sum
 
+from .ids import PREFIXES, TEST_FORM
 from .models import LogEvent, Result, Test
 
 ACTIONS = ('stop', 'restart', 'approve', 'unapprove')
 
-OPENBENCH_ID = re.compile(r'^openbench-(?P<instance>.+)-(?P<number>\d+)$')
 
 
 def test_of(match):
 
-    # The lab's test a match is the document of, or None: an old match, from OpenBench's own server, has none.
-    found = OPENBENCH_ID.match(match.pk)
-    if not found or found['instance'] != settings.NYAYO_INSTANCE:
+    # The lab's test a match is the document of, or None: a match from OpenBench's own server (renamed to sprt-<N> like
+    # the tests', but with no Test of that number) and a producer's own have none. The prefix has to be the test's mode.
+    found = TEST_FORM.match(match.pk)
+    if not found:
         return None
-    return Test.objects.filter(pk=int(found['number'])).first()
+    test = Test.objects.filter(pk=int(found['number'])).first()
+    return test if test is not None and PREFIXES.get(test.test_mode) == found['prefix'] else None
 
 
 def games_played(test):

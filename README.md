@@ -82,6 +82,9 @@ Finished games sent in bulk (OpenBench uploads one per workload) are taken at on
 batches, with a card per game in an index database of their own. `manage.py worker --once` does what is waiting and
 exits.
 
+A test's match is `sprt-1000`, `games-1001`, `tune-1002` or `datagen-1003`: its mode and its number. The matches taken from OpenBench's
+server were `openbench-openbench-N`; `manage.py rename_matches` renames them (see docs/deploy.md), and the old links redirect.
+
 Add a machine in the admin to get a push token. Installing on a server (bobby, next to OpenBench, as a systemd
 service in a conda env) and connecting Elephant are described in [docs/deploy.md](docs/deploy.md).
 

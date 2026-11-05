@@ -9,7 +9,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from nyayo.lab.ids import match_id
+
 from nyayo.lab.models import Machine, Result, Step
 from nyayo.runs.models import Machine as Token
 
@@ -64,7 +64,7 @@ class List(TestCase):
         state = {r["name"]: r["state"] for r in self.client.get("/machines").context["rows"]}
         self.assertEqual(state, {"hunt": "playing", "tor": "idle", "bobby": "quiet", "done": "idle"})
         text = page(self.client)
-        self.assertIn('<a href="/matches/%s">my test</a>' % match_id(test.id), text)
+        self.assertIn('<a href="/matches/%s">my test</a>' % test.match_id(), text)
         self.assertIn("gone quiet", text)
 
     def test_the_five_minutes_are_the_actives(self):
@@ -153,7 +153,7 @@ class Detail(TestCase):
         text = page(self.client, "/machines/hunt")
         for expected in ("Ryzen 9", ">POPCNT<", ">AVX2<", "clang 18.1.3", "1.8.1", "6.8"):
             self.assertIn(expected, text)
-        self.assertIn('<a href="/matches/%s">lmr</a>' % match_id(test.id), text)
+        self.assertIn('<a href="/matches/%s">lmr</a>' % test.match_id(), text)
         recent = self.client.get("/machines/hunt").context["recent"][0]
         self.assertEqual((recent["games"], recent["crashes"], recent["timeloss"], recent["failures"]), (40, 2, 1, 1))
 

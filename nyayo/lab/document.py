@@ -45,8 +45,11 @@ logger = logging.getLogger(__name__)
 PGN_OPTIONS = { 'fastchess' : ['nodes', 'seldepth'] }
 
 
-def instance():
-    return settings.NYAYO_INSTANCE
+# What the matches of tests say of their producer and host. Fixed by the matches that exist: these are part of what may
+# not change under a match id (ingest.fixed_part), and every match nyayo made since it ran tests itself says 'openbench'
+# in both, from the NYAYO_INSTANCE it had then. So the value stays; it is no longer a setting.
+PRODUCER_VERSION = 'openbench'
+HOST_NAME = 'openbench'
 
 
 def match_state(test):
@@ -152,16 +155,16 @@ def build_document(test):
     document = {
         'schema_version': 1,
         'match': {
-            'id': match_id(test.id),
+            'id': match_id(test.id, test.test_mode),
             'name': test.name or '%s vs %s' % (player_name(test.dev_engine, test.dev.name), test.base.name),
             'kind': 'sprt' if test.test_mode == 'SPRT' else 'games',
             'state': state,
             # as the fork sent it; there is no OpenBench page to link to, and a match of a test in the lab shows none
-            'producer': { 'name': 'OpenBench', 'version': instance(), 'url': None },
+            'producer': { 'name': 'OpenBench', 'version': PRODUCER_VERSION, 'url': None },
             'started_at': iso(test.creation),
             'updated_at': iso(timezone.now()),
             'finished_at': finished_at,
-            'host': { 'name': instance() },
+            'host': { 'name': HOST_NAME },
             'settings': {
                 'tc': test.dev_time_control, 'book': test.book_name,
                 'runner': { 'name': test.runner }, 'pgn_options': PGN_OPTIONS.get(test.runner, []),

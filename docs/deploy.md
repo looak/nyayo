@@ -137,7 +137,7 @@ What the trial **does touch** of the current nyayo, and only this: `python manag
 The current nyayo is in `~/dev/nyayo` at `e068b06` on `main`, port 8001, in the conda env `nyayo` (Python 3.13); its `.env` has
 `NYAYO_DATA_DIR=/home/fischer/dev/nyayo-data` (435 MB), `NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches` (NFS, 172.16.100.10
 `/volume2/nyayo-batches`), `NYAYO_BACKUP_REPO=/home/fischer/dev/nyayo-backups` and `NYAYO_ALLOWED_HOSTS=172.16.100.11,bobby.home,localhost`.
-It has no `NYAYO_INSTANCE`, and its match ids are `openbench-openbench-N`, so the default, `openbench`, is right. bobby has 3.8 GB of
+Its match ids are `openbench-openbench-N`; 2.0 names them `sprt-N` (*Renaming the matches*). bobby has 3.8 GB of
 memory (about 3.1 GB free) and 8.4 GB free on `/`. A second nyayo costs about 0.5 GB of data, 1 to 2 GB for the env (scipy and numpy
 are in it), and two gunicorn workers of four threads, which is why the trial has two where the real one has four.
 
@@ -246,9 +246,8 @@ curl -s http://172.16.100.11:8002/clientVersionRef/ -X POST                    #
 ```
 
 Then in the browser, at `http://172.16.100.11:8002/`: **an old match** (Matches, open one), **an old game** (Games, open one), **Machines** (empty but for tokens, with the box that says how to start a worker), and **sign in** with the owner's
-name. The id the next test will have is printed at the end of `NYAYO_CONDA_ENV=nyayo2 NYAYO_UNITS="nyayo2 nyayo2-worker" deploy/update.sh`:
-`The next test is openbench-openbench-1000 (NYAYO_INSTANCE=openbench)`, the next thousand above the highest `openbench-openbench-N` of the copy
-(1000 if 63 is near the highest), and `NYAYO_INSTANCE=openbench` there is what the current ids have.
+name. The first test of the copy takes the next thousand above the highest `openbench-openbench-N` of the copy (1000 if 63 is near the
+highest), and its match is `sprt-1000`. The copy's old matches keep their `openbench-openbench-N` ids until `rename_matches` is run on it.
 
 **9. The worker.** The WSL worker is pointed at 8002 (the commands are on `http://172.16.100.11:8002/worker`, and its client updates itself
 from there). Wherever it takes its server from (the `NYAYO_SERVER` of its `worker.env`, or the client's own `--server`, or
@@ -362,17 +361,9 @@ is what the workers talk to. The way to get here from the nyayo that runs now is
 - Python 3.12 or later in the env (`pyproject.toml` says `>=3.12`; the first install above makes the env with 3.13). Check
   with `python --version` in the env: an older one makes `pip install -e .` fail with "requires a different Python".
 - `deploy/update.sh` runs `pip install -e .`, which brings `scipy` and `numpy` (the SPRT maths), both with wheels for Linux.
-- `NYAYO_INSTANCE` in `.env`: the name in the ids of the matches tests make, `openbench-<instance>-<test id>`. **It must be
-  what OpenBench had on bobby**, or new tests are named differently from the old and the ids do not carry on from them. The
-  ids of the matches nyayo already has show it:
-
-  ```bash
-  python manage.py shell --no-imports -c "from nyayo.matches.models import Match; print(list(Match.objects.filter(id__startswith='openbench-').order_by('-started_at').values_list('id', flat=True)[:3]))"
-  ```
-
-  gives `['openbench-<instance>-2345', ...]`. `deploy/update.sh` ends by printing the id the next test will have and the
-  instance it was made with. The first migration of the lab also starts test ids at the next thousand above the highest
-  `openbench-<anything>-<N>` there, so a test of nyayo's can never take a number OpenBench used.
+- A test's match is `<mode>-<test id>` (`sprt-1000`, `games-1001`, `tune-1002`, `datagen-1003`); nothing is set for it. The first
+  migration of the lab starts test ids at the next thousand above the highest `openbench-<anything>-<N>` there was, so a test
+  of nyayo's never took a number OpenBench used. (`NYAYO_INSTANCE` is gone; a line of it left in `.env` is ignored.)
 - The rest, all optional, is in `.env.example`: `NYAYO_GITHUB_TOKEN` for the create page's lookups, and what the workers
   are told to fetch (`NYAYO_CLIENT_*`, `NYAYO_FASTCHESS_*`; the defaults are right).
 
@@ -584,6 +575,48 @@ the share: SQLite's locking isn't safe over SMB or NFS.
 To restore on a new machine: install nyayo, set `NYAYO_DATA_DIR` to an empty directory, clone the backup repository,
 stop nyayo, then `python manage.py restore_backup <path to the clone>`. It refuses a data directory that already has
 a database, archive or games. Restore `games/batches/` from the share.
+
+## Renaming the matches
+
+Once, on bobby, to turn the `openbench-openbench-N` matches into `sprt-N` (`games-N` and `tune-N` for a lab test of that mode):
+`python manage.py rename_matches`. Old links, `/matches/openbench-openbench-1000` and everything under it, keep working: they
+answer `301` to `/matches/sprt-1000`.
+
+What holds a match's id, and so what it moves: the `Match` row (its primary key) and every row that refers to it (`ScheduleEntry`,
+`MatchResult`, `MatchSnapshot`, `Upload`, `Batch`, `Game`), one transaction per match; the datasets that name it
+(`manifest[].match`, `selection.matches`); `archive/matches/<id>.json`, with `match.id` rewritten, and `<id>.meta.json`; the
+directories `games/<id>/`, `<NYAYO_BATCHES_DIR>/<id>/` and `uploads/<id>/`. The index database (`index.sqlite3`) names
+batches by row number and holds no match id. Tombstones keep their ids (a link to a deleted match still says so). It writes a
+`RenamedMatch` row per match, which is what the redirect reads and what a second run finds leftover files by. Gauntlet ids (uuids)
+are not of the form and are not touched. The command refuses, before changing anything, a new id that is taken (a match, a
+tombstone, an existing file or directory that differs) or wanted by two matches, and a match of a kind with no rule (only
+`sprt` and `games`) that is not a lab test.
+
+Order, with the services that write stopped (the worker and the web process both write matches; the expire timer deletes them):
+
+```bash
+sudo systemctl stop nyayo-expire.timer nyayo-backup.timer nyayo nyayo-worker
+cd ~/dev/nyayo-2 && conda activate nyayo2          # the checkout and env 2.0 runs from
+python manage.py backup                            # a fresh backup, then look at it: the database and the archive
+git pull --ff-only && python -m pip install --quiet -e . && python manage.py migrate   # the table of renames
+python manage.py rename_matches --dry-run          # every rename and move, one line each; nothing changes
+python manage.py rename_matches                    # for real
+python manage.py rename_matches --dry-run          # again: "0 match(es) would be renamed, 0 file(s)..."
+sudo systemctl start nyayo nyayo-worker
+curl -sI http://172.16.100.11:8001/matches/openbench-openbench-1000 | head -3   # 301, Location: /matches/sprt-1000
+sudo systemctl start nyayo-expire.timer nyayo-backup.timer
+```
+
+If it stops (a crash, Ctrl-C, a full disk), run it again: the database part is a transaction per match, and the files are found
+from the `RenamedMatch` rows, so it finishes what is left and does nothing twice. A refusal changes nothing; fix what it names.
+It rewrites the archive documents and moves files, so the old names are not kept: the backup before it is the way back (restore the
+database and the archive from it, and put the directories back with `mv`).
+
+The next `manage.py backup` sees the renames as files gone and files new. `nyayo-backups` (git) records the archive and `games/`
+moves as renames of the same content (the archive documents differ by their id), so it is a one-time commit and not the history
+again, and the old names stay in the earlier commits. `games/batches/` and `uploads/` are not in the repo; the Synology's own backup
+of the share sees the renamed `batches/<id>/` directories as new and, unless it deduplicates, uploads them once more. Take that
+backup before and after, and check the free space on the share.
 
 ## When a page gives an error
 
