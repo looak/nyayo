@@ -72,7 +72,7 @@ def get_workload(request, machine):
 def heard(machine):
 
     # A worker that asks for work and is given none is waiting, not gone: that it was heard from is recorded, so
-    # that idle is a worker that polls and gone quiet one that has not for 5 minutes. A worker asks only when it has
+    # that idle is a worker that polls and offline one that has not for 5 minutes. A worker asks only when it has
     # finished what it was on, so the workload it had is let go (OpenBench left both alone, which was harmless there).
     # One write of two columns, never the info blob; the test it left is told, as it is no longer being played.
     Machine.objects.filter(pk=machine.pk).update(updated=timezone.now(), workload=0, **rtt.values(machine))

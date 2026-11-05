@@ -50,7 +50,7 @@ class List(TestCase):
         self.assertEqual([r["name"] for r in rows], ["machine %d" % old.id])
         self.assertEqual(self.client.get("/machines/machine %d" % old.id).status_code, 200)
 
-    def test_playing_idle_and_gone_quiet(self):
+    def test_playing_idle_and_offline(self):
         test = make_test(name="my test")
         playing = make_machine("hunt")
         playing.workload = test.id
@@ -65,7 +65,7 @@ class List(TestCase):
         self.assertEqual(state, {"hunt": "playing", "tor": "idle", "bobby": "quiet", "done": "idle"})
         text = page(self.client)
         self.assertIn('<a href="/matches/%s">my test</a>' % test.match_id(), text)
-        self.assertIn("gone quiet", text)
+        self.assertIn('<span class="worse">offline</span>', text)
 
     def test_the_five_minutes_are_the_actives(self):
         machine = make_machine("hunt")
