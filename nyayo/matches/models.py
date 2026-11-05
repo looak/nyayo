@@ -93,6 +93,19 @@ class Tombstone(models.Model):
     deleted_at = models.DateTimeField(default=timezone.now)
 
 
+class RenamedMatch(models.Model):
+    """A match's id before `manage.py rename_matches` gave it a new one (openbench-openbench-1000 became sprt-1000): the
+    old id and the new. Links to the old id redirect to the new (oldids.py), and the command, run again after an
+    interruption, finds from these rows which files still carry the old name. Kept for good; a few lines."""
+
+    old_id = models.CharField(max_length=MATCH_ID_MAX, primary_key=True)
+    new_id = models.CharField(max_length=MATCH_ID_MAX, db_index=True)
+    renamed_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.old_id} -> {self.new_id}"
+
+
 class ScheduleEntry(models.Model):
     """One game of a gauntlet's schedule, the eight fields of an entry of the match document, with the hash the
     schedule's digest is made of. Kept apart from Game, the index of a PGN file that purge_games removes."""

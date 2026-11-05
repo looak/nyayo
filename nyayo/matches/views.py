@@ -6,9 +6,21 @@ from django.views.decorators.http import require_http_methods
 from nyayo.runs.ingest import IngestError
 from nyayo.runs.views import decompress, machine_for, text, unauthorized
 
+from nyayo.lab.ids import TEST_FORM
+
 from . import export, games, uploads
 from .ingest import ingest
 from .models import Match
+
+
+def reserved(match_id):
+    """The 400 for an id of nyayo's own tests' matches (sprt-1000, games-1001, tune-1002, datagen-1003): the matches the
+    lab makes in this process, which no outside producer may write to, so a test's match can never be someone else's.
+    None for any other id."""
+    if TEST_FORM.match(match_id):
+        return text(400, f"match id {match_id} is reserved: ids like sprt-N, games-N, tune-N and datagen-N belong to the "
+                         f"tests nyayo runs itself, use another id")
+    return None
 
 
 @csrf_exempt
@@ -19,6 +31,8 @@ def api_match(request, match_id):
     machine = machine_for(request)
     if machine is None:
         return unauthorized()
+    if (refused := reserved(match_id)) is not None:
+        return refused
     try:
         raw = decompress(request.body, request.headers.get("Content-Encoding"))
         result = ingest(raw, machine, match_id)
@@ -56,6 +70,8 @@ def api_game(request, match_id, game):
     machine = machine_for(request)
     if machine is None:
         return unauthorized()
+    if (refused := reserved(match_id)) is not None:
+        return refused
     try:
         raw = decompress(request.body, request.headers.get("Content-Encoding"))
         if request.method == "PATCH":
@@ -88,6 +104,8 @@ def api_batch(request, match_id, batch):
     machine = machine_for(request)
     if machine is None:
         return unauthorized()
+    if (refused := reserved(match_id)) is not None:
+        return refused
     try:
         body = request.body
     except RequestDataTooBig:

@@ -327,12 +327,26 @@ OpenBench's server (looak/ramani `plans/nyayo-2.md`). It has the models, the wor
   `SPSAParameter`, `LogEvent`, and `ServerState` (one row, the build checksum a worker restarts on, refreshed whenever
   an `EngineConfig` is saved). `Profile` is gone: `Machine.user` and `Test.author` are Django's `auth.User`. There is
   no `PGN`: an upload of games becomes one of nyayo's batches. All are registered plainly in the admin.
-- **A test and its match.** A test's match has the id `openbench-<NYAYO_INSTANCE>-<test id>` (`NYAYO_INSTANCE`, default
-  `openbench`; `nyayo.lab.ids.match_id`), which must be the value OpenBench had on bobby. `Test` has no link to `Match`: the id is a function of the test's, and the
-  match exists only once the first document is ingested.
-- **Test ids.** The first test's id is above the highest `N` in the existing `openbench-<anything>-<N>` match ids (any instance, so a wrong `NYAYO_INSTANCE` can't restart the numbering),
-  rounded up to the next thousand (1234 gives 2000, 2000 gives 3000; 1 when there are none). The data migration
-  `0002_seed` works it out once and sets SQLite's sequence; ids count on, and are never reused.
+- **A test and its match.** A test's match has the id `<mode>-<test id>` (`nyayo.lab.ids.match_id(test id, test_mode)`): `sprt-1000`
+  for an SPRT, `games-1001`, `tune-1002` for an SPSA, `datagen-1003`. `Test` has no link to `Match`: the id is a function of the
+  test's id and mode (a test's mode never changes), and the match exists only once the first document is ingested. The ids of this
+  form, `sprt-N`, `games-N`, `tune-N` and `datagen-N`, are the lab's: `PUT /api/matches/{id}` and the game and batch requests under
+  an id of that form are `400` (*reserved*), so a producer outside can never write to a test's match or take its id.
+  `modify_test.test_of` reads the id back to the test (the number, and a prefix that is that test's mode).
+- **Test ids.** One sequence for every mode, so the number alone names one test. The first test's id was above the highest `N` in the
+  `openbench-<anything>-<N>` (or already renamed `sprt-N`...) match ids that existed, rounded up to the next thousand (1234 gives
+  2000, 2000 gives 3000; 1 when there are none). The data migration `0002_seed` worked it out once and set SQLite's sequence; ids
+  count on, and are never reused.
+- **Matches taken from OpenBench's server** had the ids `openbench-<instance>-<N>`. `manage.py rename_matches` renamed each to
+  `<mode>-<N>`: the mode of lab test N where there is one, else the match's kind (`sprt`). It moves the database rows (the match
+  and everything that refers to it, in one transaction per match), the datasets that name it, `archive/matches/<id>.json` (its
+  `match.id` rewritten) and `.meta.json`, and the `games/`, batches and `uploads/` directories, is restartable and has a `--dry-run`,
+  and refuses a clash before changing anything (*docs/deploy.md*, *Renaming the matches*). Each rename is a `RenamedMatch` row
+  (old id, new id). A GET or HEAD of `/matches/<old id>` and anything under it, and of `/api/matches/<old id>/...`, answers `301`
+  to the new id with the query string kept (`nyayo/matches/oldids.py`); a write (`PUT`, `PATCH`) to `/api/matches/<old id>/...` is `409`
+  naming the new id, because the document says its own id and a redirect would send it to a url that disagrees. An id that only
+  looks like the old form and was not renamed is a `404`. A test's match says `producer.version` and `host.name` `openbench`, as
+  every one already made does; they are fixed under a match id, so they are constants and not a setting.
 - **Maths.** `nyayo/lab/stats.py` (SPRT log-likelihood ratios, Elo and its interval) and `spsa_utils.py` (SPSA
   parameters and a workload's perturbations) are OpenBench's, with its notice (README, *License*); `scipy` and `numpy`
   are dependencies.
@@ -380,7 +394,7 @@ with OpenBench's notice. Tunes and datagens come later.
   goes to the match page. A test made by the superuser is approved; one made by another staff user waits for approval.
 - **A match's actions** are a group, *Actions for this match*, last in the left nav (stuck to the bottom of the window while the nav
   is taller; on a phone it is the end of the opened menu), on a match's page and its game pages, for the staff, and nowhere in
-  the page. For a lab test's match (an `openbench-<instance>-<N>` match with a `Test` N) it holds what `modify_test.offers`
+  the page. For a lab test's match (a `<mode>-<N>` match with a `Test` N of that mode) it holds what `modify_test.offers`
   allows, each a `POST /tests/<id>/<action>`, logged and reported again: *Stop* (sets `finished`: no more work is handed out,
   workers are told to stop at their next report or heartbeat, the match is `stopped`), *Restart* (clears it and calls
   `steps.restart_walks`), *Approve* (superusers only, while not approved) and *Unapprove* (superusers only, for an approved test
@@ -488,7 +502,7 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
   builds the match document (`document.py`, from the fork's reporter: the same document, `producer` included, with
   `producer.url` null) and passes it to `ingest` in this process, in one write transaction, so two reports of a test are
   serialised and the later is built from what the earlier left. A failure is logged and never fails the worker's call. The
-  match id is `openbench-<NYAYO_INSTANCE>-<test id>`.
+  match id is `<mode>-<test id>` (*A test and its match*).
 - **Games.** `clientSubmitPGN` stores the workload's `.pgn.bz2`, as the worker named and tagged it, as one of nyayo's uploads
   named `<result id>.<book index>` (the match is reported first if nyayo has none yet; a workload that played nothing sends
   an empty archive, which is dropped). nyayo's worker puts the games away as for any producer. Nothing is kept as OpenBench

@@ -63,7 +63,7 @@ SECRET="$("$NYAYO_BIN/python" -c 'import secrets; print(secrets.token_urlsafe(50
     [ -z "${NYAYO_DATASETS_DIR:-}" ] || echo "NYAYO_DATASETS_DIR=$NYAYO_DATASETS_DIR"
     [ -z "${BACKUP_REPO:-}" ]        || echo "NYAYO_BACKUP_REPO=$BACKUP_REPO"
     # what the current nyayo is set up to do, which does not depend on which of them runs
-    for key in NYAYO_INSTANCE NYAYO_TIME_ZONE NYAYO_READER NYAYO_READER_SHA256 NYAYO_LOG_LEVEL NYAYO_GITHUB_REPO NYAYO_GITHUB_TOKEN \
+    for key in NYAYO_TIME_ZONE NYAYO_READER NYAYO_READER_SHA256 NYAYO_LOG_LEVEL NYAYO_GITHUB_REPO NYAYO_GITHUB_TOKEN \
                NYAYO_GAME_THREADS NYAYO_SILENT_AFTER NYAYO_FAILED_PRECHECKS_HOURS NYAYO_MIN_PLY_DEFAULT NYAYO_BOOK_MIN_PLY; do
         value="$(from "$key")"
         [ -z "$value" ] || echo "$key=$value"

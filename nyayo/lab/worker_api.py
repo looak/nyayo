@@ -40,7 +40,6 @@ from django.views.decorators.csrf import csrf_exempt
 from nyayo.lab import clientzip, config, fastchess, hours, registration, rtt, steps, toolchains, utils
 from nyayo.lab.document import report_test
 from nyayo.lab.get_workload import get_workload, heard
-from nyayo.lab.ids import match_id
 from nyayo.lab.models import EngineConfig, LogEvent, Machine, Network, Result, ServerState, Test
 from nyayo.runs.ingest import IngestError
 
@@ -447,14 +446,15 @@ def client_submit_pgn(request, machine):
         return JsonResponse({})
 
     # The test was deleted with its games while the worker played it: the games are not wanted
-    if not Test.objects.filter(id=test_id).exists():
+    test = Test.objects.filter(id=test_id).first()
+    if test is None:
         return JsonResponse({})
 
     try:
         # nyayo must know the match before it takes an upload of its games
         if report_test(test_id) is None:
             raise IngestError(500, 'the match of test %d could not be reported' % (test_id))
-        uploads.store(match_id(test_id), name, data, uploads.BZIP2, None, None)
+        uploads.store(test.match_id(), name, data, uploads.BZIP2, None, None)
     except IngestError as error:
         logger.error('nyayo refused upload %s of test %d: %d %s', name, test_id, error.status, error.reason)
     except Exception:

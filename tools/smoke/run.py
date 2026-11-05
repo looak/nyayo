@@ -42,7 +42,6 @@ import files  # noqa: E402
 
 ENGINE_NAME, ENGINE_NPS, ENGINE_BENCH = 'smoke', 1000000, 1000000
 SOURCE = 'https://github.com/smoke/engine'
-INSTANCE = 'smoke'
 OWNER, HELPER, PASSWORD = 'owner', 'helper', 'smoke-password'    # people who sign in to the pages; a worker has no password
 CLIENT_TIMERS = { 'TIMEOUT_ERROR' : 1, 'TIMEOUT_WORKLOAD' : 1, 'REPORT_INTERVAL' : 2 }
 RETRY = 2          # seconds a worker waits before it tries a test again after a verdict that isn't the engine's
@@ -156,7 +155,7 @@ class Rig:
         self.env = { k : v for k, v in os.environ.items() if not k.startswith('NYAYO_') }
         self.env.update(
             DJANGO_SETTINGS_MODULE='rigsettings', PYTHONPATH=os.pathsep.join([str(self.temp), str(REPO)]),
-            NYAYO_DATA_DIR=str(self.temp / 'data'), NYAYO_SECRET_KEY='smoke', NYAYO_INSTANCE=INSTANCE,
+            NYAYO_DATA_DIR=str(self.temp / 'data'), NYAYO_SECRET_KEY='smoke',
             NYAYO_GITHUB_API=self.file_server.url + '/repos', NYAYO_CLIENT_DIR=str(self.served), NYAYO_ALLOWED_HOSTS='127.0.0.1,localhost',
             RIG_WRITES=str(self.temp / 'writes.log'), PYTHONUNBUFFERED='1', PYTHONDONTWRITEBYTECODE='1')
 
@@ -324,7 +323,7 @@ class Rig:
     def match(self, test_id):
         from nyayo.lab.ids import match_id
         from nyayo.matches.models import Match
-        return Match.objects.get(pk=match_id(test_id))
+        return Match.objects.get(pk=match_id(test_id, self.test(test_id).test_mode))
 
     def step(self, test_id, step, side):
         from nyayo.lab.models import Step
@@ -807,7 +806,7 @@ def load(r):
     waits, stop_poll = [], threading.Event()
 
     def poll():
-        match = 'openbench-%s-%d' % (INSTANCE, test_id)
+        match = 'games-%d' % (test_id)
         while not stop_poll.is_set():
             for path in ('/matches', '/matches/%s' % (match), '/healthz'):
                 started = time.time()
