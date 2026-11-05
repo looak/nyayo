@@ -21,6 +21,23 @@
   .net.warn .net-words { color: var(--wip); }
   .net.offline .net-words { font-weight: 400; }
 
+  /* the Enabled toggle: a wide thumb that slides right and turns the track green when on */
+  button.toggle { appearance: none; position: relative; display: block; flex: none; box-sizing: border-box; width: 34px; height: 18px; margin: 0; padding: 0;
+    border: 1px solid var(--muted); border-radius: 9px; background: var(--code-bg); cursor: pointer; outline: none; transition: background .15s, border-color .15s; }
+  button.toggle i { position: absolute; top: 2px; left: 2px; width: 18px; height: 12px; border-radius: 6px; background: var(--muted); transition: left .15s, background .15s; }
+  button.toggle[aria-checked=true] { background: var(--success); border-color: var(--success); }
+  button.toggle[aria-checked=true] i { left: 12px; background: var(--bright); }
+  button.toggle:focus-visible { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--link); }
+
+  /* a row's actions: the toggle or Approve in one slot, so Turn away lines up under itself */
+  .row-actions { display: grid; grid-template-columns: 52px auto; align-items: center; justify-content: start; gap: .5rem; margin: 0; }
+  button.mini { appearance: none; margin: 0; padding: 1px 7px; border: 1px solid var(--muted); border-radius: 9px; background: none; color: var(--fg);
+    font: inherit; font-size: .7rem; line-height: 16px; white-space: nowrap; cursor: pointer; }
+  button.mini:hover { border-color: var(--worse); color: var(--worse); }
+  button.mini.go { padding: 1px 0; border-color: var(--accent); background: var(--accent); color: #fff; }
+  button.mini.go:hover { border-color: var(--link); background: var(--link); color: #fff; }
+  button.mini:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+
   .os { display: inline-flex; align-items: center; gap: .3rem; vertical-align: middle; }
   .os svg { width: 1.1rem; height: 1.1rem; flex: none; fill: currentColor; color: var(--muted); }
   .os .wsl { font-size: .7rem; font-weight: 700; padding: 0 .3rem; border-radius: 3px; color: var(--committed); background: var(--committed-bg); }

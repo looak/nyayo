@@ -1,0 +1,2 @@
+{# the Enabled toggle: a submit button in a form with the worker's id and back; it slides as it posts, and the page it comes back to says what is true #}
+<button class="toggle" type="submit" name="action" value="{% if enabled %}disable{% else %}enable{% endif %}" role="switch" aria-checked="{% if enabled %}true{% else %}false{% endif %}" aria-label="Enabled, {{ name }}" title="{% if enabled %}Enabled: takes work{% else %}Disabled: takes no work{% endif %}" onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked') !== 'true')"><i></i></button>
