@@ -1,32 +1,45 @@
 """Test ids and the ids of the matches they make.
 
-A test's match is `openbench-<instance>-<test id>`: every match nyayo already holds from OpenBench has that form, and its
-pages and exports use it. So a new test must not take an id an old match already has. The first test takes its id above
-the highest `N` of those matches, rounded up to the next thousand, and ids count on from there (SQLite's AUTOINCREMENT
-never reuses one, even after a test is deleted). That is worked out once, in the migration that creates the tables,
-not at runtime; `first_test_id` is the rule and `start_test_ids` applies it.
+A test's match is `<mode>-<test id>`: `sprt-1000`, `games-1001`, `tune-1002` (an SPSA), `datagen-1003`. The number is the
+test's id, one sequence for all modes, so it names exactly one test and the mode in front is only for the reader and
+never changes (a test's mode is fixed when it is made). The matches nyayo took from OpenBench before it ran tests itself
+were `openbench-<instance>-<N>`; `manage.py rename_matches` gave them the same form and `OLD_FORM` still recognises
+the old one, for the redirects.
+
+The first test took its id above the highest `N` of those old matches, rounded up to the next thousand, and ids count on
+from there (SQLite's AUTOINCREMENT never reuses one, even after a test is deleted). That was worked out once, in the
+migration that creates the tables, not at runtime; `first_test_id` is the rule and `start_test_ids` applies it.
 """
 
 import re
 
-from django.conf import settings
 from django.db import connection
 
+# a test's mode, and what its match id starts with
+PREFIXES = {'SPRT': 'sprt', 'GAMES': 'games', 'SPSA': 'tune', 'DATAGEN': 'datagen'}
+# the other way, for a match id read back: a prefix is one mode
+MODES = {prefix: mode for mode, prefix in PREFIXES.items()}
 
-def match_id(test_id, instance=None):
-    """The id of the match a test makes: openbench-<instance>-<test id>."""
-    return f"openbench-{instance if instance is not None else settings.NYAYO_INSTANCE}-{test_id}"
+# the match ids of nyayo's own tests; an outside producer may not use them (matches.views.reserved)
+TEST_FORM = re.compile(r'^(?P<prefix>%s)-(?P<number>\d+)$' % '|'.join(MODES))
+# the ids the matches from OpenBench's server had before, and now redirect from
+OLD_FORM = re.compile(r'^openbench-(?P<instance>.+)-(?P<number>\d+)$')
+
+
+def match_id(test_id, mode):
+    """The id of the match a test makes: <mode prefix>-<test id>. `mode` is the test's test_mode, a Test's column."""
+    return f"{PREFIXES[mode]}-{test_id}"
 
 
 def first_test_id(match_ids):
     """The id the first test takes, given the ids of the matches that exist.
 
     Above the highest N in any `openbench-<instance>-<N>`, whatever the instance, rounded up to the next thousand (so
-    1234 and 1999 give 2000, and 2000 gives 3000), or 1 when there is none of that form. Any instance, because this
-    runs once in a migration: with NYAYO_INSTANCE unset or wrong at that moment, the numbering would restart below the
-    old tests and a later correction of the setting would collide.
+    1234 and 1999 give 2000, and 2000 gives 3000), or 1 when there is none of that form. The ids of tests' own
+    matches (`sprt-N` ...) count too, so a database that was renamed first doesn't restart below them. Any instance,
+    because this runs once in a migration.
     """
-    pattern = re.compile(r"^openbench-.+-(\d+)$")
+    pattern = re.compile(r"^(?:openbench-.+|sprt|games|tune|datagen)-(\d+)$")
     numbers = [int(m.group(1)) for m in map(pattern.match, match_ids) if m]
     if not numbers:
         return 1

@@ -6,11 +6,11 @@ from django.conf import settings
 from nyayo.actions.access import may_act
 
 from .. import modify_test
+from ..ids import OLD_FORM, TEST_FORM
 from ..models import Test
 
 register = template.Library()
 
-OPENBENCH_ID = modify_test.OPENBENCH_ID
 test_of = modify_test.test_of
 
 
@@ -30,7 +30,7 @@ def match_actions(context, match):
 def producer_link(match):
     """The producer's link, unless it goes to OpenBench's server for a test that was never there."""
     url = (match.producer or {}).get('url')
-    return url if url and (test_of(match) is not None or not OPENBENCH_ID.match(match.pk)) else None
+    return url if url and (test_of(match) is not None or not (OLD_FORM.match(match.pk) or TEST_FORM.match(match.pk))) else None
 
 
 @register.filter

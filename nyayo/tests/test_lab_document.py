@@ -13,17 +13,16 @@ from nyayo.matches.models import Match
 from .lab_helpers import make_machine, make_result, make_test
 
 
-@override_settings(NYAYO_INSTANCE="lab")
 class Document(TestCase):
     def test_the_first_report_creates_the_match_under_the_tests_id(self):
         test = make_test()
         ingested = document.report_test(test)
         self.assertTrue(ingested.created)
         match = Match.objects.get()
-        self.assertEqual(match.pk, f"openbench-lab-{test.id}")
+        self.assertEqual(match.pk, f"sprt-{test.id}")
         self.assertEqual((match.kind, match.state), ("sprt", "waiting"))
         self.assertEqual(match.name, "Elephant feature vs main")
-        self.assertEqual(match.producer, {"name": "OpenBench", "version": "lab", "url": None})
+        self.assertEqual(match.producer, {"name": "OpenBench", "version": "openbench", "url": None})
 
     def test_a_test_may_be_given_by_its_id(self):
         test = make_test()

@@ -270,10 +270,10 @@ class Acting(Reports):
         self.assertIn("https://old/test/1", page)
 
     def test_an_old_match_has_no_openbench_link(self):
-        Match.objects.create(id="openbench-openbench-12", subject=MatchEngine.objects.create(name="Elephant", commit="x"), kind="sprt", state="finished", name="old",
+        Match.objects.create(id="sprt-12", subject=MatchEngine.objects.create(name="Elephant", commit="x"), kind="sprt", state="finished", name="old",
                              producer={"name": "OpenBench", "url": "https://old/test/12"})
         self.client.force_login(self.owner)
-        page = self.client.get("/matches/openbench-openbench-12").content.decode()
+        page = self.client.get("/matches/sprt-12").content.decode()
         self.assertNotIn("https://old/test/12", page)
         self.assertNotIn("test-actions", page)
 

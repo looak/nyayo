@@ -32,7 +32,7 @@ def read(content):
 class ExportCase(BatchCase):
     def second_match(self, **changes):
         document = copy.deepcopy(GAUNTLET)
-        document["match"]["id"] = "sprt-1"
+        document["match"]["id"] = "sprt-one"
         document["match"]["kind"] = "sprt"
         document["match"]["settings"] = {"tc": "8+0.08", "book": "other.epd"}
         document["subject"] = {"name": "Elephant", "branch": "feature-x", "commit": "abcdef0123456789"}
@@ -93,13 +93,13 @@ class Filters(ExportCase):
         self.second_match()
         self.keep(bz2.compress(batch_text(game("1-0", white="G1"))), batch="g")
         self.keep(bz2.compress(batch_text(game("0-1", white="S1", Opponent="base"),
-                                          game("1-0", white="S2", Opponent="base"))), batch="s", match_id="sprt-1")
+                                          game("1-0", white="S2", Opponent="base"))), batch="s", match_id="sprt-one")
 
     def names(self, query):
         return sorted(white for white, _ in read(self.export(query)))
 
     def test_by_match(self):
-        self.assertEqual(self.names("?match=sprt-1"), ["S1", "S2"])
+        self.assertEqual(self.names("?match=sprt-one"), ["S1", "S2"])
 
     def test_by_kind(self):
         self.assertEqual(self.names("?kind=gauntlet"), ["G1"])

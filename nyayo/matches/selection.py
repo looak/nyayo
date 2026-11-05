@@ -11,7 +11,7 @@ import re
 from django.db.models import Q
 
 from . import cards
-from .models import Match
+from .models import Match, RenamedMatch
 
 # how a position ended a game by the rules (cards.ENDED), and the other endings (cards.ENDINGS)
 RULES = {1: "Checkmate", 2: "Stalemate", 3: "Insufficient material", 4: "Fifty-move rule", 5: "Threefold repetition"}
@@ -84,7 +84,7 @@ def parse_versions(text):
 class Selection:
     """The games a set of filters chooses. Every filter is optional; none is every game with a result.
 
-    matches: match ids; openbench: OpenBench test ids (`openbench-<host>-<id>`, or its test URL); kind: a match kind;
+    matches: match ids; openbench: test numbers (the N of `sprt-N`, or of the old `openbench-<host>-<N>`, or OpenBench's test URL); kind: a match kind;
     versions: (low, high) from parse_versions(), the engine under test's version; book and tc: as the match's settings
     say them; endings: the cards.ENDINGS codes kept (endings_kept()), None for any."""
 
@@ -104,9 +104,11 @@ class Selection:
         queryset = Match.objects.select_related("subject")
         chosen = Q()
         if self.match_ids:
-            chosen |= Q(pk__in=self.match_ids)
+            # an old id (openbench-openbench-12) in a saved link or script means the match it was renamed to
+            renamed = RenamedMatch.objects.filter(old_id__in=self.match_ids).values_list("new_id", flat=True)
+            chosen |= Q(pk__in=self.match_ids) | Q(pk__in=list(renamed))
         for number in self.openbench:
-            chosen |= Q(pk__regex=rf"^openbench-.+-{re.escape(number)}$") | Q(
+            chosen |= Q(pk__regex=rf"^(openbench-.+|sprt|games|tune|datagen)-{re.escape(number)}$") | Q(
                 producer__url__endswith=f"/test/{number}/")
         if self.match_ids or self.openbench:
             queryset = queryset.filter(chosen)
