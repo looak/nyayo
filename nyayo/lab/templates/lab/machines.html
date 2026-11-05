@@ -21,7 +21,7 @@
   <div class="tile success">{% include "runs/_tile_icon.html" with icon="play" %}<div class="inner"><h4>Playing now</h4><div class="big">{{ playing }} <small>of {{ workers }}</small></div><div class="sub">workers on a test</div></div></div>
   <div class="tile info">{% include "runs/_tile_icon.html" with icon="chess-board" %}<div class="inner"><h4>Threads</h4><div class="big">{{ threads }}</div><div class="sub">on workers heard from lately</div></div></div>
   <div class="tile grey">{% include "runs/_tile_icon.html" with icon="scale-balanced" %}<div class="inner"><h4>Tokens</h4><div class="big">{{ tokens }}</div><div class="sub">{{ revoked }} revoked</div></div></div>
-  <div class="tile warning">{% include "runs/_tile_icon.html" with icon="clock" %}<div class="inner"><h4>Gone quiet</h4><div class="big">{{ quiet }}</div><div class="sub">workers not heard from for 5 minutes</div></div></div>
+  <div class="tile warning">{% include "runs/_tile_icon.html" with icon="clock" %}<div class="inner"><h4>Offline</h4><div class="big">{{ offline }}</div><div class="sub">workers not heard from for 5 minutes</div></div></div>
 </div>
 {% if new_code %}
 <div class="card"><h3 class="box-title">A join code</h3>
@@ -30,7 +30,7 @@
 </div>
 {% endif %}
 {% if pending %}<div class="card top-silent pending-banner"><h3 class="box-title">{{ pending }} worker{{ pending|pluralize }} waiting for approval</h3>
-  <ul>{% for r in rows %}{% if r.state == "pending" %}<li><a href="{% url 'machine' r.name %}"><b>{{ r.name }}</b></a> <span class="muted">said hello {{ r.first_seen|date:"D j M H:i" }}{% if r.os %} · {{ r.os }}{% endif %}{% if r.cpu %} · {{ r.cpu }}{% endif %}</span> <a href="{% url 'machine' r.name %}">Look{% if may_act %} and approve{% endif %}</a></li>{% endif %}{% endfor %}</ul>
+  <ul>{% for r in rows %}{% if r.state == "pending" %}<li><a href="{% url 'machine' r.name %}"><b>{{ r.name }}</b></a> <span class="muted">said hello {{ r.first_seen|date:"D j M H:i" }}{% if r.os %} · {{ r.os }}{% endif %}{% if r.cpu %} · {{ r.cpu }}{% endif %}{% if r.silent %} · offline, last heard {{ r.ago }}{% endif %}</span> <a href="{% url 'machine' r.name %}">Look{% if may_act %} and approve{% endif %}</a></li>{% endif %}{% endfor %}</ul>
   {% if not may_act %}<p class="muted">Sign in to approve.</p>{% endif %}</div>{% endif %}
 <div class="card">
   <h3 class="box-title">Machines <span class="right muted"><span class="tag worker">worker</span> plays what the server hands out · <span class="tag token">token</span> may report to nyayo</span></h3>
@@ -38,15 +38,15 @@
   <div class="scroll"><table class="workers machines">
     <thead><tr><th>Status</th><th>Name</th><th>System</th><th class="num">Threads</th><th>Now</th><th class="num">MNPS dev / base</th><th class="num">Response</th><th>Last heard</th><th class="num">Games</th><th class="num">Tests</th>{% if may_act %}<th>Actions</th>{% endif %}</tr></thead>
     <tbody>{% for r in rows %}<tr{% if r.state == "pending" %} class="pending-row"{% endif %}>
-      <td data-label="Status" class="nowrap">{% if r.health %}{% include "lab/_status.html" with health=r.health %}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td data-label="Status" class="nowrap">{% if r.health %}{% include "lab/_status.html" with health=r.health %}{% else %}<span class="muted">{{ r.token_words }}</span>{% endif %}</td>
       <td class="nowrap"><b><a href="{% url 'machine' r.name %}">{{ r.name }}</a></b> {% if r.worker %}<span class="tag worker">worker</span> {% endif %}{% if r.token %}<span class="tag token{% if not r.token.active %} revoked{% endif %}">{% if r.token.active %}token{% else %}token revoked{% endif %}</span>{% endif %}{% if r.place %}<br><span class="place">{{ r.place }}</span>{% endif %}</td>
       <td data-label="System" class="nowrap">{% if r.worker %}{% include "lab/_os_icon.html" with kind=r.os_kind wsl=r.wsl title=r.os_ver %} {{ r.os|default:"–" }}{% else %}<span class="muted">–</span>{% endif %}</td>
       {% if r.worker %}<td data-label="Threads" class="num">{{ r.threads|default_if_none:"–" }}{% if r.sockets and r.sockets > 1 %} <span class="muted">/ {{ r.sockets }} sockets</span>{% endif %}</td>
-      <td data-label="Now">{% if r.state == "playing" %}<a href="{% url 'match' r.match %}">{{ r.label }}</a>{% elif r.state == "idle" %}<span class="muted">idle</span>{% elif r.state == "pending" %}<span class="muted">plays nothing yet</span>{% elif r.state == "disabled" %}<span class="muted">disabled</span>{% elif r.state == "turned_away" %}<span class="muted">turned away</span>{% else %}<span class="worse">gone quiet</span>{% endif %}</td>
+      <td data-label="Now">{% if r.state == "playing" %}<a href="{% url 'match' r.match %}">{{ r.label }}</a>{% elif r.state == "idle" %}<span class="muted">idle</span>{% elif r.state == "pending" %}<span class="muted">plays nothing yet</span>{% elif r.state == "disabled" %}{% if r.test %}<a href="{% url 'match' r.match %}">{{ r.label }}</a> <span class="muted">finishing</span>{% else %}<span class="muted">disabled</span>{% endif %}{% elif r.state == "turned_away" %}<span class="muted">turned away</span>{% else %}<span class="worse">offline</span>{% endif %}</td>
       <td data-label="MNPS dev / base" class="num nowrap">{% if r.dev_mnps or r.base_mnps %}{{ r.dev_mnps|floatformat:2 }}M / {{ r.base_mnps|floatformat:2 }}M{% else %}<span class="muted">–</span>{% endif %}</td>
       <td data-label="Response" class="num nowrap">{% if r.rtt is not None %}{% if r.rtt < 10 %}{{ r.rtt|floatformat:1 }}{% else %}{{ r.rtt|floatformat:0 }}{% endif %} ms{% else %}<span class="muted">–</span>{% endif %}</td>
       {% else %}<td class="num muted na">–</td><td><span class="muted">doesn't play</span></td><td class="num muted na">–</td><td class="num muted na">–</td>{% endif %}
-      <td data-label="Last heard" class="nowrap">{% if r.updated %}{% if r.state == "quiet" %}<span class="worse">{{ r.ago }}</span>{% else %}{{ r.ago }}{% endif %}{% else %}<span class="muted">never</span>{% endif %}</td>
+      <td data-label="Last heard" class="nowrap">{% if r.updated %}{% if r.silent %}<span class="worse">{{ r.ago }}</span>{% else %}{{ r.ago }}{% endif %}{% else %}<span class="muted">never</span>{% endif %}</td>
       <td data-label="Games" class="num">{% if r.worker %}{{ r.games }}{% else %}<span class="muted">–</span>{% endif %}</td>
       <td data-label="Tests" class="num">{% if r.worker %}{{ r.tests }}{% else %}<span class="muted">–</span>{% endif %}</td>
       {% if may_act %}{% if r.worker %}<td data-label="Actions">{% include "lab/_worker_actions.html" with r=r back="machines" %}</td>{% else %}<td class="muted na">–</td>{% endif %}{% endif %}

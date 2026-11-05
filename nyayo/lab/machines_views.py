@@ -18,14 +18,14 @@ from .models import JoinCode, Machine, Place
 def list_context(request, now, **extra):
     rows = machines.listing(now)
     workers = [r for r in rows if r['worker']]
-    heard = [r for r in workers if r['state'] in ('playing', 'idle')]
+    heard = [r for r in workers if r['state'] in ('playing', 'idle') or r['on_test']]
     return {
         'here': 'machines', 'rows': rows, 'now': now, 'may_act': may_act(request.user), 'server': client_views.server_address(request),
-        'playing': sum(1 for r in workers if r['state'] == 'playing'), 'workers': len(workers),
+        'playing': sum(1 for r in workers if r['on_test']), 'workers': len(workers),
         'threads': sum(r['threads'] for r in heard if isinstance(r['threads'], int)),
         'tokens': sum(1 for r in rows if r['token'] and r['token']['active']),
         'revoked': sum(1 for r in rows if r['token'] and not r['token']['active']),
-        'quiet': sum(1 for r in workers if r['state'] == 'quiet'),
+        'offline': sum(1 for r in workers if r['silent']),
         'pending': sum(1 for r in workers if r['state'] == 'pending'),
         'codes': list(JoinCode.objects.filter(used_by__isnull=True, expires__gt=now).order_by('expires')) if may_act(request.user) else [],
         **extra,

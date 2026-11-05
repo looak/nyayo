@@ -146,17 +146,20 @@ def totals():
 
 
 def status(machine, now, tests):
-    """What a worker is doing: 'pending', 'turned_away' or 'disabled' by the owner's say; else 'quiet' once not heard from for
-    ACTIVE, 'playing' a test that has not ended (and its test), or 'idle'."""
+    """What a worker is doing: 'pending', 'turned_away' or 'disabled' by the owner's say (a disabled one with the test it is
+    finishing, while it is heard from); else 'quiet' once not heard from for ACTIVE, 'playing' a test that has not ended (and
+    its test), or 'idle'. Whether a pending or disabled one is heard from is `silent` on its row. A worker asks for work only
+    once it has finished, and asking lets its workload go, so a workload on a disabled worker is one it is still on."""
     if machine.state == 'turned_away':
         return 'turned_away', None
     if machine.state == 'pending':
         return 'pending', None
+    heard = now - machine.updated <= ACTIVE
+    test = tests.get(machine.workload) if heard else None
     if machine.state == 'approved' and not machine.enabled:
-        return 'disabled', None
-    if now - machine.updated > ACTIVE:
+        return 'disabled', test
+    if not heard:
         return 'quiet', None
-    test = tests.get(machine.workload)
     return ('playing', test) if test else ('idle', None)
 
 
@@ -183,21 +186,30 @@ def places():
     return {place.name: place.text for place in Place.objects.all() if place.text}
 
 
-def health(state, ago_text, problems, supports, configs, missing):
-    """The status icon of a worker: offline (not heard from for ACTIVE, turned away or switched off), a warning (waiting for
-    approval, or online with something wrong), or fine. The reasons are what its tooltip says, so the colour is never all
-    of it."""
+def health(state, silent, finishing, ago_text, problems, supports, configs, missing):
+    """The status icon of a worker: offline (not heard from for ACTIVE, or turned away), held (switched off, and heard from),
+    a warning (waiting for approval, or online with something wrong), or fine. The owner's say and whether the box can be
+    heard are both said, except on a turned-away one, which nobody needs to act on. The reasons are what its tooltip says,
+    so the colour is never all of it."""
+    gone = 'Not heard from for 5 minutes (last %s)' % ago_text
     if state == 'turned_away':
         return {'look': 'offline', 'label': 'Turned away', 'reasons': ['The owner turned this worker away; it is told to wait']}
     if state == 'pending':
-        return {'look': 'warn', 'label': 'Waiting for approval', 'reasons': ['Said hello, and is told to wait until the owner approves it']}
+        said = 'Said hello, and is told to wait until the owner approves it'
+        if silent:
+            return {'look': 'offline', 'label': 'Waiting for approval, offline', 'reasons': [said, gone]}
+        return {'look': 'warn', 'label': 'Waiting for approval', 'reasons': [said]}
     if state == 'disabled':
-        return {'look': 'offline', 'label': 'Disabled', 'reasons': ['Switched off: it finishes a workload it has and gets no new one']}
-    if state == 'quiet':
-        return {'look': 'offline', 'label': 'Offline', 'reasons': ['Not heard from for 5 minutes (last %s)' % ago_text]}
+        if silent:
+            return {'look': 'offline', 'label': 'Disabled, offline', 'reasons': ['Switched off: it gets no new workload', gone]}
+        if finishing:
+            return {'look': 'held', 'label': 'Disabled, finishing', 'reasons': ['Switched off: it finishes the workload it has and gets no new one']}
+        return {'look': 'held', 'label': 'Disabled', 'reasons': ['Switched off: it finishes a workload it has and gets no new one']}
     reasons = list(problems)
     if configs and not supports:
         reasons.append('Plays no engine: %s' % ' '.join('%s: %s.' % (name, '; '.join(why)) for name, why in missing))
+    if state == 'quiet':
+        return {'look': 'offline', 'label': 'Offline', 'reasons': [gone] + reasons}
     if reasons:
         return {'look': 'warn', 'label': 'Needs a look', 'reasons': reasons}
     return {'look': 'ok', 'label': 'Online', 'reasons': ['Heard from %s; nothing is wrong' % ago_text]}
@@ -215,6 +227,13 @@ def tokens(now):
         out[token.name.lower()] = {'name': token.name, 'active': token.active, 'created': token.created_at, 'last': last,
                                    'ago': ago(last, now), 'runs': token.last_run is not None, 'matches': token.last_match is not None}
     return out
+
+
+def token_words(token):
+    """What a token with no worker has in place of a status: it is never online or offline, as it only reports."""
+    if not token['active']:
+        return 'Token revoked'
+    return 'Reports' if token['last'] else 'Never reported'
 
 
 ORDER = {'playing': 0, 'idle': 1, 'pending': 2, 'disabled': 3, 'quiet': 4, 'turned_away': 5, 'token': 6}
@@ -242,10 +261,13 @@ def listing(now=None):
             used.add(machine.name.lower())
         missing = [(c.name, lacks(machine.info, c)) for c in configs if c.name not in supports and lacks(machine.info, c)]
         games, played = totals_by[machine.id] if machine.id in totals_by else (0, 0)
+        heard = now - machine.updated <= ACTIVE
+        silent = not heard and state != 'turned_away'
         rows.append({
-            'health': health(state, ago(machine.updated, now), trouble.get(machine.id, []), supports, configs, missing),
+            'health': health(state, silent, bool(test), ago(machine.updated, now), trouble.get(machine.id, []), supports, configs, missing),
+            'silent': silent, 'on_test': bool(test),
             'place': where.get(machine.name.lower(), ''), 'nameable': bool(machine.name),
-            'rtt': None if state in ('quiet', 'turned_away', 'pending') else machine.rtt_ms,
+            'rtt': None if not heard or state in ('turned_away', 'pending') else machine.rtt_ms,
             'os_kind': info['os_kind'], 'wsl': info['wsl'],
             'name': machine.name or 'machine %d' % machine.id, 'user': machine.user.username if machine.user_id else '',
             'os': info['os'], 'os_ver': info['os_ver'],
@@ -261,6 +283,7 @@ def listing(now=None):
             rows.append({'name': token['name'], 'worker': False, 'token': token, 'state': 'token', 'updated': token['last'], 'ago': token['ago'],
                          'games': 0, 'tests': 0, 'supports': [], 'missing': [], 'user': '', 'os': '', 'os_ver': '', 'cpu': '',
                          'threads': None, 'sockets': None, 'test': None, 'match': '', 'label': '', 'id': None, 'health': None,
+                         'token_words': token_words(token), 'silent': False, 'on_test': False,
                          'place': where.get(key, ''), 'nameable': True, 'rtt': None, 'os_kind': '', 'wsl': False,
                          'registration': '', 'enabled': True})
     rows.sort(key=lambda r: (ORDER[r['state']], -(r['updated'].timestamp() if r['updated'] else 0), r['name'].lower()))

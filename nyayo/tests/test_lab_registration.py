@@ -9,9 +9,10 @@ from django.test import TestCase
 from django.utils import timezone
 
 from nyayo.lab import registration, toolchains
-from nyayo.lab.models import JoinCode, LogEvent, Machine, Result
+from nyayo.lab.models import JoinCode, LogEvent, Machine, Result, Step
+from nyayo.runs.models import Machine as Token
 
-from .lab_helpers import make_machine, make_test
+from .lab_helpers import make_machine, make_result, make_test
 from .test_lab_worker_api import SYSTEM, Api
 
 
@@ -325,6 +326,61 @@ class OnThePage(TestCase):
         rows = {r['name']: r for r in self.client.get('/machines').context['rows']}
         self.assertEqual((rows['off']['state'], rows['off']['health']['label']), ('disabled', 'Disabled'))
         self.assertEqual((rows['away']['state'], rows['away']['health']['label']), ('turned_away', 'Turned away'))
+
+    def rows(self):
+        return {r['name']: r for r in self.client.get('/machines').context['rows']}
+
+    def silence(self, machine):
+        Machine.objects.filter(pk=machine.pk).update(updated=timezone.now() - datetime.timedelta(minutes=6))
+
+    def test_a_silent_pending_or_disabled_worker_says_it_is_offline_and_is_counted(self):
+        self.silence(make_machine('waits', state='pending'))
+        off = make_machine('off', enabled=False)
+        Machine.objects.filter(pk=off.pk).update(rtt_ms=3.0)
+        self.silence(off)
+        self.silence(make_machine('away', state='turned_away'))
+        self.silence(make_machine('gone'))
+        reply = self.client.get('/machines')
+        rows = {r['name']: r for r in reply.context['rows']}
+        self.assertEqual((rows['waits']['health']['label'], rows['waits']['health']['look']), ('Waiting for approval, offline', 'offline'))
+        self.assertEqual((rows['off']['health']['label'], rows['off']['health']['look']), ('Disabled, offline', 'offline'))
+        self.assertIsNone(rows['off']['rtt'])
+        self.assertEqual(rows['away']['health']['label'], 'Turned away')
+        self.assertEqual(reply.context['offline'], 3)
+        self.assertEqual(reply.context['pending'], 1)
+        self.assertIn('Offline: last heard', self.client.get('/machines/waits').content.decode())
+
+    def test_a_disabled_worker_still_on_a_test_is_finishing_and_counted(self):
+        test = make_test(name='my test')
+        off = make_machine('off', enabled=False)
+        Machine.objects.filter(pk=off.pk).update(workload=test.id)
+        reply = self.client.get('/machines')
+        row = [r for r in reply.context['rows'] if r['name'] == 'off'][0]
+        self.assertEqual((row['state'], row['health']['label'], row['health']['look']), ('disabled', 'Disabled, finishing', 'held'))
+        self.assertEqual(reply.context['playing'], 1)
+        self.assertEqual(reply.context['threads'], off.info['concurrency'])
+        page = reply.content.decode()
+        self.assertIn('>my test</a> <span class="muted">finishing</span>', page)
+        self.silence(off)
+        self.assertEqual(self.rows()['off']['health']['label'], 'Disabled, offline')
+
+    def test_an_offline_worker_keeps_its_trouble_in_the_tooltip(self):
+        test = make_test(name='my test')
+        machine = make_machine('hunt')
+        Step.objects.create(result=make_result(test, machine), step='compile', state='failed', blame='worker', detail='no make')
+        self.silence(machine)
+        health = self.rows()['hunt']['health']
+        self.assertEqual(health['label'], 'Offline')
+        self.assertEqual(len(health['reasons']), 2)
+        self.assertIn('no make', health['reasons'][1])
+
+    def test_a_token_with_no_worker_says_what_it_is(self):
+        Token.objects.create(name='revoked', active=False, token_hash='a' * 64)
+        Token.objects.create(name='fresh', token_hash='b' * 64)
+        page = self.client.get('/machines').content.decode()
+        self.assertEqual(self.rows()['revoked']['token_words'], 'Token revoked')
+        self.assertEqual(self.rows()['fresh']['token_words'], 'Never reported')
+        self.assertIn('<span class="muted">Never reported</span>', page)
 
     def test_a_join_code_is_made_shown_once_and_works(self):
         self.sign_in()

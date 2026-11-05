@@ -16,7 +16,7 @@
   <span class="pending-icon" role="img" aria-label="{% if machine.state == 'pending' %}Waiting for approval{% else %}Turned away{% endif %}">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 9.5a14 14 0 0 1 18 0"/><path d="M6.5 13a9 9 0 0 1 11 0"/><path d="M10 16.5a4 4 0 0 1 4 0"/><circle cx="12" cy="20" r="0.6"/>{% if machine.state != 'pending' %}<path d="M3 3l18 18"/>{% endif %}</svg>
   </span>
-  <div><div class="pending-line">{% if machine.state == "pending" %}Waiting for your approval. It gets no tests until then.{% else %}Turned away. It is told to wait and gets no tests.{% endif %}</div></div>
+  <div><div class="pending-line">{% if machine.state == "pending" %}Waiting for your approval. It gets no tests until then.{% else %}Turned away. It is told to wait and gets no tests.{% endif %}</div>{% if row.silent %}<div class="muted">Offline: last heard {{ ago }}.</div>{% endif %}</div>
 </header>
 <section class="wsec pending-box">
   <p>A worker said hello {{ machine.first_seen|date:"D j M H:i" }} ({{ first_seen_ago }}), and {% if machine.described %}has reported what it can do{% else %}has not yet reported what it can do{% endif %}. Check it is one of yours.</p>
@@ -78,8 +78,8 @@
     <div class="wtile-top"><span>Connection</span>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 9.5a14 14 0 0 1 18 0"/><path d="M6.5 13a9 9 0 0 1 11 0"/><path d="M10 16.5a4 4 0 0 1 4 0"/><circle cx="12" cy="20" r="0.6"/>{% if row.health.look == 'offline' %}<path d="M3 3l18 18"/>{% endif %}</svg></div>
     <div class="big{% if row.health.label|length > 8 %} mid{% endif %}">{{ row.health.label }}</div>
-    <div class="sub">{% if g.up_for %}Up {{ g.up_for }}{% if g.up_pct is not None %} · {{ g.up_pct }}% of {% if g.little %}the {{ g.recorded }} h on record{% else %}48 h{% endif %}{% endif %}{% else %}No history yet{% endif %}{% if rtt is not None %} · {% if rtt < 10 %}{{ rtt|floatformat:1 }}{% else %}{{ rtt|floatformat:0 }}{% endif %} ms{% endif %} · {% if row.state == "quiet" %}last heard {{ ago }}{% else %}heard from {{ ago }}{% endif %}</div>
-    {% if row.health.look == 'warn' %}{% for why in row.health.reasons %}<div class="sub why">{{ why }}</div>{% endfor %}{% endif %}
+    <div class="sub">{% if g.up_for %}Up {{ g.up_for }}{% if g.up_pct is not None %} · {{ g.up_pct }}% of {% if g.little %}the {{ g.recorded }} h on record{% else %}48 h{% endif %}{% endif %}{% else %}No history yet{% endif %}{% if rtt is not None %} · {% if rtt < 10 %}{{ rtt|floatformat:1 }}{% else %}{{ rtt|floatformat:0 }}{% endif %} ms{% endif %} · {% if row.silent %}last heard {{ ago }}{% else %}heard from {{ ago }}{% endif %}</div>
+    {% if row.health.look == 'warn' or row.health.reasons|length > 1 %}{% for why in row.health.reasons %}<div class="sub why">{{ why }}</div>{% endfor %}{% endif %}
   </div>
   <div class="wtile info">
     <div class="wtile-top"><span>Games, all time</span></div>

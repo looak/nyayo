@@ -14,12 +14,12 @@
   /* the status: a network icon, coloured, with its words beside it */
   .net { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; font-weight: 600; }
   .net svg { width: 1.15rem; height: 1.15rem; flex: none; }
-  .net.offline { color: var(--muted); }
+  .net.offline, .net.held { color: var(--muted); }
   .net.warn { color: var(--wip); }
   .net.ok { color: var(--success); }
   .net.ok .net-words { color: var(--fg); font-weight: 400; }
   .net.warn .net-words { color: var(--wip); }
-  .net.offline .net-words { font-weight: 400; }
+  .net.offline .net-words, .net.held .net-words { font-weight: 400; }
 
   /* the Enabled toggle: a wide thumb that slides right and turns the track green when on */
   button.toggle { appearance: none; position: relative; display: block; flex: none; box-sizing: border-box; width: 34px; height: 18px; margin: 0; padding: 0;
