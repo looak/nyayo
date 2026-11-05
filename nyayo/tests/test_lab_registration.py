@@ -281,6 +281,18 @@ class OnThePage(TestCase):
             self.assertIn(button, page)
         self.assertNotIn('value="disable"', page)
 
+    def test_the_actions_column_and_its_toggle_are_only_there_signed_in(self):
+        make_machine('on')
+        make_machine('off', enabled=False)
+        page = self.client.get('/machines').content.decode()
+        self.assertNotIn('<th>Actions</th>', page)
+        self.assertNotIn('role="switch"', page)
+        self.sign_in()
+        page = self.client.get('/machines').content.decode()
+        self.assertIn('<th>Actions</th>', page)
+        self.assertIn('name="action" value="disable" role="switch" aria-checked="true" aria-label="Enabled, on"', page)
+        self.assertIn('name="action" value="enable" role="switch" aria-checked="false" aria-label="Enabled, off"', page)
+
     def test_the_actions_are_behind_the_gate(self):
         machine = make_machine('newbie', state='pending')
         reply = self.act(machine, 'approve')

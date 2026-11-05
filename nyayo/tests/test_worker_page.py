@@ -299,7 +299,7 @@ class Approval(TestCase):
         self.assertNotIn('name="action"', text)
         self.sign_in()
         text = page(self.client)
-        self.assertIn('type="checkbox" checked', text)
+        self.assertIn('aria-checked="true"', text)
         self.assertIn('name="action" value="disable"', text)
         self.assertIn('value="turn_away"', text)
 
@@ -310,7 +310,7 @@ class Approval(TestCase):
         machine.refresh_from_db()
         self.assertFalse(machine.enabled)
         text = page(self.client)
-        self.assertNotIn('type="checkbox" checked', text)
+        self.assertIn('aria-checked="false"', text)
         self.assertIn('name="action" value="enable"', text)
         self.assertIn("Disabled", text)
         self.client.post("/machine-action", {"id": machine.id, "action": "enable", "back": "machine"})

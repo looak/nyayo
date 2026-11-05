@@ -99,9 +99,7 @@
     <div class="sub">First heard from {{ machine.first_seen|date:"j M" }}{% if token %} · its token is {% if token.active %}active{% else %}revoked{% endif %}{% endif %}</div>
     {% if may_act %}<form method="post" action="{% url 'machine_action' %}" class="switch-form">{% csrf_token %}
       <input type="hidden" name="id" value="{{ machine.id }}"><input type="hidden" name="back" value="machine">
-      <input type="hidden" name="action" value="{% if machine.enabled %}disable{% else %}enable{% endif %}">
-      <label class="switch"><input type="checkbox" {% if machine.enabled %}checked{% endif %} onchange="this.form.submit()"> Enabled: takes work</label>
-      <noscript><button class="act" type="submit">{% if machine.enabled %}Disable{% else %}Enable{% endif %}</button></noscript>
+      <div class="switch">{% include "lab/_enable_toggle.html" with enabled=machine.enabled name=name %} {% if machine.enabled %}Enabled: takes work{% else %}Disabled: takes no work{% endif %}</div>
     </form>
     <form method="post" action="{% url 'machine_action' %}" class="away-form">{% csrf_token %}
       <input type="hidden" name="id" value="{{ machine.id }}"><input type="hidden" name="back" value="machine">
