@@ -743,7 +743,7 @@ def client_update(r):
 
 def idle_then_quiet(r):
     # The worker has nothing to play: it polls, and the Machines page says idle. Stopped, it says nothing more, and
-    # five minutes later the page says gone quiet (the clock is moved on, as five minutes is too long to wait)
+    # five minutes later the page says offline (the clock is moved on, as five minutes is too long to wait)
     import datetime
     from django.utils import timezone
     from nyayo.lab.models import Machine, Test
@@ -761,8 +761,8 @@ def idle_then_quiet(r):
     check(Machine.objects.get(pk=machine.pk).updated == machine.updated, 'a stopped worker was heard from')
     check('<span class="muted">idle</span>' in r.page('/machines'), 'a worker stopped a moment ago is not idle yet')
     Machine.objects.filter(pk=machine.pk).update(updated=timezone.now() - datetime.timedelta(minutes=6))
-    check('<span class="worse">gone quiet</span>' in r.page('/machines'), 'the page does not say gone quiet')
-    return 'idle while it polled with nothing to play, silent once stopped, gone quiet after 5 minutes'
+    check('<span class="worse">offline</span>' in r.page('/machines'), 'the page does not say offline')
+    return 'idle while it polled with nothing to play, silent once stopped, offline after 5 minutes'
 
 
 E = lambda **kw: (lambda r: r.engine('dev', **kw))
