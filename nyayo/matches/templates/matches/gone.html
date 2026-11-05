@@ -1,0 +1,10 @@
+{% extends "runs/base.html" %}
+{% block title %}{% if tomb %}Deleted{% elif removed %}Removed{% else %}Not found{% endif %} · nyayo{% endblock %}
+{% block content %}
+<h1>{% if tomb %}This match was deleted{% elif removed %}This match was removed{% else %}No such match{% endif %}</h1>
+{% if tomb %}<p>{{ tomb.name|default:match_id }} was deleted with its games on {{ tomb.deleted_at|date:"Y-m-d H:i" }}. Nothing of it is kept.</p>
+{% elif removed %}<p>{{ removed.name|default:match_id }} was taken out of the lists. Its games are still in <a href="{% url 'games' %}">Games</a> and the exports.
+  {% if user.is_staff %}<a href="{% url 'matches_removed' %}">Bring it back</a> from the removed matches.{% endif %}</p>
+{% else %}<p>There is no match <code>{{ match_id }}</code>.</p>{% endif %}
+<p><a href="{% url 'matches' %}">The matches</a></p>
+{% endblock %}

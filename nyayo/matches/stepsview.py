@@ -197,8 +197,9 @@ def tally(rows):
             counts = sides.setdefault(side, {}).setdefault(step["step"], {})
             counts[step.get("state")] = counts.get(step.get("state"), 0) + 1
             if step.get("state") == "failed":
-                blame = step.get("blame") or "failed"
-                counts[blame] = counts.get(blame, 0) + 1
+                blame = step.get("blame")
+                if blame:
+                    counts[blame] = counts.get(blame, 0) + 1
     engines = []
     for side in sorted(sides, key=lambda s: (SIDE_ORDER.index(s) if s in SIDE_ORDER else len(SIDE_ORDER), s)):
         parts, blames = [], set()

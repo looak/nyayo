@@ -1,0 +1,10 @@
+{# a worker's status: a network icon, its colour, its words, and in the tooltip what is wrong (or fine) #}
+<span class="tip net {{ health.look }}" tabindex="0" role="button" aria-label="{{ health.label }}: {{ health.reasons|join:'; ' }}">
+  <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+    <rect x="1" y="10" width="3" height="5" rx=".7"/><rect x="5.5" y="7" width="3" height="8" rx=".7"/>
+    <rect x="10" y="4" width="3" height="11" rx=".7" opacity="{% if health.look == 'offline' %}.35{% else %}1{% endif %}"/>
+    {% if health.look == 'offline' %}<path d="M2 2l12 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/>{% endif %}
+  </svg>
+  <span class="net-words">{{ health.label }}</span>
+  <span class="tip-text" role="tooltip"><b>{{ health.label }}</b>{% if health.reasons|length == 1 %}<br>{{ health.reasons.0 }}{% else %}<ul>{% for r in health.reasons %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}</span>
+</span>

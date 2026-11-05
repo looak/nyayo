@@ -1,0 +1,12 @@
+{# How to get a worker going: small, with this server's address in the commands. `server` is its address, no trailing slash. #}
+<div class="card get-a-worker">
+  <h3 class="box-title">Get a worker going</h3>
+  <p class="muted">A machine with Python 3 and this server's address is all it needs. It registers itself, and waits to be approved here, or comes with a join code.</p>
+  <pre class="cmd">curl -fLo client.zip {{ server }}/client.zip
+python3 -m zipfile -e client.zip nyayo-worker
+python3 -m pip install -r nyayo-worker/requirements.txt
+python3 nyayo-worker/client.py --server {{ server }} -T 4 -N 1 -I my-machine</pre>
+  <p class="muted"><code>-T</code> is the threads it may use, <code>-I</code> its name here. With a code from the join codes below, add <code>--join CODE</code> and it is approved when it says hello.
+    On Windows use <code>py</code> for <code>python3</code>, and <code>Invoke-WebRequest {{ server }}/client.zip -OutFile client.zip</code> for curl.
+    To build engines it needs <code>make</code> and a C or C++ compiler. The client updates itself from here when the version goes up, and keeps its <code>worker.token</code>.</p>
+</div>

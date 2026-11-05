@@ -61,6 +61,9 @@ class Match(models.Model):
     # the schedule as it now stands; both null/empty for a match whose producer sends whole documents
     report_seq = models.PositiveBigIntegerField(null=True, blank=True)
     schedule_digest = models.CharField(max_length=64, blank=True)
+    # taken out of the lists and the dashboard by someone signed in (*Remove*); its games stay in Games and the exports, and
+    # it comes back with *Bring it back*. A report from its producer goes on updating it, and leaves this alone
+    hidden = models.BooleanField(default=False, db_index=True)
     received_at = models.DateTimeField(default=timezone.now)
     # when the producer last said anything, from the document; received_at is when nyayo heard it
     updated_at = models.DateTimeField(default=timezone.now, db_index=True)
@@ -79,6 +82,15 @@ class Match(models.Model):
         if getattr(self, "_schedule", None) is None:
             self._schedule = [entry.as_dict() for entry in self.scheduled.order_by("number")]
         return self._schedule
+
+
+class Tombstone(models.Model):
+    """What is left of a match deleted with its games: its id, name and the day, so that a link to it says it was deleted
+    instead of that it never was. A producer that sends the match again makes it anew and this goes."""
+
+    id = models.CharField(max_length=MATCH_ID_MAX, primary_key=True)
+    name = models.CharField(max_length=200, blank=True)
+    deleted_at = models.DateTimeField(default=timezone.now)
 
 
 class ScheduleEntry(models.Model):

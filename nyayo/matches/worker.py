@@ -31,6 +31,8 @@ from django.utils import timezone
 
 from nyayo.runs.ingest import IngestError
 
+from nyayo.lab import hours as lab_hours
+
 from . import cards, catalogue, datasets, expiry, games as single_games, reader as readers, uploads
 from .models import Batch, Game, Match, MatchResult, Upload
 
@@ -258,6 +260,7 @@ def look_for_expired():
     """Deletes the failed starts that are due; whatever goes wrong is logged, and the next look tries again."""
     try:
         expiry.expire()
+        lab_hours.prune()
     except Exception:
         log.exception("looking for expired failed starts failed, trying again at the next look")
 

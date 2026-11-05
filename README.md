@@ -55,6 +55,8 @@ cp .env.example .env
 .venv/Scripts/python manage.py test nyayo
 ```
 
+Every page reads without a login. The Actions and Lab links in the sidebar change things, so they need one: sign in at `/sign-in` with the user `createsuperuser` made. Today they are stubs for the nyayo 2.0 pages.
+
 `manage.py seed_demo` (debug mode only) makes six simulated SPRTs (passed, failed, stopped, running, silent, just
 started) with a history, a few games and a batch, a running one with workers at every stage, five tests that have not played (two waiting, held, two failed starts), and five simulated gauntlets (running, finished, stopped with games
 cut off, silent, just started) with every game they started, for working on the pages without a real test running.
@@ -86,6 +88,21 @@ service in a conda env) and connecting Elephant are described in [docs/deploy.md
 ## License
 
 GPL-3.0, see [LICENSE](LICENSE).
+
+**From OpenBench.** nyayo 2.0 moves the server of [OpenBench](https://github.com/AndyGrant/OpenBench), authored by
+Andrew Grant (GPL-3.0), into nyayo, through the owner's fork [openbench_eg](https://github.com/looak/openbench_eg). What
+came from it was repurposed, and keeps OpenBench's notice at the top of each file: `nyayo/lab/stats.py` (the SPRT and
+Elo maths, taken from Fishtest by OpenBench) is copied unchanged; `nyayo/lab/spsa_utils.py` is copied with one import
+line pointed at nyayo's models; `nyayo/lab/models.py` is OpenBench's `models.py` trimmed and adapted (`Profile` and `PGN`
+gone, users and the author of a test are Django's); and the seed data of `nyayo/lab/migrations/0002_seed.py` is
+OpenBench's book list and the Elephant engine file. The worker's API (`worker_api.py`), the scheduling
+(`get_workload.py`), the results (`utils.py`) and the match document (`document.py`) are adapted from the same
+OpenBench files (`views.py`, `workloads/get_workload.py`, `utils.py`), through the owner's fork, with OpenBench's notice on
+each; `steps.py` is the fork's own, moved. The worker that plays the games is OpenBench's `Client/`, which
+lives in `nyayo/client/` now: copied from openbench_eg at commit `6a072fa` (its `Client/`, with the registration of
+looak/openbench_eg#30), with OpenBench's notice at the top of each file, and changed only where it fetches itself: it
+updates from nyayo's `/client.zip`, not from GitHub. nyayo serves it, and its tests moved to `nyayo/tests/client/`. The smoke test in `tools/smoke/` (its toy engine, book and file server) is from
+openbench_eg's `Scripts/smoke`.
 
 Bundled with it: lichess's board, [chessground](https://github.com/lichess-org/chessground) 9.1.1 (GPL-3.0,
 `nyayo/matches/static/vendor/`), and nyayo's icon, the chess elephant

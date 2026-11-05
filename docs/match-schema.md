@@ -504,7 +504,7 @@ batch of results and every action by hand:
 | `sprt` | `elo0`, `elo1`, `alpha`, `beta`, `model` (`penta` or `tri`), `llr`, `lower`, `upper`, `result` (`passed`, `failed` or null) |
 | `stats` | OpenBench's Elo and error, as its test page shows them |
 | `progress`, `games` | null: an OpenBench test has no schedule; games played is `results.games` |
-| `machines` | one per worker, see *Machines*: its name, `user`, `games`, `crashes`, `timeloss`, and from the worker's own record the `cpu`, cores, `ram_mb`, `os`, `concurrency` and `cpu_flags` |
+| `machines` | one per worker, see *Machines*: its name, `user` (when the producer has one: nyayo's own workers register with a token and have none, so it is left out), `games`, `crashes`, `timeloss`, and from the worker's own record the `cpu`, cores, `ram_mb`, `os`, `concurrency` and `cpu_flags` |
 
 The branch is the subject's and opponent's `branch`, never their name: a test of `feature-x` against `main` is
 *Elephant feature-x* against *Elephant main* on the page.

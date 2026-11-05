@@ -1,0 +1,48 @@
+<script>
+  // the graph's hours: point at a real one, tap it, or use the arrow keys, and its details show in a small chip over the plot.
+  // An hour before the record began is blank: nothing is lit and nothing is said for it.
+  (function () {
+    var body = document.getElementById('hours');
+    if (!body) return;
+    var chip = document.getElementById('readout'), note = document.getElementById('note');
+    var cols = body.querySelectorAll('.col'), cells = body.querySelectorAll('.cell');
+    var current = -1;
+    function real(i) { return i >= 0 && i < cols.length && !cols[i].classList.contains('none'); }
+    function show(i) {
+      if (!real(i)) { hide(); return; }
+      if (current >= 0 && current !== i) { cols[current].classList.remove('hl'); cells[current].classList.remove('hl'); }
+      current = i;
+      cols[i].classList.add('hl'); cells[i].classList.add('hl');
+      chip.textContent = cols[i].dataset.tip;
+      chip.className = 'chip ' + (i < cols.length / 2 ? 'r' : 'l');
+      chip.hidden = false;
+      if (note) note.classList.add('dim');
+    }
+    function hide() {
+      if (current >= 0) { cols[current].classList.remove('hl'); cells[current].classList.remove('hl'); }
+      current = -1; chip.hidden = true; chip.textContent = '';
+      if (note) note.classList.remove('dim');
+    }
+    function index(e) {
+      var el = e.target.closest ? e.target.closest('[data-i]') : null;
+      return el ? parseInt(el.dataset.i, 10) : -1;
+    }
+    body.addEventListener('mouseover', function (e) { var i = index(e); if (i < 0) return; if (real(i)) show(i); else hide(); });
+    body.addEventListener('mouseleave', function () { if (document.activeElement !== body) hide(); });
+    body.addEventListener('click', function (e) { var i = index(e); if (real(i)) show(i); else hide(); });
+    body.addEventListener('blur', hide);
+    body.addEventListener('keydown', function (e) {
+      var step = 0, to = null, first = 0, last = cols.length - 1;
+      while (first < cols.length && !real(first)) first++;
+      if (first > last) return;
+      if (e.key === 'ArrowLeft') to = current < 0 ? last : Math.max(first, current - 1);
+      else if (e.key === 'ArrowRight') to = current < 0 ? last : Math.min(last, current + 1);
+      else if (e.key === 'Home') to = first;
+      else if (e.key === 'End') to = last;
+      else if (e.key === 'Escape') { hide(); return; }
+      if (to === null) return;
+      e.preventDefault();
+      show(to);
+    });
+  })();
+</script>

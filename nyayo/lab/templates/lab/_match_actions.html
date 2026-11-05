@@ -1,0 +1,13 @@
+<div class="side-actions" role="group" aria-label="Actions for this match">
+  <h5>Actions for this match</h5>
+  {% if match.hidden %}
+  <form method="post" action="{% url 'match_restore' %}">{% csrf_token %}<input type="hidden" name="id" value="{{ match.pk }}">
+    <button class="side-bar bring" type="submit">{% include "lab/_action_icon.html" with icon="bring" %}Bring it back</button></form>
+  {% else %}
+  {% if test and not test.approved %}<p class="side-note">Not approved: no worker gets it.</p>{% endif %}
+  {% if buttons %}<form method="post" aria-label="Test {{ test.id }}">{% csrf_token %}
+    {% for action in buttons %}<button class="side-bar {{ action }}" formaction="{% url 'test_action' test.id action %}" type="submit">{% include "lab/_action_icon.html" with icon=action %}{{ action|capfirst }}</button>{% endfor %}
+  </form>{% endif %}
+  <a class="side-bar delete" href="{% url 'match_remove' %}?id={{ match.pk|urlencode }}">{% include "lab/_action_icon.html" with icon="delete" %}Delete…</a>
+  {% endif %}
+</div>

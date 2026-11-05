@@ -1,7 +1,8 @@
 {% extends "runs/base.html" %}
-{% load static runs_extras matches_extras %}
+{% load lab_extras static runs_extras matches_extras %}
 {% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
 {% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% if show_workers %}<script defer src="{% static 'matches/workers.js' %}"></script>{% endif %}{% endblock %}
+{% block side_actions %}{% match_actions match %}{% endblock %}
 {% block content %}
 <div class="pagehead">
   <h1>{{ match.name|default:match.pk }}</h1>
@@ -66,10 +67,12 @@
   <div class="card-head">
     <h3>SPRT</h3>
     <span class="muted">{{ tc_text }}{% if options_text %} · {{ options_text }}{% endif %}</span>
+    <span class="card-end">
     {% if sprt.result == "passed" %}<span class="outcome pass card-state">passed</span>
     {% elif sprt.result %}<span class="outcome fail card-state">{{ sprt.result }}</span>
     {% elif silent %}<span class="outcome silent card-state">silent</span>
     {% else %}<span class="outcome {{ match.state }} card-state">{{ match.state|statename }}</span>{% endif %}
+</span>
   </div>
 
   {% if not unstarted %}
@@ -125,6 +128,8 @@
           <div><dt>Done around</dt><dd>{{ projection.at|date:"D j M H:i" }}</dd></div>
           {% endif %}
           {% elif projection.reason %}<div><dt>Estimate</dt><dd class="muted">{{ projection.reason }}</dd></div>{% endif %}
+        {% elif match.state == "waiting" or match.state == "held" %}
+          <div><dt>Last report</dt><dd>{{ match.updated_at|date:"D j M H:i" }}</dd></div>
         {% else %}
           <div><dt>{% if match.state == "finished" %}Ended{% else %}Stopped{% endif %}</dt><dd>{{ match.finished_at|default:match.updated_at|date:"D j M H:i" }}</dd></div>
           {% if timing.elapsed is not None %}<div><dt>Elapsed</dt><dd>{{ timing.elapsed|seconds }}</dd></div>{% endif %}
@@ -227,6 +232,7 @@
 
 {% if entries %}
 <h2 id="games">Games</h2>
+{% if games_note %}<p class="muted games-note">The results count {{ games_note.counted }} games, which is what the figures above are made of; {{ games_note.kept }} are kept here{% if games_note.kept > games_note.counted %}, the extra ones played after the last report the results had{% endif %}.</p>{% endif %}
 {% include "matches/_games_table.html" with entries=groups.playing title="Playing" count=totals.playing %}
 {% include "matches/_games_table.html" with entries=groups.unfinished title="Cut off" count=totals.unfinished %}
 {% include "matches/_games_table.html" with entries=groups.finished title="Finished" count=totals.finished %}

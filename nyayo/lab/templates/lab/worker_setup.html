@@ -1,0 +1,8 @@
+{% extends "runs/base.html" %}
+{% block title %}Get a worker · nyayo{% endblock %}
+{% block crumb %}Lab › <a href="{% url 'machines' %}">Machines</a> › Get a worker{% endblock %}
+{% block head %}<style>pre.cmd { margin: .5rem 0; padding: .6rem .8rem; overflow-x: auto; background: var(--code-bg); border-radius: 4px; }</style>{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>Get a worker</h1><span class="muted">client version {{ client_version }}</span></div>
+{% include "lab/_get_a_worker.html" %}
+{% endblock %}

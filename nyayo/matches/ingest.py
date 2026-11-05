@@ -21,7 +21,7 @@ from django.utils import timezone
 from nyayo.runs.ingest import IngestError, atomic_write, first_difference, invalid, timestamp
 
 from . import schedule
-from .models import GAME_ID_MAX, ID_PATTERN, KINDS, MATCH_ID_MAX, STATES, Engine, Match, MatchResult, MatchSnapshot
+from .models import GAME_ID_MAX, ID_PATTERN, KINDS, MATCH_ID_MAX, STATES, Engine, Match, MatchResult, MatchSnapshot, Tombstone
 
 SCHEMA_VERSION = 1
 
@@ -566,6 +566,7 @@ def create_match(document, machine):
         progress=document.get("progress"), received_at=now,
         updated_at=timestamp(m, "updated_at"), report_seq=(document.get("report") or {}).get("seq"),
     )
+    Tombstone.objects.filter(pk=match.pk).delete()  # a match deleted with its games, sent again, is a new one
     schedule.replace(match, document.get("games"))
     match.save(update_fields=["schedule_digest"])
     rows = {row["opponent"]: row for row in document["results"]}

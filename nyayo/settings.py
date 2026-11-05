@@ -6,6 +6,7 @@ repository root; see .env.example.
 
 import json
 import os
+import sys
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -112,6 +113,9 @@ NYAYO_ARCHIVE_EVERY = int(os.environ.get("NYAYO_ARCHIVE_EVERY", 60))
 NYAYO_SILENT_AFTER = int(os.environ.get("NYAYO_SILENT_AFTER", 30))
 
 # The engine's repository on GitHub, owner/name: the dashboard links its commits there. Unset, nothing links out.
+# The name in the ids of the matches tests make, openbench-<instance>-<test id> (nyayo/lab/ids.py); bobby's is openbench.
+NYAYO_INSTANCE = os.environ.get("NYAYO_INSTANCE", "openbench").strip()
+
 NYAYO_GITHUB_REPO = os.environ.get("NYAYO_GITHUB_REPO", "").strip().strip("/")
 
 # A run's largest size once decompressed; uploads are gzipped and far smaller on the wire.
@@ -129,6 +133,8 @@ INSTALLED_APPS = [
     "nyayo",
     "nyayo.runs",
     "nyayo.matches",
+    "nyayo.actions",
+    "nyayo.lab",
 ]
 
 MIDDLEWARE = [
@@ -142,6 +148,11 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# Actions need a signed-in admin user (nyayo/actions); reading stays open
+LOGIN_URL = "sign_in"
+LOGIN_REDIRECT_URL = "dashboard"
+LOGOUT_REDIRECT_URL = "dashboard"
 
 ROOT_URLCONF = "nyayo.urls"
 WSGI_APPLICATION = "nyayo.wsgi.application"
@@ -187,6 +198,13 @@ USE_TZ = True
 STATIC_URL = f"{FORCE_SCRIPT_NAME.rstrip('/')}/static/" if FORCE_SCRIPT_NAME else "/static/"
 STATIC_ROOT = DATA_DIR / "static"
 STATIC_ROOT.mkdir(exist_ok=True)
+# Deployed, static files get a hash in their name (collectstatic, run by deploy/update.sh, makes the manifest), so a
+# browser can't keep an old script after an update. Not in debug, and not under the tests, which have no manifest.
+if not DEBUG and "test" not in sys.argv:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

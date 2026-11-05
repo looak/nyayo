@@ -8,3 +8,5 @@ __pycache__/
 /data/
 *.egg-info/
 .vscode/
+worker.token
+side-by-side-units/

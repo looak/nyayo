@@ -1,5 +1,5 @@
 {% extends "runs/base.html" %}
-{% load static %}
+{% load static lab_extras %}
 {% block title %}Game {{ game }} · {{ match.name|default:match.pk }} · nyayo{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{% static 'vendor/chessground-9.1.1/chessground.base.css' %}">
@@ -26,8 +26,9 @@
   table.moves td.here a, table.moves td.here span { color: #fff; }
 </style>
 {% endblock %}
+{% block side_actions %}{% match_actions match %}{% endblock %}
 {% block content %}
-<p class="muted"><a href="{% url 'match' match.pk %}">← {{ match.name|default:match.pk }}</a>
+<p class="muted">{% if match.hidden %}<span title="taken out of the lists; its games stay">← {{ match.name|default:match.pk }}</span> <span class="badge silent">from a removed match</span>{% else %}<a href="{% url 'match' match.pk %}">← {{ match.name|default:match.pk }}</a>{% endif %}
   · game {{ game }}{% if headers %}: {{ headers.White }} <span class="muted">v</span> {{ headers.Black }}{% endif %}</p>
 <div id="game-body" data-url="{% url 'game_fragment' match.pk game %}" data-version="{{ version }}"
      data-poll="{{ poll_ms }}" data-pinned="{% if pinned %}1{% endif %}" data-ply="{{ ply|default_if_none:'' }}"
