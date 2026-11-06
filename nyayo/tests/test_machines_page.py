@@ -232,7 +232,7 @@ class Online(TestCase):
 
     def test_every_page_has_it_for_the_price_of_one_query(self):
         make_machine("one")
-        for path in ("/", "/matches", "/machines"):
+        for path in ("/", "/tests", "/machines"):
             self.assertIn(">1 online<", self.client.get(path).content.decode(), path)
         from nyayo import shell
         with CaptureQueriesContext(connection) as queries:
