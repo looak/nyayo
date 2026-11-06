@@ -16,11 +16,16 @@ MODES = ("remove", "delete")
 
 
 def chosen(request):
-    """The matches named by `id` in the query or the form, in the order given, without repeats; missing ids are dropped."""
+    """The match named by `id` in the query or the form, as a list of one; empty when there is none. One at a time:
+    there is no choosing many from the lists."""
     source = request.POST if request.method == "POST" else request.GET
-    ids = list(dict.fromkeys(i for i in source.getlist("id") if i))
-    found = Match.objects.in_bulk(ids)
-    return [found[i] for i in ids if i in found]
+    match = Match.objects.filter(pk=(source.getlist("id") or [""])[0]).first()
+    return [match] if match else []
+
+
+def jobs_list(match):
+    """The list the match was in: Gauntlets or Tests."""
+    return redirect("gauntlets" if match.kind == "gauntlet" else "tests")
 
 
 def holds(match):
@@ -41,8 +46,7 @@ def confirm(request):
         raise Http404("no match chosen")
     mode = request.GET.get("mode") if request.GET.get("mode") in MODES else "remove"
     return render(request, "matches/remove_confirm.html", {
-        "rows": [holds(m) for m in matches], "mode": mode, "blockers": removal.blockers(matches),
-        "many": len(matches) > 1, "total_games": sum(holds(m)["played"] for m in matches)})
+        "row": holds(matches[0]), "mode": mode, "blockers": removal.blockers(matches)})
 
 
 @action_required
@@ -56,19 +60,17 @@ def do(request):
     mode = request.POST.get("mode")
     if not matches or mode not in MODES:
         raise Http404("nothing chosen")
-    here = redirect("matches")
+    here, name = jobs_list(matches[0]), removal.name_of(matches[0])
     if removal.blockers(matches):
         for sentence in removal.blockers(matches):
             messages.error(request, sentence)
         return here
     if mode == "delete":
         done = removal.delete(matches, request.user)
-        messages.success(request, "Deleted %d match%s with %s. They are gone for good." % (
-            len(done), "" if len(done) == 1 else "es", "its games" if len(done) == 1 else "their games"))
+        messages.success(request, "Deleted %s with its games. It is gone for good." % name)
     else:
         done = removal.remove(matches, request.user)
-        messages.success(request, "Removed %d match%s; the games stay in Games and the exports. They can be brought back." % (
-            len(done), "" if len(done) == 1 else "es"))
+        messages.success(request, "Removed %s; the games stay in Games and the exports. It can be brought back." % name)
         if len(done) and request.user.is_authenticated:
             return redirect("matches_removed")
     return here

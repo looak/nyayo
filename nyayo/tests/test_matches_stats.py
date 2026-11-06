@@ -38,4 +38,4 @@ class Stats(MatchTestCase):
 
     def test_the_list_shows_them_in_place_of_the_calculation(self):
         self.put_match(v1())
-        self.assertContains(self.client.get("/matches"), "+21.7")
+        self.assertContains(self.client.get("/tests"), "+21.7")

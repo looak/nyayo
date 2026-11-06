@@ -89,7 +89,7 @@ class GameThreads(GameTestCase):
 
         report = self.put_match(gauntlet())
         self.assertEqual(report.status_code, 200, report.content)
-        self.assertEqual(self.client.get("/matches").status_code, 200)
+        self.assertEqual(self.client.get("/gauntlets").status_code, 200)
         self.assertEqual(self.client.get("/api/matches/gauntlet-test-1/games/100").status_code, 404)
 
         self.finish(threads)
@@ -120,7 +120,7 @@ class GameThreads(GameTestCase):
 
         report = self.put_match(gauntlet())
         self.assertEqual(report.status_code, 200, report.content)
-        self.assertEqual(self.client.get("/matches").status_code, 200)
+        self.assertEqual(self.client.get("/gauntlets").status_code, 200)
         self.assertEqual(self.client.get("/api/matches/gauntlet-test-1/games/100").status_code, 404)
 
         self.finish(threads, status=200)
