@@ -158,11 +158,11 @@ class InTheList(MatchTestCase):
         document = example_document()
         document["sprt"]["llr"] = 1.5
         self.assertIn(self.put_match(document).status_code, (200, 201))
-        page = self.client.get("/matches").content.decode()
+        page = self.client.get("/tests").content.decode()
         self.assertIn('class="gauge-small"', page)
         self.assertIn('aria-label="SPRT Leaning pass, LLR 1.50"', page)
         self.assertIn("LLR 1.50", page)
 
     def test_a_gauntlet_row_has_none(self):
         self.put_match(gauntlet())
-        self.assertNotIn('class="gauge-small"', self.client.get("/matches").content.decode())
+        self.assertNotIn('class="gauge-small"', self.client.get("/tests").content.decode())

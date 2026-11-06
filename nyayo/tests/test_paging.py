@@ -70,16 +70,16 @@ class Lists(GameTestCase):
 
     def test_the_match_list_is_64_to_a_page(self):
         self.matches(70)  # and the gauntlet from setUp: 71
-        first = self.client.get("/matches").content.decode()
+        first = self.client.get("/gauntlets").content.decode()
         self.assertEqual(first.count('<a href="/matches/'), 64)
         self.assertIn("page 1 of 2", first)
-        second = self.client.get("/matches?page=2").content.decode()
+        second = self.client.get("/gauntlets?page=2").content.decode()
         self.assertEqual(second.count('<a href="/matches/'), 7)
 
     def test_the_match_list_pager_keeps_the_filter(self):
         self.matches(70)
-        page = self.client.get("/matches?kind=gauntlet").content.decode()
-        self.assertIn('href="?kind=gauntlet&amp;page=2"', page)
+        page = self.client.get("/gauntlets?state=finished").content.decode()
+        self.assertIn('href="?state=finished&amp;page=2"', page)
 
     def test_a_matches_games_are_64_to_a_page_and_still_counted_whole(self):
         match = Match.objects.get()

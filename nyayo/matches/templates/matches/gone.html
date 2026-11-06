@@ -6,5 +6,5 @@
 {% elif removed %}<p>{{ removed.name|default:match_id }} was taken out of the lists. Its games are still in <a href="{% url 'games' %}">Games</a> and the exports.
   {% if user.is_staff %}<a href="{% url 'matches_removed' %}">Bring it back</a> from the removed matches.{% endif %}</p>
 {% else %}<p>There is no match <code>{{ match_id }}</code>.</p>{% endif %}
-<p><a href="{% url 'matches' %}">The matches</a></p>
+<p><a href="{% url 'tests' %}">The tests</a> · <a href="{% url 'gauntlets' %}">the gauntlets</a></p>
 {% endblock %}
