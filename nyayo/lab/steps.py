@@ -389,6 +389,17 @@ def settle(result, step, side, was_passed=False):
     return {}, changed
 
 
+def settle_running(step):
+    # Called after the running step failed: the match runner could not be started, died, or ended with no finished game
+    # (nyayo/client/worker.py, fail_running). No other machine's row or other step says whose it is, but nothing was played,
+    # so it is taken as the machine's: it tries again in a while, as after a failed compile on a worker. Returns what
+    # settle() does, and nothing is judged twice.
+    if step.state != 'failed' or step.blame:
+        return {}, False
+    enact(step, 'worker', [point('worker', 'The match runner did not play on this machine.')])
+    return { 'retry_after' : retry_seconds() }, True
+
+
 def judge_again(row):
     # A new machine's failure is what a can't-tell on another machine was waiting for. True where one changed.
     changed = False

@@ -220,7 +220,7 @@ the same bytes again are `200`, different bytes under that name `409`, an unknow
 `GET /api/games` (open, like the pages) and `manage.py export_games -o FILE` stream every stored game matching the
 filters as one bz2 stream: each of the batches, sealed or open, as a stream of its own, then the finished single games
 not yet in a batch, so every game is in it once. The filters are `kind`, `engine`, `branch`, `commit` (7 characters or
-more), `tc`, `book`, `since`, `until` and `match`, combined with *and*. A match's page counts its stored games and links
+more), `tc`, `book`, `since`, `until` and `match`, combined with *and*; a `match` that is an id `rename_matches` changed (a `RenamedMatch`) asks for the match it became, here and on the games page. A match's page counts its stored games and links
 its export. The games page below filters by match and by opening; a position is otherwise found by reading the games.
 
 **Position datasets** (milestone 10) are made by the worker, as jobs: requested from the Exports page (`/exports`)
@@ -397,7 +397,7 @@ with OpenBench's notice. Tunes and datagens come later.
   the page. For a lab test's match (a `<mode>-<N>` match with a `Test` N of that mode) it holds what `modify_test.offers`
   allows, each a `POST /tests/<id>/<action>`, logged and reported again: *Stop* (sets `finished`: no more work is handed out,
   workers are told to stop at their next report or heartbeat, the match is `stopped`), *Restart* (clears it and calls
-  `steps.restart_walks`), *Approve* (superusers only, while not approved) and *Unapprove* (superusers only, for an approved test
+  `steps.restart_walks`; offered once it has stopped or finished, and also to a test that is *held*, where it releases the hold and does not stop the test), *Approve* (superusers only, while not approved) and *Unapprove* (superusers only, for an approved test
   that is still running and has **no games played**: it goes back to not approved, no worker is given it, and one already on it
   is told to stop by `clientHeartbeat` and `clientSubmitResults`; with games played *Stop* is the way and *Unapprove* is not
   offered, and `POST` of it is a `409`). For any match it also holds *Delete…*, a link to the confirm page. A match of
@@ -483,7 +483,7 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
     answered `Bad Client Version` makes `client.py` fetch `client_url` (a path is the server's own), check `client_sha256`, and
     copy every file of the zip over its own but `client.py`, which is running, and `worker.token`, which is its own, with the time
     of the copy (Python keeps compiled files by the time and size of their source, and 54 and 55 are the same size). `client.py`
-    itself is not updated by an update, as before. The worker's version stays 54: the protocol did not change, only where it fetches.
+    itself is not updated by an update, as before. The worker's version was 54 while the protocol did not change, only where it fetches; it is 55 since the client starts the match runner, the bench and genfens by their full paths (a bare name is not looked for in the current folder where Windows has `NoDefaultCurrentDirectoryInExePath` set) and reports a match runner that could not start, died or finished no game as a failed `running` step.
   - The worker's own behaviour (hello and `worker.token`, the describe job and *wait*, `gpus`, fastchess from the server with the
     build as a fallback, a game named and tagged with its `Termination` and the whole comment of each move, steps and the retry
     the server asks for) is what *Worker registration* above and the match schema describe from the server's side.
@@ -497,7 +497,7 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
 - **Steps and verdicts** (`steps.py`, as the fork has it): `clientReportStep` records a step of the worker's walk, and once
   both engines have been through a stage, judges the failures (whose they are: the engine's stops the test, the worker's is
   retried after `STEP_RETRY_SECONDS`, 300, one nobody can place gets one more try, and a test only that worker could play
-  is held). The table is in ramani's `plans/sprt-steps.md`.
+  is held). The table is in ramani's `plans/sprt-steps.md`. A `running` step reported `failed` (the worker's match runner could not be started, died, or ended with no finished game; it sends the message as `detail` and the runner's last lines as `log`) is the worker's own: the server blames the worker, answers `retry_after` as for a failed compile on a worker, and the match page shows it like a failed build.
 - **The match.** Every change to a test (a hand-out, a step, a result, an error) ends with `document.report_test(test)`: it
   builds the match document (`document.py`, from the fork's reporter: the same document, `producer` included, with
   `producer.url` null) and passes it to `ingest` in this process, in one write transaction, so two reports of a test are
@@ -527,7 +527,7 @@ Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar, which 
 Pi-hole's: Font Awesome Free 6.6.0's solid icons, the twelve used and no more, unchanged, under CC BY 4.0
 (`nyayo/runs/static/img/fa/`, with `LICENSE-fontawesome.txt`; `runs/_tile_icon.html` draws one). The sidebar has a status block
 (whether the worker holds its lock, the game reader, uploads waiting or refused, whether the batches' directory is
-there and how much it holds) and the links, grouped as Main (Dashboard), Actions (Create test, Create tune, Create datagen, Upload net, Run gauntlet), Lab (Engines, Books, Machines), Testing (Matches with the number live: running and not silent, as the list's cards count them; Runs, Compare),
+there and how much it holds) and the links, grouped as Main (Dashboard), Actions (Create test, Create tune, Create datagen, Upload net, Run gauntlet), Lab (Engines, Books, Machines with the number of workers online: approved, enabled and heard from within 5 minutes, which is what the Machines page calls playing or idle, shown as a muted 0 when none, counted in one query), Testing (Matches with the number live: running and not silent, as the list's cards count them; Runs, Compare),
 Catalogue (Games with the number kept, Exports, Uploads in the admin) and System (Admin); the page's own link is marked. The
 top bar says where the page is, names the host and the time zone the pages' times are in (`NYAYO_TIME_ZONE`, UTC by default; times are stored in UTC). and who is signed in, with a link to sign in or a button to sign out. Under 900 px the sidebar is one bar with a menu button: the status block goes and the links open and close with it, so the top bar's crumb keeps its room. The status is worked out only when a page's frame is drawn, never
 for the game page's polled fragment. The site has one colour scheme, dark.

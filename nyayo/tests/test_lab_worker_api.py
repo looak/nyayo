@@ -37,7 +37,7 @@ class FakeSocket:
 
 
 SYSTEM = {
-    'client_ver': 54, 'machine_name': 'hunt', 'concurrency': 4, 'sockets': 1, 'physical_cores': 4, 'syzygy_max': 0,
+    'client_ver': 55, 'machine_name': 'hunt', 'concurrency': 4, 'sockets': 1, 'physical_cores': 4, 'syzygy_max': 0,
     'cpu_flags': ['POPCNT', 'AVX2'], 'tokens': {}, 'os_name': 'Linux',
     'toolchains': {'gcc': '13.3.0', 'g++': '13.3.0', 'clang': None, 'clang++': None, 'dotnet': None, 'rustc': None, 'cargo': None,
                    'python3': '3.12.3', 'make': '4.3'},
@@ -54,7 +54,7 @@ class Api(TestCase):
             return self.client.post(f'/{path}/', form)
 
     def hello(self, name='hunt', **form):
-        answer = self.post('clientHello', name=name, client_ver=54, **form).json()
+        answer = self.post('clientHello', name=name, client_ver=55, **form).json()
         self.token = answer.get('token', self.token)
         return answer
 
@@ -80,7 +80,7 @@ class Settings(Api):
     def test_the_client_to_fetch_is_nyayos_own(self):
         answer = self.client.get('/clientVersionRef/').json()
         self.assertEqual(sorted(answer), ['client_sha256', 'client_url', 'client_version'])
-        self.assertEqual((answer['client_version'], answer['client_url']), (54, 'http://testserver/client.zip'))
+        self.assertEqual((answer['client_version'], answer['client_url']), (55, 'http://testserver/client.zip'))
         self.assertNotIn('github', json.dumps(answer))
 
     def test_the_fastchess_to_build(self):
@@ -134,8 +134,8 @@ class SigningIn(Api):
     def test_an_old_client_is_told_to_update(self):
         self.hello()
         answer = self.post('clientWorkerInfo', token=self.token, system_info=json.dumps({**SYSTEM, 'client_ver': 53})).json()
-        self.assertEqual(answer, {'error': 'Bad Client Version: Expected 54'})
-        self.assertEqual(self.post('clientHello', name='old', client_ver=53).json(), {'error': 'Bad Client Version: Expected 54'})
+        self.assertEqual(answer, {'error': 'Bad Client Version: Expected 55'})
+        self.assertEqual(self.post('clientHello', name='old', client_ver=53).json(), {'error': 'Bad Client Version: Expected 55'})
         self.assertEqual(Machine.objects.count(), 1)
 
     def test_it_supports_only_the_engines_it_can_build(self):
@@ -478,6 +478,22 @@ class Steps(Api):
         answer = self.worker('clientReportStep', test_id=test.id, step='compile', side='base', state='passed').json()
         self.assertEqual(answer, {'retry_after': 300})
         self.assertFalse(Test.objects.get().finished)
+
+    def test_a_match_runner_that_played_nothing_is_a_failed_running_step_to_retry(self):
+        test = make_test()
+        self.handed_out(test)
+        answer = self.worker('clientReportStep', test_id=test.id, step='running', side='', state='failed',
+                             detail='Match runner #0 ended with no finished games', log='fastchess: not found').json()
+        self.assertEqual(answer, {'retry_after': 300})
+        self.assertFalse(Test.objects.get().finished)
+        row = Step.objects.get(step='running')
+        self.assertEqual((row.state, row.blame, row.tries), ('failed', 'worker', 1))
+        walk = Match.objects.get().machines[0]['steps']
+        running = [x for x in walk if x['step'] == 'running'][0]
+        self.assertEqual((running['state'], running['blame'], running['detail']),
+                         ('failed', 'worker', 'Match runner #0 ended with no finished games'))
+        self.assertEqual(running['log'], 'fastchess: not found')
+        self.assertIn('tries again', running['effect'])
 
     def test_what_cannot_be_recorded_is_no_reason_to_fail(self):
         self.sign_in()

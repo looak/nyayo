@@ -60,7 +60,7 @@ def genfens_book_input_name(config):
 
 def genfens_command_builder(args, index):
 
-    command = ['./%s' % (args['engine'])]
+    command = [os.path.abspath(args['engine'])] # The full path, see bench.py
 
     fstr = 'genfens %d seed %d book %s %s'
     command += [fstr % (args['N'], args['seeds'][index], args['book'], args['extra']), 'quit']
