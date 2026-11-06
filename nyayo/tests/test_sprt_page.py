@@ -86,6 +86,20 @@ class OnThePage(MatchTestCase):
         page = self.page(document)
         self.assertIn("<dt>Stopped</dt>", page)
 
+    def test_a_waiting_or_held_test_has_not_stopped_so_shows_no_end_time(self):
+        for state in ("waiting", "held"):
+            document = example_document()
+            document["match"].update(state=state, finished_at=None)
+            page = self.page(document)
+            self.assertNotIn("<dt>Stopped</dt>", page, state)
+            self.assertNotIn("<dt>Ended</dt>", page, state)
+
+    def test_a_test_stopped_by_its_engine_says_stopped(self):
+        for state in ("failed_prechecks", "error"):
+            document = example_document()
+            document["match"].update(state=state, finished_at="2026-10-16T13:00:00Z")
+            self.assertIn("<dt>Stopped</dt>", self.page(document), state)
+
     def test_the_test_settings_are_there(self):
         page = self.page()
         for text in ("<dt>Time control</dt><dd>8.0+0.00s</dd>", "<dt>UCI options</dt><dd>Threads=1 Hash=8MB</dd>",
