@@ -56,6 +56,7 @@
                      background: var(--accent); }
   .side nav .count.green { background: var(--success); } .side nav .count.orange { background: var(--warning); }
   .side nav .count.red { background: var(--danger); }
+  .side nav .count.none { background: #3a4249; color: #aab2b9; }
   /* a match's actions, last in the nav so that no other link moves as buttons come and go; stuck to the bottom of the window
      while the nav is taller than it */
   .side-actions { position: sticky; bottom: 0; background: var(--side); border-top: 1px solid #111; }
@@ -594,7 +595,7 @@
     <h5>Lab</h5>
     <a href="{% url 'engines' %}"{% if here == "engines" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 1h1.5v2h3V1H11v2h2v2h2v1.5h-2v3h2V11h-2v2h-2v2H9.5v-2h-3v2H5v-2H3v-2H1V9.5h2v-3H1V5h2V3h2zm0 4v6h6V5z"/></svg>Engines</a>
     <a href="{% url 'books' %}"{% if here == "books" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h3v12H2zm4 0h3v12H6zm4.4.6 2.8-.8 2.6 11.4-2.8.8z"/></svg>Books</a>
-    <a href="{% url 'machines' %}"{% if here == "machines" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M1 2h14v5H1zm0 7h14v5H1zM3 4v1h2V4zm0 7v1h2v-1z"/></svg>Machines</a>
+    <a href="{% url 'machines' %}"{% if here == "machines" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M1 2h14v5H1zm0 7h14v5H1zM3 4v1h2V4zm0 7v1h2v-1z"/></svg>Machines<span class="count{% if not shell.workers_online %} none{% else %} green{% endif %}" title="workers online now: approved, enabled and heard from in the last 5 minutes">{{ shell.workers_online }} online</span></a>
     <h5>Testing</h5>
     <a href="{% url 'matches' %}"{% if here == "matches" or here == "match" or here == "game" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h12v3H2zm0 4.5h12v3H2zM2 11h12v3H2z"/></svg>Matches{% if shell.running %}<span class="count green" title="running now">{{ shell.running }} live</span>{% endif %}</a>
     <a href="{% url 'runs' %}"{% if here == "runs" or here == "run" or here == "case" %} class="active"{% endif %}><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 1h7l3 3v11H3zM9 2v3h3"/></svg>Runs</a>
