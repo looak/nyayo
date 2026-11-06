@@ -125,7 +125,7 @@ after it ended, and `nyayo-worker.service` deletes it then, with its archive: it
 `nyayo-expire.timer` has nothing to do with it. A match with games, and any other state, is never deleted.
 
 A running match with no report for `NYAYO_SILENT_AFTER` minutes (30 by default, in `.env`) is shown as *silent* on
-`/matches` and its page; nothing is stored, and its next report clears it.
+the Tests list and its page; nothing is stored, and its next report clears it.
 
 A match whose producer reports by changes (uwanja, once it sends `report.seq`) is archived whole at most every
 `NYAYO_ARCHIVE_EVERY` seconds while it runs (60 by default) and when it ends, instead of on every report; the archive
@@ -463,8 +463,8 @@ journalctl -u nyayo --since "15 min ago" | grep -B2 -A25 "ERROR"
 journalctl -u nyayo -f            # follow it while you reproduce the error
 ```
 
-The access log beside it (`"GET /matches HTTP/1.1" 500`) says which request and when; the lines above it say why.
-From a client, `curl -i http://172.16.100.11:8001/matches` shows the status line and headers, and the browser's network
+The access log beside it (`"GET /tests HTTP/1.1" 500`) says which request and when; the lines above it say why.
+From a client, `curl -i http://172.16.100.11:8001/tests` shows the status line and headers, and the browser's network
 tab shows the same; neither shows the cause, which only the server knows. `NYAYO_LOG_LEVEL=DEBUG` in `.env` makes
 nyayo's own messages chattier.
 
