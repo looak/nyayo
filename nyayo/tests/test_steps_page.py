@@ -143,12 +143,12 @@ class OnThePages(MatchTestCase):
             document = unstarted(state)
             document["match"]["id"] = f"unstarted-{number}"
             self.assertIn(self.put_match(document).status_code, (200, 201))
-        page = self.client.get("/matches").content.decode()
+        page = self.client.get("/tests").content.decode()
         self.assertIn("Waiting for a worker", page)
         self.assertIn("Failed their start", page)
         self.assertIn("Held, they need a look", page)
         self.assertEqual(page.count('<div class="walk-line">'), 3)
         self.assertNotIn(" live</span>", page)
         for state in ("waiting", "held", "failed_prechecks"):
-            self.assertEqual(self.client.get("/matches", {"state": state}).status_code, 200)
+            self.assertEqual(self.client.get("/tests", {"state": state}).status_code, 200)
         self.assertEqual(self.client.get("/").status_code, 200)

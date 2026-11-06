@@ -111,21 +111,47 @@ class Comments(SimpleTestCase):
 
 class Pages(GameTestCase):
     def test_the_filters_are_a_bar_that_opens(self):
-        page = self.client.get("/matches").content.decode()
+        page = self.client.get("/gauntlets").content.decode()
         self.assertIn('<details class="filterbar">', page)
-        self.assertIn("<summary>Filter matches</summary>", page)
-        filtered = self.client.get("/matches?kind=gauntlet").content.decode()
+        self.assertIn("<summary>Filter gauntlets</summary>", page)
+        self.assertNotIn('name="kind"', page)  # every one is a gauntlet
+        filtered = self.client.get("/gauntlets?state=running").content.decode()
         self.assertIn('<details class="filterbar" open>', filtered)
-        self.assertIn("1 match matching", filtered)
-        self.assertIn("No matches match.", self.client.get("/matches?kind=sprt").content.decode())
+        self.assertIn("1 gauntlet matching", filtered)
+        self.assertIn("None match.", self.client.get("/gauntlets?state=finished").content.decode())
+        self.assertIn("<summary>Filter tests</summary>", self.client.get("/tests").content.decode())
 
     def test_matches_list(self):
-        response = self.client.get("/matches")
+        response = self.client.get("/gauntlets")
         self.assertContains(response, "gauntlet-test-1")
         self.assertContains(response, "elephant-1.0.0-ccrl-blitz")
-        self.assertContains(self.client.get("/matches?kind=gauntlet"), "gauntlet-test-1")
-        self.assertNotContains(self.client.get("/matches?kind=sprt"), "gauntlet-test-1")
-        self.assertNotContains(self.client.get("/matches?state=finished"), "gauntlet-test-1")
+        self.assertNotContains(self.client.get("/tests"), "gauntlet-test-1")
+        self.assertNotContains(self.client.get("/gauntlets?state=finished"), "gauntlet-test-1")
+
+    def test_the_tests_are_the_rest_named_by_their_mode(self):
+        self.put_match(v1())
+        for match_id, kind in (("tune-1002", "games"), ("datagen-1003", "games"), ("games-1001", "games"), ("selfplay-x", "selfplay")):
+            Match.objects.create(id=match_id, subject=Match.objects.get(pk=ID).subject, kind=kind, state="finished", producer={"name": "nyayo"})
+        page = self.client.get("/tests").content.decode()
+        for match_id in (ID, "tune-1002", "datagen-1003", "games-1001", "selfplay-x"):
+            self.assertIn('href="/matches/%s"' % match_id, page)
+        self.assertNotIn("gauntlet-test-1", page)
+        for kind in ("sprt", "tune", "datagen", "games", "selfplay"):
+            self.assertIn('<span class="tier">%s</span>' % kind, page)
+        only = {kind: self.client.get("/tests", {"kind": kind}).content.decode() for kind in ("tune", "datagen", "games", "sprt")}
+        self.assertIn("tune-1002", only["tune"])
+        self.assertNotIn("datagen-1003", only["tune"])
+        self.assertIn("datagen-1003", only["datagen"])
+        self.assertIn("games-1001", only["games"])
+        self.assertNotIn("tune-1002", only["games"])
+        self.assertIn(ID, only["sprt"])
+        self.assertNotIn("games-1001", only["sprt"])
+
+    def test_the_old_list_sends_on_to_the_new(self):
+        self.assertRedirects(self.client.get("/matches"), "/tests", status_code=301, fetch_redirect_response=False)
+        self.assertRedirects(self.client.get("/matches?kind=gauntlet&state=running"), "/gauntlets?state=running", status_code=301,
+                             fetch_redirect_response=False)
+        self.assertRedirects(self.client.get("/matches?kind=sprt"), "/tests?kind=sprt", status_code=301, fetch_redirect_response=False)
 
     def test_match_page_shows_counts_and_rating(self):
         response = self.client.get("/matches/gauntlet-test-1")
@@ -169,8 +195,8 @@ class Pages(GameTestCase):
         self.assertNotContains(self.client.get("/matches/gauntlet-test-1"), "badge silent")
         Match.objects.update(updated_at=django_timezone.now() - timedelta(minutes=31))
         self.assertContains(self.client.get("/matches/gauntlet-test-1"), '<span class="badge silent">silent</span>')
-        self.assertContains(self.client.get("/matches"), "badge silent")
-        self.assertContains(self.client.get("/matches?state=silent"), "gauntlet-test-1")
+        self.assertContains(self.client.get("/gauntlets"), "badge silent")
+        self.assertContains(self.client.get("/gauntlets?state=silent"), "gauntlet-test-1")
 
     def test_a_report_clears_silent(self):
         Match.objects.update(updated_at=django_timezone.now() - timedelta(minutes=31))
@@ -186,13 +212,13 @@ class Pages(GameTestCase):
         losing = v1(stats={"elo": -8.5, "error": 30.0, "model": "penta"})
         losing["match"]["id"] = "openbench-openbench-124"
         self.put_match(losing, match_id="openbench-openbench-124")
-        page = self.client.get("/matches").content.decode()
+        page = self.client.get("/tests").content.decode()
         self.assertRegex(page, r'class="better">\+21\.7</span>')
         self.assertRegex(page, r'class="worse">.8\.5</span>')
-        self.assertRegex(page, r'class="better">\+107\.5</span>')
+        self.assertRegex(self.client.get("/gauntlets").content.decode(), r'class="better">\+107\.5</span>')
 
     def test_the_list_colours_score_around_fifty_percent(self):
-        page = self.client.get("/matches").content.decode()  # the gauntlet scored 65%
+        page = self.client.get("/gauntlets").content.decode()  # the gauntlet scored 65%
         self.assertIn('<td class="num better">65.0%</td>', page)
         losing = v1()
         losing["match"]["id"] = "openbench-openbench-125"
@@ -202,7 +228,7 @@ class Pages(GameTestCase):
         even["match"]["id"] = "openbench-openbench-126"
         even["results"][0].update(games=20, wins=7, draws=6, losses=7, penta=None)
         self.put_match(even, match_id="openbench-openbench-126")
-        page = self.client.get("/matches").content.decode()
+        page = self.client.get("/tests").content.decode()
         self.assertIn('<td class="num worse">35.0%</td>', page)
         self.assertIn('<td class="num ">50.0%</td>', page)
 
@@ -303,8 +329,12 @@ class Pages(GameTestCase):
         self.assertEqual(self.client.get("/matches/gauntlet-test-1/games/9").status_code, 404)
         self.assertEqual(self.client.get("/matches/gauntlet-test-1/games/9/live").status_code, 404)
 
-    def test_navigation_has_matches(self):
-        self.assertContains(self.client.get("/"), 'href="/matches"')
+    def test_navigation_has_tests_and_gauntlets(self):
+        page = self.client.get("/")
+        self.assertContains(page, 'href="/tests"')
+        self.assertContains(page, 'href="/gauntlets"')
+        self.assertContains(page, "<h5>Jobs</h5>")
+        self.assertContains(page, "Smokes</a>")
 
     def test_the_subject_is_at_the_bottom(self):
         self.put_game(pgn(white="Barbarossa 0.6.0", black="Elephant 1.0.0"))
@@ -759,7 +789,7 @@ class RunningCards(GameTestCase):
     def fresh(self):
         Match.objects.update(updated_at=django_timezone.now())
 
-    def page(self, url="/matches"):
+    def page(self, url="/gauntlets"):
         return self.client.get(url).content.decode()
 
     def test_a_running_gauntlet_gets_a_card_linking_to_the_match(self):
@@ -795,7 +825,8 @@ class RunningCards(GameTestCase):
     def test_a_running_sprt_shows_its_llr_and_the_producers_elo(self):
         self.put_match(v1())
         self.fresh()
-        page = self.page()
+        page = self.page("/tests")
+        self.assertNotIn('<a href="/matches/%s">' % ID, self.page())  # an SPRT is not a gauntlet
         card = page[page.index('<a href="/matches/%s">' % ID):]
         card = card[:card.index("</dl>")]
         self.assertIn("LLR (-2.94, 2.94)", card)
@@ -828,8 +859,9 @@ class RunningCards(GameTestCase):
             document["match"]["id"] = f"openbench-openbench-{200 + n}"
             self.put_match(document, match_id=f"openbench-openbench-{200 + n}")
         self.fresh()
-        self.assertEqual(self.page().count(CARD), 6)
+        self.assertEqual(self.page("/tests").count(CARD), 6)
+        self.assertEqual(self.page().count(CARD), 1)  # the gauntlet, not left out by the SPRTs
 
     def test_the_filters_still_work_with_a_card_up(self):
         self.fresh()
-        self.assertEqual(self.client.get("/matches?kind=sprt").status_code, 200)
+        self.assertEqual(self.client.get("/gauntlets?state=running").status_code, 200)

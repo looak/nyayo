@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 GATED = ["create_test", "create_tune", "create_datagen", "upload_net", "gauntlet", "engines", "books"]
-OPEN = ["dashboard", "matches", "runs", "compare", "games", "exports", "machines", "sign_in"]
+OPEN = ["dashboard", "tests", "gauntlets", "runs", "compare", "games", "exports", "machines", "sign_in"]
 
 
 class Login(TestCase):
@@ -58,9 +58,9 @@ class Login(TestCase):
         self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
 
     def test_the_top_bar_says_who_is_signed_in(self):
-        self.assertContains(self.client.get(reverse("matches")), "sign in</a>")
+        self.assertContains(self.client.get(reverse("tests")), "sign in</a>")
         self.client.force_login(self.owner)
-        page = self.client.get(reverse("matches"))
+        page = self.client.get(reverse("tests"))
         self.assertContains(page, "<b>owner</b>")
         self.assertContains(page, "sign out</button>")
 
@@ -71,8 +71,8 @@ class Login(TestCase):
         self.assertEqual(self.client.get(reverse("engines")).status_code, 302)
 
     def test_the_sidebar_has_the_groups_in_order(self):
-        page = self.client.get(reverse("matches")).content.decode()
-        positions = [page.index(f"<h5>{name}</h5>") for name in ("Main", "Actions", "Lab", "Testing", "Catalogue", "System")]
+        page = self.client.get(reverse("tests")).content.decode()
+        positions = [page.index(f"<h5>{name}</h5>") for name in ("Main", "Actions", "Lab", "Jobs", "Catalogue", "System")]
         self.assertEqual(positions, sorted(positions))
         for name in GATED + ["machines"]:
             self.assertIn(f'href="{reverse(name)}"', page)

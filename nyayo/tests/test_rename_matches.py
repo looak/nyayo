@@ -441,8 +441,9 @@ class AfterTheRename(Fixture):
     def test_delete_with_games_removes_everything_under_the_new_name(self):
         self.work()    # the upload that waited in uploads/<new id>/ is read under the new name; a delete waits for that
         self.assertFalse(list((self.data / "uploads").glob("sprt-12/9.9")))
-        response = self.client.post(reverse("match_remove"), {"id": ["games-1001", "sprt-12"], "mode": "delete", "confirm": ""})
-        self.assertLess(response.status_code, 400, response.content)
+        for name in ("games-1001", "sprt-12"):
+            response = self.client.post(reverse("match_remove"), {"id": name, "mode": "delete", "confirm": ""})
+            self.assertLess(response.status_code, 400, response.content)
         for name in ("games-1001", "sprt-12"):
             self.assertFalse(Match.objects.filter(pk=name).exists())
             self.assertTrue(Tombstone.objects.filter(pk=name).exists())

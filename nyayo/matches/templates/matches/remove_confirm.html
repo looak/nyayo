@@ -1,6 +1,6 @@
 {% extends "runs/base.html" %}
-{% block title %}{% if mode == "delete" %}Delete{% else %}Remove{% endif %} {% if many %}{{ rows|length }} matches{% else %}{{ rows.0.name }}{% endif %} · nyayo{% endblock %}
-{% block crumb %}Testing › Matches › {% if mode == "delete" %}Delete{% else %}Remove{% endif %}{% endblock %}
+{% block title %}{% if mode == "delete" %}Delete{% else %}Remove{% endif %} {{ row.name }} · nyayo{% endblock %}
+{% block crumb %}Jobs › {% if row.match.kind == "gauntlet" %}Gauntlets{% else %}Tests{% endif %} › {% if mode == "delete" %}Delete{% else %}Remove{% endif %}{% endblock %}
 {% block head %}<style>
   .confirm { max-width: 46rem; }
   .confirm .what { margin: .4rem 0 1rem; padding: 0; list-style: none; display: flex; flex-direction: column; gap: .5rem; }
@@ -18,26 +18,26 @@
 </style>{% endblock %}
 {% block content %}
 <div class="confirm">
-<h1>Delete {% if many %}{{ rows|length }} matches{% else %}{{ rows.0.name }}{% endif %}?</h1>
+<h1>Delete {{ row.name }}?</h1>
 {% for sentence in blockers %}<p class="flash error">{{ sentence }}</p>{% endfor %}
-<p>What is on them now:</p>
+<p>What is on it now:</p>
 <ul class="what">
-  {% for r in rows %}<li><b><a href="{% url 'match' r.match.pk %}">{{ r.name }}</a></b> <span class="tier">{{ r.match.kind }}</span> <span class="badge {{ r.match.state }}">{{ r.match.state }}</span>
+  {% with r=row %}<li><b><a href="{% url 'match' r.match.pk %}">{{ r.name }}</a></b> <span class="tier">{{ r.match.kind }}</span> <span class="badge {{ r.match.state }}">{{ r.match.state }}</span>
     <span class="muted">{{ r.played }} game{{ r.played|pluralize }} counted · {{ r.game_rows }} game file{{ r.game_rows|pluralize }} · {{ r.batches }} batch{{ r.batches|pluralize:"es" }} ({{ r.batch_games }} games) · {{ r.uploads }} upload{{ r.uploads|pluralize }}{% if r.test %} · lab test {{ r.test.id }}{% endif %}</span>
-    {% if r.running %}<span class="muted">Its test is still open: it is stopped first, and no worker gets more of it.</span>{% endif %}</li>{% endfor %}
+    {% if r.running %}<span class="muted">Its test is still open: it is stopped first, and no worker gets more of it.</span>{% endif %}</li>{% endwith %}
 </ul>
 <form method="post" action="{% url 'match_remove' %}">{% csrf_token %}
-  {% for r in rows %}<input type="hidden" name="id" value="{{ r.match.pk }}">{% endfor %}
+  <input type="hidden" name="id" value="{{ row.match.pk }}">
   <label class="choice"><input type="radio" name="mode" value="remove" {% if mode != "delete" %}checked{% endif %} onchange="document.getElementById('forever').hidden = true">
     <b>Delete, keep the games</b>
-    <span class="muted">{% if many %}They leave{% else %}It leaves{% endif %} the lists and the dashboard, with the test{% if many %}s{% endif %}. The games stay in Games and the exports, and their pages work, saying they are from a removed match. They can be brought back from <a href="{% url 'matches_removed' %}">the removed matches</a>.</span></label>
+    <span class="muted">It leaves the lists and the dashboard, with the test. The games stay in Games and the exports, and their pages work, saying they are from a removed match. It can be brought back from <a href="{% url 'matches_removed' %}">the removed matches</a>.</span></label>
   <label class="choice del"><input type="radio" name="mode" value="delete" {% if mode == "delete" %}checked{% endif %} onchange="document.getElementById('forever').hidden = false">
     <b>Delete with the games</b> <span class="muted" style="display:inline; margin:0">(cannot be undone)</span>
-    <span class="muted">Everything of {% if many %}them{% else %}it{% endif %} goes for good: the match, its test, results and steps, its batches and cards, its uploads, its game files and its archive. Nothing can bring {% if many %}them{% else %}it{% endif %} back, and links to {% if many %}them{% else %}it{% endif %} become a page saying so. If the producer (uwanja, OpenBench) sends {% if many %}one{% else %}it{% endif %} again, {% if many %}that one{% else %}it{% endif %} comes back as a new match, with only what is sent then.</span></label>
+    <span class="muted">Everything of it goes for good: the match, its test, results and steps, its batches and cards, its uploads, its game files and its archive. Nothing can bring it back, and links to it become a page saying so. If the producer (uwanja, OpenBench) sends it again, it comes back as a new match, with only what is sent then.</span></label>
   <div class="buttons">
     <button class="go {% if mode == 'delete' %}del{% endif %}" type="submit" {% if blockers %}disabled{% endif %}>Approve</button>
-    <a href="{% if rows|length == 1 %}{% url 'match' rows.0.match.pk %}{% else %}{% url 'matches' %}{% endif %}">Cancel</a>
-    <strong class="forever" id="forever" {% if mode != "delete" %}hidden{% endif %}>This cannot be undone: {% if many %}these matches and their games are{% else %}the match and its games are{% endif %} gone for good.</strong>
+    <a href="{% url 'match' row.match.pk %}">Cancel</a>
+    <strong class="forever" id="forever" {% if mode != "delete" %}hidden{% endif %}>This cannot be undone: the match and its games are gone for good.</strong>
   </div>
 </form>
 </div>
