@@ -1,0 +1,31 @@
+/* the SPRT and Elo gauges: zones from the site's red through its card colour to its green */
+.gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem 2rem; align-items: start; margin: .5rem 0 1rem; }
+.gauge { margin: 0; display: flex; flex-direction: column; align-items: center; gap: .1rem; min-width: 0; }
+.gauge figcaption { font-size: .85rem; font-weight: 700; color: var(--bright); }
+.gauge svg { width: 100%; max-width: 340px; height: auto; display: block; }
+.gz0 { fill: color-mix(in srgb, var(--danger) 55%, var(--card)); }
+.gz1 { fill: color-mix(in srgb, var(--danger) 22%, var(--card)); }
+.gz2 { fill: color-mix(in srgb, var(--fg) 14%, var(--card)); }
+.gz3 { fill: color-mix(in srgb, var(--success) 35%, var(--card)); }
+.gz4 { fill: color-mix(in srgb, var(--success) 65%, var(--card)); }
+.gzl { font-size: 9px; font-weight: 600; letter-spacing: .06em; }
+.gzl0, .gzl1 { fill: var(--worse); } .gzl2 { fill: var(--fg); } .gzl3, .gzl4 { fill: var(--better); }
+.ghub { fill: var(--card); }
+.gneedle, .gpin { fill: var(--bright); }
+.gneedle { transform-origin: 160px 165px; transition: transform 1.2s cubic-bezier(.2, .7, .2, 1); }
+.gring { fill: var(--code-bg); }
+.gband { fill: var(--link); fill-opacity: .38; }
+.gtick { stroke: var(--muted); stroke-width: 1; }
+.gtl { font-size: 10px; } .gbl { font-size: 10px; font-weight: 600; }
+.gzero { stroke: var(--fg); stroke-width: 1.5; }
+.gbound { stroke-width: 2; stroke-dasharray: 3 2; }
+.gtl.tone-zero { fill: var(--muted); } .gtl.tone-pass, .gbl.tone-pass { fill: var(--better); } .gtl.tone-fail { fill: var(--worse); }
+.gbl.tone-base { fill: var(--fg); } .gbound.tone-base { stroke: var(--fg); } .gbound.tone-pass { stroke: var(--better); }
+.gends { display: flex; justify-content: space-between; width: 100%; max-width: 340px; font-size: .75rem; color: var(--muted); margin-top: -.2rem; }
+.gbig { font-size: 1.6rem; line-height: 1.2; font-weight: 600; color: var(--bright); }
+.gbig.tone-pass { color: var(--better); } .gbig.tone-fail { color: var(--worse); }
+.gsmall { font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.gauge-small { display: block; }
+.gauge-cell { width: 1%; padding-right: .25rem; }
+@media (prefers-reduced-motion: reduce) { .gneedle { transition: none; } }
+.gword.tone-pass { color: var(--better); } .gword.tone-fail { color: var(--worse); } .gword.tone-open { color: var(--bright); }

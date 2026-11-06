@@ -266,6 +266,21 @@ pages show it) can be copied with a button. The results follow with the pentanom
 and illegal moves per side, and the **workers** that played it (`machines`, busiest first, with their processor,
 cores, memory and instruction sets where the producer sends them; schema, *Machines*), then the games.
 
+- **Gauges** (`nyayo/matches/gauges.py`, drawn as inline SVG in `_gauge_*.html`, styled by `matches/gauges.css`), at the
+  top of the SPRT card, after election-night dials; they show a position, never a probability. The **SPRT gauge** is a
+  half circle from the lower LLR bound (left) to the upper (right) in five equal zones (NEAR FAIL, LEANS FAIL, OPEN, LEANS
+  PASS, NEAR PASS), with a needle at the LLR, clamped to the ends. Under it: `fails at −2.94`, `passes at 2.94`, a big
+  word (the zone's: Near failing, Leaning fail, Open, Leaning pass, Near passing; Passed or Failed once there is a
+  result) and a small line (`LLR 1.12 of 2.94 · 18 games`, the bound being the one on the LLR's side of zero; finished:
+  `LLR 3.32, past 2.94 · 44 games`). The **Elo gauge**, beside it (stacked on a phone), is a scale centred on 0 whose
+  reach is the first of 5, 10, 20, 50, 100, 200, 500, 1000 at least 1.1 × max(|elo| + error, |elo0|, |elo1|), with 11
+  ticks, a translucent band for elo ± error (the match's `stats`, else nyayo's), dashed marks for the Elo bounds (H₀, H₁),
+  a zero line and a needle; under it `base is stronger` and `dev is stronger`, a big `+191 Elo` and `+39 to +343 · 95%`
+  (100 or more whole, below that one decimal, a real minus sign). The geometry is worked out in Python so the page and
+  the list share it; each SVG has `role="img"` and an `aria-label` that says what the text says. A needle is turned with a
+  CSS transition; as the page refreshes by reloading, `matches/gauges.js` keeps where each stood in the session's storage
+  and starts the next load there, so it moves rather than jumps. No gauge without an LLR between two ordered bounds
+  (the SPRT one) or without an Elo estimate (the Elo one).
 - The producer's LLR as a fill from zero towards the bound it is heading for, between its lower and upper bounds,
   and the result: `passed` (green), `failed` (red), or running while there is none.
 - Alpha, beta, Elo0, Elo1 and the model where the producer sends them, and, from `stats`, its Elo and error labelled as
@@ -539,7 +554,7 @@ for the game page's polled fragment. The site has one colour scheme, dark.
 | `/runs/{id}` | every check against its baseline: verdict, settings, when & how long, a score bar (pass, newly pass, newly fail, fail; minimum & baseline marked), a grid of positions; then what changed |
 | `/compare` | any two runs, or a run against its baselines or its branch's previous run; incomparable checks listed as such |
 | `/case/{check_id}/{case_id}` | one position on a board with expected & avoided moves, a lichess analysis link, and every attempt along a branch's history |
-| `/tests` | the tests, every match but the gauntlets, newest first, filtered by kind (sprt, tune, datagen, games, selfplay: a lab test's mode, read from its id `<mode>-<number>`, else the match's kind), state (or silent) and engine; games, score and Elo (an SPRT's is its producer's) |
+| `/tests` | the tests, every match but the gauntlets, newest first, filtered by kind (sprt, tune, datagen, games, selfplay: a lab test's mode, read from its id `<mode>-<number>`, else the match's kind), state (or silent) and engine; games, score and Elo (an SPRT's is its producer's); an SPRT row that has played a game also has a small SPRT gauge (no labels) with its result word (or zone) and LLR |
 | `/gauntlets` | the gauntlets, the same list without the kind |
 | `/matches` | `301` to `/tests` with the query kept, or to `/gauntlets` when `kind=gauntlet` |
 | `/matches/{id}/workers` | the SPRT page's Workers area alone, as JSON, for its poll |

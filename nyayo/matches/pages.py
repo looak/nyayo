@@ -17,7 +17,7 @@ from nyayo.actions.access import may_act
 from nyayo.lab.templatetags.lab_extras import producer_link
 from nyayo.paging import paginate
 
-from . import catalogue, games, pgnview, progress, sprtview, stats, stepsview, timing
+from . import catalogue, gauges, games, pgnview, progress, sprtview, stats, stepsview, timing
 from .models import STATES, Engine, Game, Match, Tombstone
 
 OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): "loss", ("1-0", "black"): "loss",
@@ -160,6 +160,8 @@ def sprt_page(match, sprt, projection, now=None):
         "subject_link": sprtview.commit_link(match.subject_info, match.subject.commit),
         "base_link": sprtview.commit_link(base["info"], base["commit"]) if base else None,
         "projection": projection, "penta_rows": penta_rows(row), "faults": faults(row),
+        "llr_gauge": gauges.llr_gauge(sprt["llr"], sprt["lower"], sprt["upper"], sprt["result"], row.games if row else 0),
+        "elo_gauge": gauges.elo_gauge(elo, error, sprt["elo0"], sprt["elo1"]),
         **workers_context(match, row, now),
     }
 
@@ -373,6 +375,15 @@ def of_kind(matches, kind):
     return matches.filter(kind=kind)
 
 
+def list_gauge(match):
+    """The small SPRT gauge of a list row, None for what isn't an SPRT, has played no game or has no LLR between bounds."""
+    data = match.sprt if match.kind == "sprt" and isinstance(match.sprt, dict) else None
+    if not data or (not match.summary.overall.games and not data.get("result")):
+        return None     # nothing played: a needle at Open would say something it doesn't know
+    return gauges.llr_gauge(data.get("llr"), data.get("lower"), data.get("upper"), data.get("result"),
+                            match.summary.overall.games, small=True)
+
+
 def is_gauntlet(match):
     return match.kind == "gauntlet"
 
@@ -428,6 +439,7 @@ def jobs_list(request, gauntlets):
         produced = match.stats if isinstance(match.stats, dict) else None
         match.elo = produced.get("elo") if produced else match.summary.overall.elo
         match.elo_error = produced.get("error") if produced else match.summary.overall.error
+        match.gauge = list_gauge(match)
     shown = Match.objects.filter(kind="gauntlet") if gauntlets else Match.objects.exclude(kind="gauntlet")
     return render(request, "matches/matches_list.html", {
         "page": page, "kind": kind, "kinds": [] if gauntlets else TEST_KINDS, "state": state, "states": STATES + ["silent"],
