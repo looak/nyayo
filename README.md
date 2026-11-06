@@ -34,7 +34,7 @@ nyayo receives smoke runs pushed from developer machines and shows them:
 
 - **Matches** (`/matches`), gauntlets and SPRTs with their state, games and Elo. A gauntlet shows each opponent's
   score, pentanomial and Elo (as cards or a list, with a table to copy), and every game on a live page with board,
-  clocks, evaluation and the engines' figures. An SPRT shows its LLR against its bounds, the producer's Elo, Elo and
+  clocks, evaluation and the engines' figures. An SPRT shows half-circle gauges for how close it is to a verdict and for its Elo with its 95% interval (also small on each SPRT row of the list), its LLR against its bounds, the producer's Elo, Elo and
   LLR over games, and an estimate of the games and time left to a bound. A running match that has stopped reporting is
   marked silent. A test that reports its steps shows a card per worker with its walk (compile, bench, running), whose failure it is and what happens next, and waiting, held and failed-start tests on the list.
 

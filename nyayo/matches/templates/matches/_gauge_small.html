@@ -1,0 +1,7 @@
+{# a list row's SPRT gauge, no labels; g is gauges.llr_gauge(..., small=True) #}
+<svg class="gauge-small" viewBox="{{ g.view }}" width="72" height="40" role="img" aria-label="{{ g.aria }}">
+  {% for z in g.zones %}<path class="gz gz{{ z.index }}" d="{{ z.d }}"/>{% endfor %}
+  <path class="ghub" d="{{ g.hub }}"/>
+  <polygon class="gneedle" data-gauge="{{ key }}" data-angle="{{ g.angle }}" style="transform: rotate({{ g.angle }}deg)" points="{{ g.needle }}"/>
+  <circle class="gpin" cx="160" cy="165" r="{{ g.hub_radius }}"/>
+</svg>

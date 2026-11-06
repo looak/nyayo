@@ -1,0 +1,13 @@
+{# the SPRT gauge of the SPRT card; g is gauges.llr_gauge(...) #}
+<figure class="gauge">
+  <figcaption>SPRT</figcaption>
+  <svg viewBox="{{ g.view }}" role="img" aria-label="{{ g.full_aria }}">
+    {% for z in g.zones %}<path class="gz gz{{ z.index }}" d="{{ z.d }}"/><text class="gzl gzl{{ z.index }}" x="{{ z.lx }}" y="{{ z.ly }}" text-anchor="middle">{{ z.label }}</text>{% endfor %}
+    <path class="ghub" d="{{ g.hub }}"/>
+    <polygon class="gneedle" data-gauge="{{ key }}" data-angle="{{ g.angle }}" style="transform: rotate({{ g.angle }}deg)" points="{{ g.needle }}"/>
+    <circle class="gpin" cx="160" cy="165" r="{{ g.hub_radius }}"/>
+  </svg>
+  <div class="gends"><span>fails at {{ g.lower_text }}</span><span>passes at {{ g.upper_text }}</span></div>
+  <div class="gbig tone-{{ g.tone }}">{{ g.word }}</div>
+  <div class="gsmall">{{ g.line }}</div>
+</figure>

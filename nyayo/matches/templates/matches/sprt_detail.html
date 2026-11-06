@@ -1,7 +1,7 @@
 {% extends "runs/base.html" %}
 {% load lab_extras static runs_extras matches_extras %}
 {% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
-{% block head %}{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% if show_workers %}<script defer src="{% static 'matches/workers.js' %}"></script>{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'matches/gauges.css' %}"><script defer src="{% static 'matches/gauges.js' %}"></script>{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% if boards %}{% include "matches/_chessground.html" %}{% endif %}{% if show_workers %}<script defer src="{% static 'matches/workers.js' %}"></script>{% endif %}{% endblock %}
 {% block side_actions %}{% match_actions match %}{% endblock %}
 {% block content %}
 <div class="pagehead">
@@ -76,6 +76,12 @@
   </div>
 
   {% if not unstarted %}
+  {% if llr_gauge or elo_gauge %}
+  <div class="gauges">
+    {% if llr_gauge %}{% include "matches/_gauge_llr.html" with g=llr_gauge key=match.pk|add:"-llr" %}{% endif %}
+    {% if elo_gauge %}{% include "matches/_gauge_elo.html" with g=elo_gauge key=match.pk|add:"-elo" %}{% endif %}
+  </div>
+  {% endif %}
   <div class="score-row sprt-figures">
     <div class="score-figure">
       <span class="score-value">{{ timing.finished }}</span>

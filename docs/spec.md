@@ -266,6 +266,21 @@ pages show it) can be copied with a button. The results follow with the pentanom
 and illegal moves per side, and the **workers** that played it (`machines`, busiest first, with their processor,
 cores, memory and instruction sets where the producer sends them; schema, *Machines*), then the games.
 
+- **Gauges** (`nyayo/matches/gauges.py`, drawn as inline SVG in `_gauge_*.html`, styled by `matches/gauges.css`), at the
+  top of the SPRT card, after election-night dials; they show a position, never a probability. The **SPRT gauge** is a
+  half circle from the lower LLR bound (left) to the upper (right) in five equal zones (NEAR FAIL, LEANS FAIL, OPEN, LEANS
+  PASS, NEAR PASS), with a needle at the LLR, clamped to the ends. Under it: `fails at −2.94`, `passes at 2.94`, a big
+  word (the zone's: Near failing, Leaning fail, Open, Leaning pass, Near passing; Passed or Failed once there is a
+  result) and a small line (`LLR 1.12 of 2.94 · 18 games`, the bound being the one on the LLR's side of zero; finished:
+  `LLR 3.32, past 2.94 · 44 games`). The **Elo gauge**, beside it (stacked on a phone), is a scale centred on 0 whose
+  reach is the first of 5, 10, 20, 50, 100, 200, 500, 1000 at least 1.1 × max(|elo| + error, |elo0|, |elo1|), with 11
+  ticks, a translucent band for elo ± error (the match's `stats`, else nyayo's), dashed marks for the Elo bounds (H₀, H₁),
+  a zero line and a needle; under it `base is stronger` and `dev is stronger`, a big `+191 Elo` and `+39 to +343 · 95%`
+  (100 or more whole, below that one decimal, a real minus sign). The geometry is worked out in Python so the page and
+  the list share it; each SVG has `role="img"` and an `aria-label` that says what the text says. A needle is turned with a
+  CSS transition; as the page refreshes by reloading, `matches/gauges.js` keeps where each stood in the session's storage
+  and starts the next load there, so it moves rather than jumps. No gauge without an LLR between two ordered bounds
+  (the SPRT one) or without an Elo estimate (the Elo one).
 - The producer's LLR as a fill from zero towards the bound it is heading for, between its lower and upper bounds,
   and the result: `passed` (green), `failed` (red), or running while there is none.
 - Alpha, beta, Elo0, Elo1 and the model where the producer sends them, and, from `stats`, its Elo and error labelled as
@@ -539,7 +554,7 @@ for the game page's polled fragment. The site has one colour scheme, dark.
 | `/runs/{id}` | every check against its baseline: verdict, settings, when & how long, a score bar (pass, newly pass, newly fail, fail; minimum & baseline marked), a grid of positions; then what changed |
 | `/compare` | any two runs, or a run against its baselines or its branch's previous run; incomparable checks listed as such |
 | `/case/{check_id}/{case_id}` | one position on a board with expected & avoided moves, a lichess analysis link, and every attempt along a branch's history |
-| `/matches` | matches, newest first, filtered by kind, state (or silent) and engine; games, score and Elo (an SPRT's is its producer's) |
+| `/matches` | matches, newest first, filtered by kind, state (or silent) and engine; games, score and Elo (an SPRT's is its producer's); an SPRT row that has played a game also has a small SPRT gauge (no labels) with its result word (or zone) and LLR |
 | `/matches/{id}/workers` | the SPRT page's Workers area alone, as JSON, for its poll |
 | `/matches/{id}` | a head with the match's state and runner, Pi-hole tiles of the figures that matter (a gauntlet: played, performance, score, time to go; an SPRT: games, Elo, LLR, time to go), the settings, an opponent per card or per row of a list (the choice is remembered in a cookie): counts, score, Elo ± error, pentanomial, rating, faults; overall with the performance rating and a table to copy; an opponent can be left out of the figures from the page; a small board for every game in play, each a link to its game and drawn in the browser by chessground (`matches/minis.js`); the SPRT card when present; the games stored as data (and the uploads waiting or refused), with a link to their export; and the games, kept ones included: playing, cut off, scheduled, finished. Refreshes while the match runs. A match that isn't running never shows a game as playing |
 | `/matches/{id}/games/{game}` | a large board with a bar and a clock per engine, an eval bar from white's side, a card per engine (score, depth, time, nodes, nps, PV), the moves in a scrolling list, and graphs per metric with a line per engine (the eval graph from white's side too); stepping through the game by click or arrow keys. The board is lichess's chessground (9.1.1, GPL-3.0, vendored under `nyayo/matches/static/vendor/`), drawn in the browser from every position the page embeds, so a step shows at once and a move animates; the rest of the page then follows from the server. A game is read from its file, or from its batch once it is kept |

@@ -1,7 +1,7 @@
 {% extends "runs/base.html" %}
-{% load runs_extras matches_extras %}
+{% load static runs_extras matches_extras %}
 {% block title %}Matches · nyayo{% endblock %}
-{% block head %}{% if running or unstarted.refresh %}{% if can_act %}<script>setInterval(function () { if (!document.querySelector(".pick:checked")) location.reload(); }, 10000);</script>{% else %}<meta http-equiv="refresh" content="10">{% endif %}{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'matches/gauges.css' %}"><script defer src="{% static 'matches/gauges.js' %}"></script>{% if running or unstarted.refresh %}{% if can_act %}<script>setInterval(function () { if (!document.querySelector(".pick:checked")) location.reload(); }, 10000);</script>{% else %}<meta http-equiv="refresh" content="10">{% endif %}{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
 {% block content %}
 <style>
   .pickcell { width: 2.2rem; text-align: center; } .pickcell input { width: 18px; height: 18px; }
@@ -47,7 +47,7 @@
 {% if can_act %}<form method="get" action="{% url 'match_remove' %}" class="pickform">{% endif %}
 <div class="scroll">
 <table>
-  <thead><tr>{% if can_act %}<th class="pickcell"><input type="checkbox" aria-label="Choose every match on this page" onclick="document.querySelectorAll('.pick').forEach(function (b) { b.checked = this.checked; }, this); pickChanged()"></th>{% endif %}<th>Updated</th><th>Match</th><th>Kind</th><th>State</th><th>Engine</th><th class="num">Games</th>
+  <thead><tr>{% if can_act %}<th class="pickcell"><input type="checkbox" aria-label="Choose every match on this page" onclick="document.querySelectorAll('.pick').forEach(function (b) { b.checked = this.checked; }, this); pickChanged()"></th>{% endif %}<th>Updated</th><th>Match</th><th>Kind</th><th>State</th><th colspan="2">SPRT</th><th>Engine</th><th class="num">Games</th>
     <th class="num">Score</th><th class="num">Elo</th></tr></thead>
   <tbody>
   {% for match in page.object_list %}
@@ -57,6 +57,9 @@
       <td class="clip" title="{{ match.name|default:match.pk }}"><a href="{% url 'match' match.pk %}">{{ match.name|default:match.pk }}</a></td>
       <td><span class="tier">{{ match.kind }}</span></td>
       <td>{% if match.silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state|statename }}</span>{% endif %}</td>
+      {% if match.gauge %}<td class="gauge-cell">{% include "matches/_gauge_small.html" with g=match.gauge key="list-"|add:match.pk %}</td>
+      <td class="nowrap"><div class="gword tone-{{ match.gauge.tone }}"><b>{{ match.gauge.word }}</b></div><div class="muted">LLR {{ match.gauge.llr }}</div></td>
+      {% else %}<td colspan="2"></td>{% endif %}
       <td>{{ match.subject }}</td>
       <td class="num">{{ match.summary.overall.games }}{% if match.progress.total %}<span class="muted">/{{ match.progress.total }}</span>{% endif %}</td>
       <td class="num {% if match.summary.overall.score > 0.5 %}better{% elif match.summary.overall.score < 0.5 %}worse{% endif %}">{{ match.summary.overall.score|percent }}</td>

@@ -1,0 +1,17 @@
+{# the Elo gauge of the SPRT card; g is gauges.elo_gauge(...) #}
+<figure class="gauge">
+  <figcaption>Elo</figcaption>
+  <svg viewBox="{{ g.view }}" role="img" aria-label="{{ g.aria }}">
+    <path class="gring" d="{{ g.ring }}"/>
+    {% if g.band %}<path class="gband" d="{{ g.band }}"/>{% endif %}
+    {% for t in g.ticks %}<line class="gtick" x1="{{ t.x1 }}" y1="{{ t.y1 }}" x2="{{ t.x2 }}" y2="{{ t.y2 }}"/><text class="gtl tone-{{ t.tone }}" x="{{ t.lx }}" y="{{ t.ly }}" text-anchor="middle">{{ t.text }}</text>{% endfor %}
+    <line class="gzero" x1="{{ g.zero.x1 }}" y1="{{ g.zero.y1 }}" x2="{{ g.zero.x2 }}" y2="{{ g.zero.y2 }}"/>
+    {% for b in g.bounds %}<line class="gbound tone-{{ b.tone }}" x1="{{ b.x1 }}" y1="{{ b.y1 }}" x2="{{ b.x2 }}" y2="{{ b.y2 }}"/><text class="gbl tone-{{ b.tone }}" x="{{ b.lx }}" y="{{ b.ly }}" text-anchor="{{ b.anchor }}">{{ b.text }}</text>{% endfor %}
+    <path class="ghub" d="{{ g.hub }}"/>
+    <polygon class="gneedle" data-gauge="{{ key }}" data-angle="{{ g.angle }}" style="transform: rotate({{ g.angle }}deg)" points="{{ g.needle }}"/>
+    <circle class="gpin" cx="160" cy="165" r="{{ g.hub_radius }}"/>
+  </svg>
+  <div class="gends"><span>base is stronger</span><span>dev is stronger</span></div>
+  <div class="gbig tone-{{ g.tone }}">{{ g.big }}</div>
+  <div class="gsmall">{{ g.small }}</div>
+</figure>
