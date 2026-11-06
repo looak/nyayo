@@ -333,7 +333,7 @@ the pages on.
 
 ### Lab: the models
 
-`nyayo/lab` (app label `lab`) is where nyayo 2.0 will create, schedule and play tests itself, taking over from
+`nyayo/lab` (app label `lab`) is where nyayo creates, schedules and plays tests itself, having taken over from
 OpenBench's server (looak/ramani `plans/nyayo-2.md`). It has the models, the worker's API and the pages that create a test and stop, restart, approve or unapprove it (below); no scheduling page.
 
 - **Models** are OpenBench's (openbench_eg `da629d7`), with its names and fields, trimmed of what this lab doesn't
@@ -586,7 +586,7 @@ its line, and the stubs' table in `nyayo/actions/views.py` loses its entry. Ther
 ### Deployment
 
 bobby (172.16.100.11), gunicorn on :8001 as `nyayo.service` with four workers of four threads each (`gthread`), in a
-conda env, next to OpenBench but sharing nothing. `nyayo-worker.service` runs `manage.py worker`, bound to
+conda env (`nyayo2` on bobby, named by `NYAYO_CONDA_ENV`), the only nyayo there and OpenBench's server is not run. `nyayo-worker.service` runs `manage.py worker`, bound to
 `nyayo.service` so it starts, stops and restarts with it, `Restart=always`, at low CPU and disk priority;
 `nyayo-expire.timer` (04:30) and `nyayo-backup.timer` (05:00) run daily. `deploy/install-service.sh` installs the units
 and `deploy/update.sh` pulls, installs, migrates, collects static files and restarts nyayo and the worker. The owner

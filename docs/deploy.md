@@ -21,39 +21,67 @@ Open http://127.0.0.1:8001/ for the site and http://127.0.0.1:8001/admin/ for th
 
 ## bobby
 
-bobby (172.16.100.11, user `fischer`) ran OpenBench on port 8000 (stopped now, see *The lab*). nyayo runs as its own service on
-port 8001 under gunicorn, in its own conda env. They share nothing, so either can be restarted without touching the
-other.
+bobby (172.16.100.11, user `fischer`) runs one nyayo, as its own service on port 8001 under gunicorn, in its own conda
+env. OpenBench's server is not run any more (see *The lab*); the workers talk to nyayo. Where things are on bobby:
+
+| What | Where |
+|:--|:--|
+| Checkout, on `main` | `~/dev/nyayo-2` |
+| Conda env | `nyayo2` |
+| Data directory (`NYAYO_DATA_DIR`) | `~/dev/nyayo-2-data` |
+| Batches (`NYAYO_BATCHES_DIR`) | `/mnt/nyayo-batches/batches-2` (NFS, the Synology's `/volume2/nyayo-batches`) |
+| Datasets (`NYAYO_DATASETS_DIR`) | `/mnt/nyayo-batches/datasets-2` |
+| Backup repository (`NYAYO_BACKUP_REPO`) | `~/dev/nyayo-backups`, a git repository |
+| Units | `nyayo`, `nyayo-worker`, `nyayo-expire.timer`, `nyayo-backup.timer`, installed from `~/dev/nyayo-2` |
+
+The names with a `2` are leftovers of how it got there (*How nyayo 2.0 replaced the old nyayo*); nothing else depends on
+them. A fresh install elsewhere can use plain `nyayo`, `nyayo-data` and so on, and the rest of this section is written that way.
 
 ### First install
 
 ```bash
 mkdir -p ~/dev && cd ~/dev
-git clone https://github.com/looak/nyayo.git        # or git@github.com:... if bobby has a deploy key
-cd nyayo
-conda create -n nyayo python=3.13 -y
+git clone https://github.com/looak/nyayo.git        # or git@github.com:... if the machine has a deploy key
+cd nyayo                                            # <checkout>: ~/dev/nyayo-2 on bobby
+conda create -n nyayo python=3.13 -y                # <env>: nyayo2 on bobby
 conda activate nyayo
 pip install -e .
 ```
 
-Create `~/dev/nyayo/.env`:
+Create `<checkout>/.env`:
 
 ```bash
 NYAYO_DEBUG=false
 NYAYO_SECRET_KEY=<output of: python -c "import secrets; print(secrets.token_urlsafe(50))">
 NYAYO_ALLOWED_HOSTS=172.16.100.11,bobby.home,localhost
 NYAYO_CSRF_TRUSTED_ORIGINS=http://172.16.100.11:8001,http://bobby.home:8001
-NYAYO_DATA_DIR=/home/fischer/dev/nyayo-data
+NYAYO_DATA_DIR=/home/fischer/dev/nyayo-data                 # bobby: /home/fischer/dev/nyayo-2-data
+NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches                # bobby: /mnt/nyayo-batches/batches-2
+NYAYO_DATASETS_DIR=/mnt/nyayo-batches/datasets              # bobby: /mnt/nyayo-batches/datasets-2
+NYAYO_BACKUP_REPO=/home/fischer/dev/nyayo-backups
+NYAYO_TIME_ZONE=America/Vancouver
 ```
 
-Keeping the data directory outside the checkout means a fresh clone or `git clean` never touches it.
+The data directory is outside the checkout, so a fresh clone or `git clean` never touches it. The batches and datasets
+are on the share, which the NAS backs up (see *Backup*); the datasets default to a directory beside the batches, so
+name both. **Two nyayos must never share batches**: deleting a match with its games removes its batch files. `.env.example` lists the rest. The backup repository is made once, see *Backup*; leave `NYAYO_BACKUP_REPO` out until it is.
 
-Then set up the database and static files, and try it by hand:
+Tell the scripts which env this checkout uses, so a plain `deploy/update.sh` finds it. **`deploy/env.sh` takes the env
+from `NYAYO_CONDA_ENV` (`nyayo` when unset), never from the conda env that happens to be active**, so with an env of
+another name and no line below, `update.sh` and `install-service.sh` use the wrong one (or fail). Put it first in
+`~/.bashrc`, so it is set before anything that returns early for a non-interactive shell:
+
+```bash
+export NYAYO_CONDA_ENV=nyayo        # nyayo2 on bobby; the name of <env> above
+```
+
+Then set up the database, static files and fastchess, and try it by hand:
 
 ```bash
 python manage.py migrate
 python manage.py collectstatic --noinput
 python manage.py createsuperuser
+python manage.py fetch_fastchess v1.8.2-alpha       # see The lab, Fastchess from the server
 gunicorn nyayo.wsgi:application --bind 0.0.0.0:8001 --workers 2
 ```
 
@@ -67,8 +95,8 @@ With `NYAYO_DEBUG` off the static files are served with a hash in their name (`/
 deploy/install-service.sh
 ```
 
-It fills in the units in `deploy/` for this checkout, user and conda env (found through `conda info --base`; set
-`NYAYO_CONDA_ENV` if the env isn't called `nyayo`), installs them with `sudo`, starts them and shows their status:
+It fills in the units in `deploy/` for this checkout, user and conda env (found through `conda info --base`, from
+`NYAYO_CONDA_ENV`, `nyayo` when unset), installs them with `sudo`, starts them and shows their status:
 
 - `nyayo.service`, the site on port 8001, four workers of four threads each (`gthread`): live game pages poll ten times a second and a gauntlet
   runner PUTs every move, so a couple of slow pages must not queue them. Game requests (a game's moves, a batch of
@@ -97,7 +125,7 @@ after it ended, and `nyayo-worker.service` deletes it then, with its archive: it
 `nyayo-expire.timer` has nothing to do with it. A match with games, and any other state, is never deleted.
 
 A running match with no report for `NYAYO_SILENT_AFTER` minutes (30 by default, in `.env`) is shown as *silent* on
-`/matches` and its page; nothing is stored, and its next report clears it.
+the Tests list and its page; nothing is stored, and its next report clears it.
 
 A match whose producer reports by changes (uwanja, once it sends `report.seq`) is archived whole at most every
 `NYAYO_ARCHIVE_EVERY` seconds while it runs (60 by default) and when it ends, instead of on every report; the archive
@@ -113,248 +141,53 @@ log with `journalctl -u nyayo -f`.
 deploy/update.sh
 ```
 
-It pulls, reinstalls the package, migrates the database, collects static files and restarts the service. No need to
-activate the env first.
+It pulls (fast-forward only), reinstalls the package, migrates the database, collects static files and restarts `nyayo` and
+`nyayo-worker`. No need to activate the env first, and it does not look at the active one: it uses the env that
+`NYAYO_CONDA_ENV` names (`nyayo` when unset; `nyayo2` on bobby, set in `~/.bashrc`, so a plain `deploy/update.sh` from
+`~/dev/nyayo-2` is right). `NYAYO_UNITS` names other units to restart, if there ever is a second nyayo on a machine.
 
-## nyayo 2.0 beside the current nyayo, and the switch
+## How nyayo 2.0 replaced the old nyayo
 
-2.0 is tried **beside** the nyayo that is running: its own checkout, its own conda env, its own data, its own port (8002), a copy of what
-the current one holds. The current nyayo on port 8001 is not stopped, not changed and not pointed at anything new. Then, later and in
-one sitting, the switch. Every command is run on bobby by the owner, in order, as pasted.
+History, not instructions: it was done once and cannot be repeated.
 
-What the trial **does touch** of the current nyayo, and only this: `python manage.py backup` is run in its checkout, which writes
-`backup/nyayo.sqlite3` in its data directory (the online copy of the database that its daily `nyayo-backup.timer` makes anyway). With
-`NYAYO_BACKUP_REPO` emptied for that one run it makes no commit and pushes nothing; the daily timer does both, as it always did.
+On 2026-11-05 nyayo 2.0 replaced the old nyayo on bobby. It was first run **beside** the old one as a trial, with its own
+checkout, env, data, batches (a copy) and port (8002), while the old one went on unchanged on 8001. Then, in one sitting, the
+old units were stopped, the data was copied again from the old nyayo, and 2.0's units took port 8001 and the names `nyayo`,
+`nyayo-worker` and the two timers. The old checkout `~/dev/nyayo` and the conda env `nyayo` were then deleted, on the owner's
+word, so there is no going back to the old nyayo. `manage.py rename_matches` was run the same day (*Renaming the matches*): every
+old `openbench-openbench-N` is now `sprt-N`.
 
-> **2.0 must never use the current nyayo's `batches`.** *Delete with its games* (on a match's page, signed in) removes the match's
-> batch files from `NYAYO_BATCHES_DIR`, and so does `manage.py purge_batches`. Pointed at `/mnt/nyayo-batches/batches`, 2.0
-> would delete the current nyayo's games from under it. The trial's batches are a **copy**, `/mnt/nyayo-batches/batches-2`, and its
-> datasets `/mnt/nyayo-batches/datasets-2` (they default to a directory *beside* the batches, which would be the current nyayo's, so
-> `.env` names both). `deploy/make-env.sh` refuses the current batches, and says so.
+The scripts that did it (`make-env.sh`, `copy-live-data.sh`, `install-side-by-side.sh`) were removed with it; they are in
+the git history if a similar move is ever needed.
 
-### The facts this is written for
+Where things live now is in the table under *bobby*. Two things came out of it that still matter:
 
-The current nyayo is in `~/dev/nyayo` at `e068b06` on `main`, port 8001, in the conda env `nyayo` (Python 3.13); its `.env` has
-`NYAYO_DATA_DIR=/home/fischer/dev/nyayo-data` (435 MB), `NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches` (NFS, 172.16.100.10
-`/volume2/nyayo-batches`), `NYAYO_BACKUP_REPO=/home/fischer/dev/nyayo-backups` and `NYAYO_ALLOWED_HOSTS=172.16.100.11,bobby.home,localhost`.
-Its match ids are `openbench-openbench-N`; 2.0 names them `sprt-N` (*Renaming the matches*). bobby has 3.8 GB of
-memory (about 3.1 GB free) and 8.4 GB free on `/`. A second nyayo costs about 0.5 GB of data, 1 to 2 GB for the env (scipy and numpy
-are in it), and two gunicorn workers of four threads, which is why the trial has two where the real one has four.
+- **The data copy must finish before the service is installed.** The units start nyayo on whatever
+  data directory there is, an empty one included. Run out of order, the install started 2.0 on an empty database. Whenever a
+  data directory is filled from elsewhere (a copy from another machine, a restore), finish that first and install or start
+  the services only afterwards.
+- **`NYAYO_CONDA_ENV` decides the env**, not the active one (*First install*). On bobby it is `nyayo2`, set first in
+  `~/.bashrc`.
 
-### Trial
+### Leftovers on bobby
 
-**1. Look before changing anything**
-
-```bash
-df -h / /mnt/nyayo-batches
-free -m
-ss -ltn | grep -E ':800[0-9] '                     # 8001 is the current nyayo; 8002 must not be listed
-command -v rsync conda                              # both must answer; sudo apt install rsync if not
-systemctl is-active nyayo nyayo-worker              # active, active
-git -C ~/dev/nyayo rev-parse --short HEAD           # e068b06
-```
-
-**2. The checkout and its env.** Its own env, because an editable install (`pip install -e .`) in `nyayo` would point the running nyayo
-at the 2.0 code.
+Of the old nyayo these are still on bobby, unused, until the owner removes them: `~/dev/nyayo-data` (the old data
+directory, about 435 MB), `/mnt/nyayo-batches/batches` and `/mnt/nyayo-batches/datasets` (the old batches and datasets, on the
+share). Nothing reads them: 2.0 uses `batches-2` and `datasets-2`. They are also the last copy of the old nyayo's data as
+it was before the switch, so this is for when the owner is sure; **removal cannot be undone**. Look first, then remove:
 
 ```bash
-cd ~/dev
-git clone https://github.com/looak/nyayo.git nyayo-2       # or git@github.com:looak/nyayo.git, as the first install did
-cd nyayo-2
-git checkout 2.0
-git log --oneline -1
-conda create -n nyayo2 python=3.13 -y
-conda activate nyayo2
-pip install -e .
-python --version                                            # 3.13.x
-python -c "import scipy, numpy, django; print('ok')"
+du -sh ~/dev/nyayo-data /mnt/nyayo-batches/batches /mnt/nyayo-batches/datasets
+rm -rf ~/dev/nyayo-data /mnt/nyayo-batches/batches /mnt/nyayo-batches/datasets
 ```
 
-**3. Its `.env`.** An absolute data directory, a new secret key, debug off, the hosts of the current `.env` and the origins on port 8002, the
-reader and time zone of the current one, its own batches and datasets, and **no `NYAYO_BACKUP_REPO`**. It will not overwrite a `.env`.
-
-```bash
-mkdir -p /mnt/nyayo-batches/batches-2 /mnt/nyayo-batches/datasets-2
-NYAYO_DATA_DIR=/home/fischer/dev/nyayo-2-data \
-FROM_ENV=/home/fischer/dev/nyayo/.env \
-NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches-2 \
-NYAYO_DATASETS_DIR=/mnt/nyayo-batches/datasets-2 \
-deploy/make-env.sh
-```
-
-It prints what it wrote, without the secret: check `NYAYO_DATA_DIR=/home/fischer/dev/nyayo-2-data`, `NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches-2`,
-`NYAYO_CSRF_TRUSTED_ORIGINS=http://172.16.100.11:8002,http://bobby.home:8002`, and that there is no `NYAYO_BACKUP_REPO` line.
-
-**4. Copy the batches** (the games of every finished test: 258 MB, with plenty of room on the share). `rsync -a` copies; it is safe to repeat,
-which the switch does, and the current nyayo may go on adding to its batches meanwhile:
-
-```bash
-rsync -a --info=progress2 /mnt/nyayo-batches/batches/ /mnt/nyayo-batches/batches-2/
-[ -d /mnt/nyayo-batches/datasets ] && rsync -a /mnt/nyayo-batches/datasets/ /mnt/nyayo-batches/datasets-2/
-rsync -a --dry-run -i /mnt/nyayo-batches/batches/ /mnt/nyayo-batches/batches-2/ | wc -l     # 0 when it is all there (the current worker may add a few)
-```
-
-**5. Copy the data.** The database is the online copy that `backup` takes in the current checkout (never the live file, which is in
-WAL mode); it and `archive/` and `games/` go into the new data directory, without `games/batches`, and `WITH_INDEX=1` copies the index
-of the games kept as data (`index.sqlite3`, which points into the batches by their relative names, so it belongs with the copy above).
-
-```bash
-WITH_INDEX=1 \
-OLD_CHECKOUT=/home/fischer/dev/nyayo \
-OLD_BIN="$(conda info --base)/envs/nyayo/bin" \
-NEW_DATA=/home/fischer/dev/nyayo-2-data \
-deploy/copy-live-data.sh
-```
-
-It says `database copied to /home/fischer/dev/nyayo-data/backup/nyayo.sqlite3` and how many matches the copy has (compare with the
-Matches page of the current nyayo). It refuses a data directory that already has data, and the current one.
-
-**6. Migrate, static files, fastchess, the owner.** After `migrate`, `python manage.py reindex --dry-run` says how many batches would be
-indexed; if it says some, run `python manage.py reindex` (low priority, one batch at a time, safe to stop and start again).
-
-```bash
-python manage.py migrate
-python manage.py collectstatic --noinput
-python manage.py fetch_fastchess v1.8.2-alpha
-python manage.py shell --no-imports -c "from django.contrib.auth.models import User; print(list(User.objects.values_list('username', 'is_superuser')))"
-```
-
-`migrate` applies the lab's migrations and 2.0's others to the copy. The copy has the current admin users, so the owner signs in with the same
-name and password; make another only if the list above is empty or one is wanted: `python manage.py createsuperuser`.
-`fetch_fastchess` downloads the official fastchess release (`Disservin/fastchess`, about 23 MB of files for every system) into
-`/home/fischer/dev/nyayo-2-data/fastchess/`, checks each archive against GitHub's checksum and keeps the executable of each.
-
-**7. The services**, `nyayo2` and `nyayo2-worker`, two gunicorn workers of four threads on `0.0.0.0:8002`, written from the units in `deploy/` with
-other names and installed with `sudo`. No backup or expire timer; nothing of `nyayo`, `nyayo-worker` or their timers is touched. The script
-refuses the name `nyayo`, and a unit that is installed already. First look at what it would write, which changes nothing:
-
-```bash
-DRY_RUN=1 deploy/install-side-by-side.sh
-deploy/install-side-by-side.sh
-```
-
-Follow it with `journalctl -u nyayo2 -f`, and its worker with `journalctl -u nyayo2-worker -f`. (It is the same units as `install-service.sh`
-makes, with `NYAYO_PORT`, `NYAYO_WORKERS` and `NYAYO_UNIT` to change.) The trial is updated with
-`NYAYO_CONDA_ENV=nyayo2 NYAYO_UNITS="nyayo2 nyayo2-worker" deploy/update.sh`.
-
-**8. Checks.** From bobby, or from the owner's PC (which reached 172.16.100.11 from both Windows and WSL):
-
-```bash
-curl -s http://172.16.100.11:8002/healthz                                      # ok
-curl -s -o /dev/null -w '%{http_code}\n' http://172.16.100.11:8002/matches     # 200
-curl -s http://172.16.100.11:8002/clientVersionRef/ -X POST                    # {"client_version": 55, "client_url": "http://172.16.100.11:8002/client.zip", ...}
-```
-
-Then in the browser, at `http://172.16.100.11:8002/`: **an old match** (Matches, open one), **an old game** (Games, open one), **Machines** (empty but for tokens, with the box that says how to start a worker), and **sign in** with the owner's
-name. The first test of the copy takes the next thousand above the highest `openbench-openbench-N` of the copy (1000 if 63 is near the
-highest), and its match is `sprt-1000`. The copy's old matches keep their `openbench-openbench-N` ids until `rename_matches` is run on it.
-
-**9. The worker.** The WSL worker is pointed at 8002 (the commands are on `http://172.16.100.11:8002/worker`, and its client updates itself
-from there). Wherever it takes its server from (the `NYAYO_SERVER` of its `worker.env`, or the client's own `--server`, or
-`OPENBENCH_SERVER`), set `http://172.16.100.11:8002`; delete the token it holds, which the trial's database has never heard of
-(`rm client/worker.token`, beside `client.py`); restart it. It says *waiting for approval*. On Machines (signed in) it is *Waiting for
-approval*: **Approve**. Then make a test on Create test, from a branch of Elephant with its base's bench typed under *Advanced* (Elephant's `main`
-has no `Bench:` line), and watch it on its match page.
-
-### Undoing the trial
-
-At any point the trial is undone by stopping `nyayo2` and deleting what the trial made. The current nyayo is as it was, but for the
-`backup/nyayo.sqlite3` it was asked for.
-
-```bash
-sudo systemctl disable --now nyayo2-worker nyayo2
-sudo rm /etc/systemd/system/nyayo2.service /etc/systemd/system/nyayo2-worker.service
-sudo systemctl daemon-reload
-conda deactivate
-rm -rf ~/dev/nyayo-2 ~/dev/nyayo-2-data
-conda env remove -n nyayo2 -y
-rm -rf /mnt/nyayo-batches/batches-2 /mnt/nyayo-batches/datasets-2      # the trial's copies: never `batches` or `datasets`
-```
-
-The worker has nowhere to go then (the current nyayo on 8001 has no worker API, and OpenBench's server is not running): stop it, or
-point it at 8002 again when the trial is made again.
-
-### The switch
-
-Later, when the trial has played a test. It stops both for the few minutes it takes, repeats the copy so that nothing is lost, and makes
-2.0 the nyayo on 8001, with its backups and timers. **What the trial held (its tests, its workers) is not carried over**: the trial's data
-directory is kept aside as `nyayo-2-data.trial`, and the copy is made again from the current nyayo.
-
-**1. Stop everything that writes**
-
-```bash
-sudo systemctl stop nyayo-expire.timer nyayo-backup.timer nyayo nyayo-worker nyayo2 nyayo2-worker
-```
-
-**2. Put the trial aside and copy again.** The `rsync` is the same as in the trial and only brings what is new.
-
-```bash
-cd ~/dev/nyayo-2
-conda activate nyayo2
-mv /home/fischer/dev/nyayo-2-data /home/fischer/dev/nyayo-2-data.trial
-mv .env .env.trial
-rsync -a --info=progress2 /mnt/nyayo-batches/batches/ /mnt/nyayo-batches/batches-2/
-[ -d /mnt/nyayo-batches/datasets ] && rsync -a /mnt/nyayo-batches/datasets/ /mnt/nyayo-batches/datasets-2/
-NYAYO_PORT=8001 \
-BACKUP_REPO=/home/fischer/dev/nyayo-backups \
-NYAYO_DATA_DIR=/home/fischer/dev/nyayo-2-data \
-FROM_ENV=/home/fischer/dev/nyayo/.env \
-NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches-2 \
-NYAYO_DATASETS_DIR=/mnt/nyayo-batches/datasets-2 \
-deploy/make-env.sh
-WITH_INDEX=1 \
-OLD_CHECKOUT=/home/fischer/dev/nyayo \
-OLD_BIN="$(conda info --base)/envs/nyayo/bin" \
-NEW_DATA=/home/fischer/dev/nyayo-2-data \
-deploy/copy-live-data.sh
-```
-
-`.env` now has port 8001 in its origins and
-`NYAYO_BACKUP_REPO=/home/fischer/dev/nyayo-backups`, the backup repository the current nyayo writes to: nothing else writes to it
-once the current one is stopped.
-
-**3. Migrate, and the real units**
-
-```bash
-python manage.py migrate
-python manage.py collectstatic --noinput
-python manage.py fetch_fastchess v1.8.2-alpha
-python manage.py reindex --dry-run
-sudo systemctl disable --now nyayo2-worker nyayo2
-sudo rm /etc/systemd/system/nyayo2.service /etc/systemd/system/nyayo2-worker.service
-sudo systemctl daemon-reload
-NYAYO_CONDA_ENV=nyayo2 deploy/install-service.sh
-```
-
-`NYAYO_CONDA_ENV=nyayo2` is the env the units are made for (it is not the active one that counts: the script finds `envs/<name>/bin`).
-It rewrites
-`nyayo.service` and `nyayo-worker.service` to run `~/dev/nyayo-2` (four gunicorn workers of four threads on port 8001), installs the
-expire and backup timers, and starts them. From here `nyayo` and `journalctl -u nyayo` mean 2.0, and `deploy/update.sh` updates it with
-`NYAYO_CONDA_ENV=nyayo2`. Run `python manage.py reindex` if the dry run said some batches would be indexed.
-
-**4. Check** as in the trial, on port 8001 now: `healthz`, an old match, an old game, Machines, sign in, and
-`systemctl list-timers nyayo-expire.timer nyayo-backup.timer`. Point the worker at `http://172.16.100.11:8001`, delete its `worker.token`, restart it,
-approve it on Machines, and make a test. The first `manage.py backup` that the timer runs commits to `nyayo-backups` the 2.0 database as a SQL dump.
-
-### Going back from the switch
-
-Everything of the current nyayo is as it was at the final copy: its checkout, its env, its data and its batches were only read.
-
-```bash
-sudo systemctl stop nyayo-expire.timer nyayo-backup.timer nyayo nyayo-worker
-cd ~/dev/nyayo
-NYAYO_CONDA_ENV=nyayo deploy/install-service.sh
-```
-
-That puts the units back to the current checkout, port 8001 and the old env, and starts them with their timers. The current nyayo has no
-worker API, and OpenBench's server is not running, so there is no worker to point at it: stop the worker. What 2.0 did after the switch (tests,
-workers, games) stays in `nyayo-2-data` and is not in the old nyayo. Until the old checkout, env and data are removed, which this does not do, the switch can be made again from the top.
+Check that the paths are those and not the `-2` ones, with `grep -E '^NYAYO_(DATA|BATCHES|DATASETS)_DIR' ~/dev/nyayo-2/.env`.
 
 ## The lab: OpenBench's workers
 
-From nyayo 2.0 nyayo is OpenBench's server: it makes the tests, hands the workers their work, and takes their results.
+nyayo is OpenBench's server: it makes the tests, hands the workers their work, and takes their results.
 The worker that plays is OpenBench's own `Client/`, which nyayo carries (`nyayo/client/`, from looak/openbench_eg `6a072fa`) and hands out at `/client.zip`, with the registration of *Workers register themselves* below: no username and no password. OpenBench's own server is not run any more: nyayo
-is what the workers talk to. The way to get here from the nyayo that runs now is the section above.
+is what the workers talk to (`/client.zip`, client 55).
 
 **What is new in the environment**
 
@@ -363,7 +196,7 @@ is what the workers talk to. The way to get here from the nyayo that runs now is
 - `deploy/update.sh` runs `pip install -e .`, which brings `scipy` and `numpy` (the SPRT maths), both with wheels for Linux.
 - A test's match is `<mode>-<test id>` (`sprt-1000`, `games-1001`, `tune-1002`, `datagen-1003`); nothing is set for it. The first
   migration of the lab starts test ids at the next thousand above the highest `openbench-<anything>-<N>` there was, so a test
-  of nyayo's never took a number OpenBench used. (`NYAYO_INSTANCE` is gone; a line of it left in `.env` is ignored.)
+  of nyayo's never took a number OpenBench used.
 - The rest, all optional, is in `.env.example`: `NYAYO_GITHUB_TOKEN` for the create page's lookups, and what the workers
   are told to fetch (`NYAYO_CLIENT_*`, `NYAYO_FASTCHESS_*`; the defaults are right).
 
@@ -558,9 +391,10 @@ the `.sqlite3` file while the service runs, it is in WAL mode) and, when `NYAYO_
 changed and pushes. `nyayo-backup.timer` runs it daily; a failed push leaves the commit and fails the unit, so
 `systemctl status nyayo-backup` and `journalctl -u nyayo-backup` say so.
 
-Once, on bobby: make a private repository, clone it (`git clone git@github.com:<you>/nyayo-backup.git
-~/dev/nyayo-backup`, with a key bobby may push with), set `NYAYO_BACKUP_REPO=/home/fischer/dev/nyayo-backup` in
-`.env`, and run `python manage.py backup` by hand to see it work. The dump holds the machines' token hashes and the
+Once, on a new install: make a private repository, clone it (`git clone git@github.com:<you>/nyayo-backups.git
+~/dev/nyayo-backups`, with a key the machine may push with), set `NYAYO_BACKUP_REPO=/home/fischer/dev/nyayo-backups` in
+`.env`, and run `python manage.py backup` by hand to see it work. On bobby that is done: `~/dev/nyayo-backups` is the
+repository, and `nyayo-backup.timer` is installed with the other units. The dump holds the machines' token hashes and the
 admin users, hence private.
 
 `games/batches/` (the game database: nyayo's 64-game batches of finished games, zstd) is not in the repo: it will be
@@ -578,8 +412,10 @@ a database, archive or games. Restore `games/batches/` from the share.
 
 ## Renaming the matches
 
-Once, on bobby, to turn the `openbench-openbench-N` matches into `sprt-N` (`games-N` and `tune-N` for a lab test of that mode):
-`python manage.py rename_matches`. Old links, `/matches/openbench-openbench-1000` and everything under it, keep working: they
+`python manage.py rename_matches` turns the `openbench-openbench-N` matches of an OpenBench-era database into `sprt-N` (`games-N`
+and `tune-N` for a lab test of that mode). **It has been run on bobby (2026-11-05) and does not need running again**: every old match
+there is already `sprt-N`, and a second run finds nothing to do. What follows is what it does and how to run it, for a
+fresh copy of old data (a restore of a backup from before the rename, say). Old links, `/matches/openbench-openbench-1000` and everything under it, keep working: they
 answer `301` to `/matches/sprt-1000`.
 
 What holds a match's id, and so what it moves: the `Match` row (its primary key) and every row that refers to it (`ScheduleEntry`,
@@ -596,7 +432,7 @@ Order, with the services that write stopped (the worker and the web process both
 
 ```bash
 sudo systemctl stop nyayo-expire.timer nyayo-backup.timer nyayo nyayo-worker
-cd ~/dev/nyayo-2 && conda activate nyayo2          # the checkout and env 2.0 runs from
+cd <checkout> && conda activate <env>              # ~/dev/nyayo-2 and nyayo2 on bobby
 python manage.py backup                            # a fresh backup, then look at it: the database and the archive
 git pull --ff-only && python -m pip install --quiet -e . && python manage.py migrate   # the table of renames
 python manage.py rename_matches --dry-run          # every rename and move, one line each; nothing changes
@@ -627,8 +463,8 @@ journalctl -u nyayo --since "15 min ago" | grep -B2 -A25 "ERROR"
 journalctl -u nyayo -f            # follow it while you reproduce the error
 ```
 
-The access log beside it (`"GET /matches HTTP/1.1" 500`) says which request and when; the lines above it say why.
-From a client, `curl -i http://172.16.100.11:8001/matches` shows the status line and headers, and the browser's network
+The access log beside it (`"GET /tests HTTP/1.1" 500`) says which request and when; the lines above it say why.
+From a client, `curl -i http://172.16.100.11:8001/tests` shows the status line and headers, and the browser's network
 tab shows the same; neither shows the cause, which only the server knows. `NYAYO_LOG_LEVEL=DEBUG` in `.env` makes
 nyayo's own messages chattier.
 
@@ -646,7 +482,7 @@ one untick *active*; the *new token* action replaces a lost one.
 On the machine, in the Elephant checkout:
 
 ```sh
-git config nyayo.url http://172.16.100.11:8001      # http://127.0.0.1:8000 for a local nyayo
+git config nyayo.url http://172.16.100.11:8001      # http://127.0.0.1:8001 for a local nyayo
 git config nyayo.token <the token>
 python test/results.py sync                         # uploads every run nyayo doesn't have yet
 ```
