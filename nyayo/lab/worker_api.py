@@ -340,6 +340,10 @@ def client_report_step(request, machine):
         answer, judged = {}, False
         if form.get('state') in ('passed', 'failed') and form.get('step') in ('compile', 'bench'):
             answer, judged = steps.settle(result, form['step'], form.get('side', ''), getattr(step, 'was_passed', False))
+
+        # A match runner that played nothing: the worker leaves the test for a while
+        elif form.get('state') == 'failed' and form.get('step') == 'running' and step is not None:
+            answer, judged = steps.settle_running(step)
     except (Test.DoesNotExist, Result.DoesNotExist, KeyError, ValueError):
         return JsonResponse({})
 

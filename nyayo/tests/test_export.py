@@ -101,6 +101,13 @@ class Filters(ExportCase):
     def test_by_match(self):
         self.assertEqual(self.names("?match=sprt-one"), ["S1", "S2"])
 
+    def test_by_a_match_id_it_was_renamed_from(self):
+        from nyayo.matches.models import RenamedMatch
+
+        RenamedMatch.objects.create(old_id="openbench-openbench-85", new_id="sprt-one")
+        self.assertEqual(self.names("?match=openbench-openbench-85"), ["S1", "S2"])
+        self.assertEqual(self.names("?match=openbench-openbench-86"), [])
+
     def test_by_kind(self):
         self.assertEqual(self.names("?kind=gauntlet"), ["G1"])
         self.assertEqual(self.names("?kind=sprt"), ["S1", "S2"])

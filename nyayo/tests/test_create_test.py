@@ -66,6 +66,7 @@ class Reports(TestCase):
         steps = types.ModuleType("nyayo.lab.steps")
         self.restarted = []
         steps.restart_walks = lambda test: self.restarted.append(test.pk)
+        steps.held = lambda test: []
         patcher = mock.patch.dict(sys.modules, {"nyayo.lab.document": document, "nyayo.lab.steps": steps})
         patcher.start()
         self.addCleanup(patcher.stop)

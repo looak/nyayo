@@ -66,11 +66,12 @@ from client import save_token
 
 ## Basic configuration of the Client. These timeouts can be changed at will
 
-CLIENT_VERSION   = 54 # Client version to send to the Server
+CLIENT_VERSION   = 55 # Client version to send to the Server
 TIMEOUT_HTTP     = 30 # Timeout in seconds for HTTP requests
 TIMEOUT_ERROR    = 60 # Timeout in seconds when any errors are thrown
 TIMEOUT_WORKLOAD = 60 # Timeout in seconds between workload requests
 TIMEOUT_RETRY    = 300 # Seconds before a test that failed a step is tried again, where the server did not say
+RUNNER_LOG_LINES = 40 # Lines of the match runner's output kept for a report of its failure
 REPORT_INTERVAL  = 30 # Seconds between reports to the Server
 
 IS_WINDOWS = platform.system() == 'Windows' # Don't touch this
@@ -484,8 +485,15 @@ class MatchRunner:
     ## and a small number of secondary arguments that are not housed in the Configuration
 
     @staticmethod
+    def executable_path():
+
+        # By its full path, in the client's folder: a bare name is looked for in the current folder only where Windows is
+        # set to (NoDefaultCurrentDirectoryInExePath turns that off, and Popen then finds no file)
+        return os.path.join(os.getcwd(), ['fastchess-ob.exe', 'fastchess-ob'][IS_LINUX])
+
+    @staticmethod
     def executable(config):
-        return ['fastchess-ob.exe', './fastchess-ob'][IS_LINUX]
+        return shlex.quote(MatchRunner.executable_path()) # The command line is split by shlex before it is run
 
     @staticmethod
     def basic_settings(config):
@@ -1382,10 +1390,20 @@ def complete_workload(config):
             rr.send_errors(timestamp, runner_cnt)
             MatchRunner.kill_everything(dev_name, base_name)
 
+            # Match runners that played nothing, or died, are a failed step
+            failure = runner_failure(tasks, abort_flag)
+            if failure:
+                fail_running(config, failure[0], failure[1], timestamp)
+
         # Kill everything during an Exception, but print it
-        except (Exception, KeyboardInterrupt):
+        except (Exception, KeyboardInterrupt) as error:
             abort_flag.set()
             MatchRunner.kill_everything(dev_name, base_name)
+
+            # An exception while playing is a failed step too, unless it is the server's to handle or already reported
+            if isinstance(error, Exception) and not isinstance(error, (BadVersionException, utils.OpenBenchFatalWorkerException,
+                                                                    utils.OpenBenchRunnerFailedException)):
+                fail_running(config, 'Playing failed: %s: %s' % (type(error).__name__, error), traceback.format_exc()[-4096:], timestamp)
             raise
 
         pgn_files = [MatchRunner.pgn_name(config, timestamp, x) for x in range(runner_cnt)]
@@ -1556,6 +1574,9 @@ def run_and_parse_runner(config, command, runner_idx, results_queue, abort_flag)
     print('\n[#%d] Launching match runner...\n%s\n' % (runner_idx, command))
     runner = Popen(shlex.split(command), stdout=PIPE)
 
+    finished = 0   # Games the match runner finished, for the caller to tell a runner that played nothing
+    output   = []  # The last lines it said, for the report if it did
+
     results = {
 
         'trinomial'   : [0, 0, 0],       # LDW
@@ -1570,17 +1591,25 @@ def run_and_parse_runner(config, command, runner_idx, results_queue, abort_flag)
     while True:
 
         # Read each line of output until the pipe closes and we get "" back
-        line = runner.stdout.readline().strip().decode('ascii')
-        if not line:
+        raw = runner.stdout.readline()
+        if not raw:
             break
+
+        line = raw.strip().decode('ascii', errors='replace')
+        if not line:
+            continue # A blank line is not the end of the output
 
         if abort_flag.is_set():
             break
+
+        output.append(line)
+        del output[:-RUNNER_LOG_LINES]
 
         if 'Started game' not in line and 'Score of' not in line:
             print('[#%d] %s' % (runner_idx, line))
 
         if 'Finished game' in line:
+            finished += 1
             MatchRunner.update_results(results, line)
 
         # Add to the results queue every time we have a game-pair finished
@@ -1602,6 +1631,40 @@ def run_and_parse_runner(config, command, runner_idx, results_queue, abort_flag)
             results['crashes'    ] = 0
             results['timelosses' ] = 0
             results['illegals'   ] = 0
+
+    return { 'games' : finished, 'output' : '\n'.join(output), 'exit_code' : runner.poll() }
+
+def runner_failure(tasks, abort_flag):
+
+    # Why the match runners did not play, as (message, log), or None where they did or were told to stop. A runner
+    # that could not be started, or died, left its exception in its task; one that ended having finished no game
+    # played nothing, and its last lines are the log.
+    if abort_flag.is_set():
+        return None
+
+    for idx, task in enumerate(tasks):
+        if not task.done():
+            continue
+
+        error = task.exception()
+        if error:
+            return ('Match runner #%d could not be run: %s' % (idx, error), ''.join(traceback.format_exception(type(error), error, error.__traceback__))[-4096:])
+
+        found = task.result()
+        if not found['games']:
+            code = found['exit_code']
+            return ('Match runner #%d ended with no finished games%s' % (idx, '' if code is None else ' (exit code %s)' % (code)),
+                    found['output'])
+
+    return None
+
+def fail_running(config, message, log, started):
+
+    # Playing did not work: the last step of the walk failed, which the server shows like a failed build. It answers how
+    # long the test is left for, which leave_for_a_while uses.
+    ServerReporter.report_step(config, 'running', None, 'failed',
+        detail=message[:500], log=log, seconds=round(time.time() - started, 1))
+    raise utils.OpenBenchRunnerFailedException(message, log)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #                                                                           #
@@ -1713,8 +1776,8 @@ def run_openbench_worker(client_args):
         except BadVersionException:
             raise BadVersionException()
 
-        # A failed compile or bench: the test is left for as long as the server says
-        except (utils.OpenBenchBuildFailedException, utils.OpenBenchBadBenchException):
+        # A failed compile, bench or match runner: the test is left for as long as the server says
+        except (utils.OpenBenchBuildFailedException, utils.OpenBenchBadBenchException, utils.OpenBenchRunnerFailedException):
             traceback.print_exc()
             leave_for_a_while(config)
             time.sleep(TIMEOUT_ERROR)

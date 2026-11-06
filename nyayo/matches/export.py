@@ -12,6 +12,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from . import catalogue
 from .games import read_pgn
 from .models import KINDS, Batch, Game, Match
+from .oldids import new_id_for
 
 # after each batch: a batch needn't end with a blank line, and the next one's first tag would run into its last move
 SEPARATOR = bz2.compress(b"\n\n")
@@ -54,7 +55,8 @@ def matches(filters):
     if "book" in filters:
         queryset = queryset.filter(settings__book=filters["book"])
     if "match" in filters:
-        queryset = queryset.filter(pk=filters["match"])
+        # an id the rename command changed (RenamedMatch) asks for the match it became
+        queryset = queryset.filter(pk=new_id_for(filters["match"]) or filters["match"])
     return queryset
 
 

@@ -147,6 +147,15 @@ class GamesPage(BatchCase):
         self.has(other, "0 games matching")
         self.has(other, "No games match")
 
+    def test_filtered_to_a_match_by_the_id_it_was_renamed_from(self):
+        from nyayo.matches.models import RenamedMatch
+
+        self.keep(bz2.compress(batch_text(game("1-0", moves=MATE))))
+        RenamedMatch.objects.create(old_id="openbench-openbench-85", new_id="gauntlet-test-1")
+        page = self.page("?match=openbench-openbench-85").content.decode()
+        self.has(page, "1 game matching")
+        self.has(self.page("?match=openbench-openbench-86").content.decode(), "0 games matching")
+
     def test_filtered_by_result_ending_and_length(self):
         self.keep(bz2.compress(batch_text(
             game("1-0", moves=MATE),                                      # 1.0.1 won, checkmate, 4 moves

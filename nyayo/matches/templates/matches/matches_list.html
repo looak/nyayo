@@ -1,7 +1,7 @@
 {% extends "runs/base.html" %}
-{% load runs_extras matches_extras %}
+{% load static runs_extras matches_extras %}
 {% block title %}{{ title }} · nyayo{% endblock %}
-{% block head %}{% if running or unstarted.refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'matches/gauges.css' %}"><script defer src="{% static 'matches/gauges.js' %}"></script>{% if running or unstarted.refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
 {% block content %}
 <h1>{{ title }}</h1>
 {% if running %}<div class="columns">{% endif %}
@@ -41,7 +41,7 @@
 {% if page.object_list %}
 <div class="scroll">
 <table>
-  <thead><tr><th>Updated</th><th>{% if gauntlets %}Gauntlet{% else %}Test{% endif %}</th>{% if not gauntlets %}<th>Kind</th>{% endif %}<th>State</th><th>Engine</th><th class="num">Games</th>
+  <thead><tr><th>Updated</th><th>{% if gauntlets %}Gauntlet{% else %}Test{% endif %}</th>{% if not gauntlets %}<th>Kind</th>{% endif %}<th>State</th>{% if not gauntlets %}<th colspan="2">SPRT</th>{% endif %}<th>Engine</th><th class="num">Games</th>
     <th class="num">Score</th><th class="num">Elo</th></tr></thead>
   <tbody>
   {% for match in page.object_list %}
@@ -50,6 +50,9 @@
       <td class="clip" title="{{ match.name|default:match.pk }}"><a href="{% url 'match' match.pk %}">{{ match.name|default:match.pk }}</a></td>
       {% if not gauntlets %}<td><span class="tier">{{ match.job_kind }}</span></td>{% endif %}
       <td>{% if match.silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state|statename }}</span>{% endif %}</td>
+      {% if not gauntlets %}{% if match.gauge %}<td class="gauge-cell">{% include "matches/_gauge_small.html" with g=match.gauge key="list-"|add:match.pk %}</td>
+      <td class="nowrap"><div class="gword tone-{{ match.gauge.tone }}"><b>{{ match.gauge.word }}</b></div><div class="muted">LLR {{ match.gauge.llr }}</div></td>
+      {% else %}<td colspan="2"></td>{% endif %}{% endif %}
       <td>{{ match.subject }}</td>
       <td class="num">{{ match.summary.overall.games }}{% if match.progress.total %}<span class="muted">/{{ match.progress.total }}</span>{% endif %}</td>
       <td class="num {% if match.summary.overall.score > 0.5 %}better{% elif match.summary.overall.score < 0.5 %}worse{% endif %}">{{ match.summary.overall.score|percent }}</td>
