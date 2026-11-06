@@ -214,18 +214,14 @@
       {% for p in penta_rows %}
       <div class="pillar-col" title="{{ p.label }}: {{ p.count }} pairs, {{ p.share }}">
         <span class="pillar-count">{{ p.count }}</span>
-        <span class="pillar {{ p.tone }}" style="height: {{ p.height }}%"></span>
-        <span class="pillar-label muted">{{ p.label }}</span>
+        <span class="pillar-well"><span class="pillar {{ p.tone }}" style="height: {{ p.height }}%"></span></span>
+        <span class="pillar-label">{{ p.label }}</span>
+        <span class="pillar-share muted">{{ p.share }}</span>
+        <span class="pillar-words muted">{{ p.words }}</span>
       </div>
       {% endfor %}
     </div>
-    <table class="penta">
-      <thead><tr><th>Pairs</th>{% for p in penta_rows %}<th class="num">{{ p.label }}</th>{% endfor %}</tr></thead>
-      <tbody>
-        <tr><td class="muted">count</td>{% for p in penta_rows %}<td class="num">{{ p.count }}</td>{% endfor %}</tr>
-        <tr><td class="muted">share</td>{% for p in penta_rows %}<td class="num muted">{{ p.share }}</td>{% endfor %}</tr>
-      </tbody>
-    </table>
+    <p class="muted pillar-summary">{{ penta_summary.pairs }} pairs · dev ahead in {{ penta_summary.ahead }}, behind in {{ penta_summary.behind }} · dev scored {{ penta_summary.points }} of the points</p>
     {% else %}<p class="muted">No pairs played yet.</p>{% endif %}
   </div>
 </div>

@@ -159,7 +159,7 @@ def sprt_page(match, sprt, projection, now=None):
         "base_line": sprtview.engine_line(base["name"], base["info"], base["commit"]) if base else "",
         "subject_link": sprtview.commit_link(match.subject_info, match.subject.commit),
         "base_link": sprtview.commit_link(base["info"], base["commit"]) if base else None,
-        "projection": projection, "penta_rows": penta_rows(row), "faults": faults(row),
+        "projection": projection, "penta_rows": penta_rows(row), "penta_summary": penta_summary(row), "faults": faults(row),
         "llr_gauge": gauges.llr_gauge(sprt["llr"], sprt["lower"], sprt["upper"], sprt["result"], row.games if row else 0),
         "elo_gauge": gauges.elo_gauge(elo, error, sprt["elo0"], sprt["elo1"]),
         **workers_context(match, row, now),
@@ -233,8 +233,23 @@ def penta_rows(row):
         return None
     pairs, tallest = sum(row.penta), max(row.penta)
     return [{"label": label, "count": count, "share": f"{count / pairs:.1%}", "tone": label.lower(),
-             "height": f"{count / tallest * 100:.1f}"}
+             "height": f"{count / tallest * 100:.1f}", "words": PENTA_WORDS[label]}
             for label, count in zip(PENTA_LABELS, row.penta)]
+
+
+PENTA_WORDS = {"LL": "lost both", "LD": "lost one, drew one", "DD": "drew both, or won one and lost one", "DW": "won one, drew one",
+               "WW": "won both"}
+
+
+def penta_summary(row):
+    """The pairs in one line's numbers: how many, in how many the subject was ahead and behind, and the share of
+    the points it scored (a pair has two points to give), None before a pair is played."""
+    if not row or not row.penta or not sum(row.penta):
+        return None
+    ll, ld, dd, dw, ww = row.penta
+    pairs = sum(row.penta)
+    return {"pairs": pairs, "ahead": dw + ww, "behind": ll + ld,
+            "points": f"{(ld * 0.5 + dd + dw * 1.5 + ww * 2) / (2 * pairs):.1%}"}
 
 
 def faults(row):

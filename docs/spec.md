@@ -262,7 +262,7 @@ played (the results' count, which is what the test was decided on, with the pace
 uploads its whole file with the games it played after its last report, or fewer, and the page then says so under *Games*), the Elo with its error (the producer's, else nyayo's from the counts), the LLR with its bounds, the time
 (started, elapsed, pace, games and time to go), the test (time control, UCI options, book, Elo bounds, alpha, beta,
 model) and both engines. A block in the testers' layout (Elo, SPRT, LLR, Games, Penta, as OpenBench's and fishtest's
-pages show it) can be copied with a button. The results follow with the pentanomial as pillars, time losses, crashes
+pages show it) can be copied with a button. The results follow with the pentanomial as five columns on one grid (count, bar, key, share and what the result means, each under its own bar, with a line under them for the pairs, the pairs the subject won and lost and the share of points it scored), time losses, crashes
 and illegal moves per side, and the **workers** that played it (`machines`, busiest first, with their processor,
 cores, memory and instruction sets where the producer sends them; schema, *Machines*), then the games.
 
