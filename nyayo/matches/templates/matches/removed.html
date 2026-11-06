@@ -1,9 +1,9 @@
 {% extends "runs/base.html" %}
 {% block title %}Removed matches · nyayo{% endblock %}
-{% block crumb %}Testing › Matches › Removed{% endblock %}
+{% block crumb %}Jobs › Removed{% endblock %}
 {% block content %}
 <h1>Removed matches</h1>
-<p class="muted">Taken out of the lists and the dashboard. Their games stay in <a href="{% url 'games' %}">Games</a> and the exports. <a href="{% url 'matches' %}">Back to the matches</a>.</p>
+<p class="muted">Taken out of the lists and the dashboard. Their games stay in <a href="{% url 'games' %}">Games</a> and the exports. Back to <a href="{% url 'tests' %}">the tests</a> or <a href="{% url 'gauntlets' %}">the gauntlets</a>.</p>
 {% if matches %}
 <div class="card"><div class="scroll"><table>
   <thead><tr><th>Match</th><th>Kind</th><th>State</th><th class="num">Games</th><th>Last report</th><th></th></tr></thead>

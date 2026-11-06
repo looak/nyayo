@@ -67,7 +67,7 @@ class SeedDemo(NyayoTestCase):
         self.assertIn(">Performance<", page)
         self.assertIn(">Cut off <", self.client.get("/matches/demo-gauntlet-stopped").content.decode())
         self.assertContains(self.client.get("/matches/demo-gauntlet-silent"), "badge silent")
-        self.assertIn("mini live-board", self.client.get("/matches").content.decode())
+        self.assertIn("mini live-board", self.client.get("/gauntlets").content.decode())
         self.assertEqual(self.client.get("/matches/demo-gauntlet-running/games/41").status_code, 200)
 
     def test_the_tests_that_have_not_played(self):
@@ -80,7 +80,7 @@ class SeedDemo(NyayoTestCase):
         self.assertEqual(failed.machines[0]["steps"][1]["blame"], "engine")
         for match_id, state in expected.items():
             self.assertContains(self.client.get(f"/matches/{match_id}"), f"badge {state}")
-        self.assertEqual(self.client.get("/matches").status_code, 200)
+        self.assertEqual(self.client.get("/tests").status_code, 200)
         self.assertEqual(self.client.get("/").status_code, 200)
 
     def test_a_failed_start_in_the_demo_is_on_its_way_out(self):

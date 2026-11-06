@@ -5,6 +5,8 @@ from . import dashboard, exports, gameslist, pages, views
 urlpatterns = [
     path("", dashboard.dashboard, name="dashboard"),
     path("matches", pages.matches_list, name="matches"),
+    path("tests", pages.tests_list, name="tests"),
+    path("gauntlets", pages.gauntlets_list, name="gauntlets"),
     path("games", gameslist.games_list, name="games"),
     path("exports", exports.exports_page, name="exports"),
     path("exports/<int:dataset_id>", exports.export_page, name="export"),

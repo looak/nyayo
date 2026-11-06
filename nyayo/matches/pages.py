@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import chess
 from django.conf import settings
 from django.http import Http404, HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.db.models import Q
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.template.loader import render_to_string
 
@@ -17,7 +18,7 @@ from nyayo.lab.templatetags.lab_extras import producer_link
 from nyayo.paging import paginate
 
 from . import catalogue, games, pgnview, progress, sprtview, stats, stepsview, timing
-from .models import KINDS, STATES, Engine, Game, Match, Tombstone
+from .models import STATES, Engine, Game, Match, Tombstone
 
 OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): "loss", ("1-0", "black"): "loss",
             ("1/2-1/2", "white"): "draw", ("1/2-1/2", "black"): "draw"}
@@ -310,12 +311,15 @@ def playing_entries(match, limit):
              "opponent_name": names.get(g.opponent, g.opponent)} for g in rows]
 
 
-def running_cards(cutoff, now):
+def running_cards(cutoff, now, gauntlets=None):
     """The matches being played right now, newest first, for the top of the list: running, and reported lately (a
-    silent match is likely dead). Each as what a glance needs: games, Elo, how it is going and when it will be done."""
+    silent match is likely dead). Each as what a glance needs: games, Elo, how it is going and when it will be done.
+    gauntlets: True for only the gauntlets, False for only the tests, None for both (the dashboard)."""
     cards = []
-    for match in match_queryset().filter(state="running", updated_at__gte=cutoff).order_by("-updated_at")[
-            :RUNNING_CARDS]:
+    running = match_queryset().filter(state="running", updated_at__gte=cutoff)
+    if gauntlets is not None:
+        running = running.filter(kind="gauntlet") if gauntlets else running.exclude(kind="gauntlet")
+    for match in running.order_by("-updated_at")[:RUNNING_CARDS]:
         summary = stats.summarize(match.results.all())
         progress_info = match.progress or {}
         total = progress_info.get("total") or len(match.schedule) or None
@@ -363,11 +367,62 @@ def sprt_card(match, sprt, now):
     return {"elo": elo, "error": error, "projection": progress.projection(series, match.sprt, now)}
 
 
+# the kinds of job the Tests page lists, as its Kind column and filter name them: the lab's by the mode in their id, the
+# rest by the match's kind. Gauntlets have a page of their own
+LAB_MODES = ("tune", "datagen")
+TEST_KINDS = ["sprt", "tune", "datagen", "games", "selfplay"]
+
+
+def job_kind(match):
+    """sprt, tune, datagen, games, selfplay or gauntlet: a lab test's mode (its id is `<mode>-<number>`), else its kind."""
+    prefix, _, number = match.pk.partition("-")
+    return prefix if prefix in LAB_MODES and number.isdigit() else match.kind
+
+
+def of_kind(matches, kind):
+    lab = [Q(pk__regex=r"^%s-[0-9]+$" % mode) for mode in LAB_MODES]
+    if kind in LAB_MODES:
+        return matches.filter(kind="games").filter(lab[LAB_MODES.index(kind)])
+    if kind == "games":
+        return matches.filter(kind="games").exclude(lab[0] | lab[1])
+    return matches.filter(kind=kind)
+
+
+def is_gauntlet(match):
+    return match.kind == "gauntlet"
+
+
+def jobs_of(match):
+    """The list a match belongs to, for the sidebar and the crumb: tests or gauntlets."""
+    return "gauntlets" if is_gauntlet(match) else "tests"
+
+
 def matches_list(request):
+    """The old list of every match: now Tests, or Gauntlets when it was filtered to them."""
+    query = request.GET.copy()
+    name = "tests"
+    if query.get("kind") == "gauntlet":
+        name = "gauntlets"
+        del query["kind"]
+    return redirect(reverse(name) + ("?" + query.urlencode() if query else ""), permanent=True)
+
+
+def tests_list(request):
+    return jobs_list(request, gauntlets=False)
+
+
+def gauntlets_list(request):
+    return jobs_list(request, gauntlets=True)
+
+
+def jobs_list(request, gauntlets):
+    """Tests (SPRTs, tunes, datagens, the lab's games and self-play) or Gauntlets: the same list, of one or the other."""
     matches = match_queryset().order_by("-updated_at")
+    matches = matches.filter(kind="gauntlet") if gauntlets else matches.exclude(kind="gauntlet")
     kind, state, engine = request.GET.get("kind", ""), request.GET.get("state", ""), request.GET.get("engine", "")
-    if kind in KINDS:
-        matches = matches.filter(kind=kind)
+    kind = "" if gauntlets else kind
+    if kind in TEST_KINDS:
+        matches = of_kind(matches, kind)
     cutoff = silent_cutoff()
     if state == "silent":
         matches = matches.filter(state="running", updated_at__lt=cutoff)
@@ -377,20 +432,24 @@ def matches_list(request):
         matches = matches.filter(subject_id=int(engine))
     page = paginate(matches, request)
     now = timezone.now()
-    running = running_cards(cutoff, now)
-    unstarted = unstarted_cards(now)
+    running = running_cards(cutoff, now, gauntlets)
+    # the tests that haven't played a game are the lab's, never a gauntlet
+    unstarted = {"groups": [], "any": False, "refresh": False} if gauntlets else unstarted_cards(now)
     for match in page.object_list:
+        match.job_kind = job_kind(match)
         match.summary = stats.summarize(match.results.all())
         match.silent = is_silent(match, cutoff)
         # an SPRT's Elo is its producer's; the rest are nyayo's from the counts
         produced = match.stats if isinstance(match.stats, dict) else None
         match.elo = produced.get("elo") if produced else match.summary.overall.elo
         match.elo_error = produced.get("error") if produced else match.summary.overall.error
+    shown = Match.objects.filter(kind="gauntlet") if gauntlets else Match.objects.exclude(kind="gauntlet")
     return render(request, "matches/matches_list.html", {
-        "page": page, "kind": kind, "kinds": KINDS, "state": state, "states": STATES + ["silent"], "engine": engine,
-        "running": running, "unstarted": unstarted, "can_act": may_act(request.user),
-        "removed_count": Match.objects.filter(hidden=True).count() if may_act(request.user) else 0,
-        "engines": Engine.objects.filter(matches_as_subject__isnull=False).distinct(),
+        "page": page, "kind": kind, "kinds": [] if gauntlets else TEST_KINDS, "state": state, "states": STATES + ["silent"],
+        "engine": engine, "gauntlets": gauntlets, "jobs": "gauntlets" if gauntlets else "tests",
+        "title": "Gauntlets" if gauntlets else "Tests", "running": running, "unstarted": unstarted,
+        "removed_count": shown.filter(hidden=True).count() if may_act(request.user) else 0,
+        "engines": Engine.objects.filter(matches_as_subject__in=shown).distinct(),
     })
 
 
@@ -511,7 +570,7 @@ def match_detail(request, match_id):
         "groups": groups, "entries": entries, "refresh": match.state == "running", "settings": match.settings,
         "host": match.host, "subject_name": subject_name, "stored_games": stored_games(match),
         "uploads": upload_counts(match),
-        "producer_url": producer_link(match),
+        "producer_url": producer_link(match), "jobs": jobs_of(match),
     }
     # the games table shows one page of them, in play order (playing, cut off, scheduled, finished); what was counted
     # above, the totals and the boards in play, is of all of them
@@ -609,7 +668,7 @@ def game_page(request, match_id, game):
     context = game_context(match, game, ply)
     if context is None:
         raise Http404("no such game")
-    context.update(version=version_token(match_id, game, match.state, ply), pinned=ply is not None,
+    context.update(version=version_token(match_id, game, match.state, ply), pinned=ply is not None, jobs=jobs_of(match),
                    poll_ms=settings.NYAYO_GAME_POLL_MS)
     return render(request, "matches/game.html", context)
 

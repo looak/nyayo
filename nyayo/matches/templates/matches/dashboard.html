@@ -27,11 +27,11 @@
   {% if p.running %}
   <div class="tile success">{% include "runs/_tile_icon.html" with icon="play" %}<div class="inner"><h4>Playing now</h4><div class="big">{{ p.running }} match{{ p.running|pluralize:"es" }}</div>
     <div class="sub">{% for kind, n in p.kinds %}{{ n }} {{ kind }}{% if n != 1 %}s{% endif %} · {% endfor %}{{ p.in_play }} game{{ p.in_play|pluralize }} in play</div></div>
-    <a class="foot" href="{% url 'matches' %}?state=running">The matches running ➔</a></div>
+    <a class="foot" href="{% url 'tests' %}?state=running">The tests running ➔</a></div>
   {% else %}
   <div class="tile grey">{% include "runs/_tile_icon.html" with icon="clock" %}<div class="inner"><h4>Last played</h4><div class="big">{% if p.last %}{{ p.last_at|timesince }} ago{% else %}–{% endif %}</div>
     <div class="sub">{% if p.last %}{{ p.last.name|default:p.last.pk|truncatechars:40 }} · {{ p.last.kind }}, {{ p.last.state }}{% else %}nothing yet{% endif %}</div></div>
-    {% if p.last %}<a class="foot" href="{% url 'match' p.last.pk %}">That match ➔</a>{% else %}<a class="foot" href="{% url 'matches' %}">All matches ➔</a>{% endif %}</div>
+    {% if p.last %}<a class="foot" href="{% url 'match' p.last.pk %}">That match ➔</a>{% else %}<a class="foot" href="{% url 'tests' %}">All tests ➔</a>{% endif %}</div>
   {% endif %}
   {% endwith %}
   {% with s=tiles.sprt %}
@@ -40,7 +40,7 @@
     <div class="big">{% if s %}{{ s.elo|elo }}{% else %}–{% endif %}</div>
     <div class="sub">{% if s %}{{ s.match.name|default:s.match.pk|truncatechars:34 }}{% if s.error is not None %} · {{ s.error|error }}{% endif %}{% if s.llr is not None %} · LLR {{ s.llr|floatformat:2 }}{% endif %}{% else %}no SPRT yet{% endif %}</div>
     {% if s %}<div class="sub">{% if s.faults %}<b>{{ s.faults|join:" · " }}</b> by the engine under test{% else %}no crashes, time losses or illegal moves{% endif %}</div>{% endif %}</div>
-    {% if s %}<a class="foot" href="{% url 'match' s.match.pk %}">The test ➔</a>{% else %}<a class="foot" href="{% url 'matches' %}?kind=sprt">SPRTs ➔</a>{% endif %}</div>
+    {% if s %}<a class="foot" href="{% url 'match' s.match.pk %}">The test ➔</a>{% else %}<a class="foot" href="{% url 'tests' %}?kind=sprt">SPRTs ➔</a>{% endif %}</div>
   {% endwith %}
   {% with g=tiles.github %}
   <div class="tile purple">{% include "runs/_tile_icon.html" with icon="code-commit" %}<div class="inner"><h4>GitHub, last 7 days{% if g.repo %} · {{ g.repo }}{% endif %}</h4>
@@ -64,7 +64,7 @@
 <div class="columns wide-left">
   <div>
     {% for c in running %}{% include "matches/_running_card.html" %}{% empty %}
-    <div class="card"><h3 class="box-title">Running</h3><p class="muted">Nothing is being played right now. <a href="{% url 'matches' %}">Every match</a></p></div>
+    <div class="card"><h3 class="box-title">Running</h3><p class="muted">Nothing is being played right now. <a href="{% url 'tests' %}">The tests</a> · <a href="{% url 'gauntlets' %}">the gauntlets</a></p></div>
     {% endfor %}
     {% include "matches/_unstarted_cards.html" %}
   </div>
@@ -76,7 +76,7 @@
 
 <div class="columns" style="margin-top: 1rem">
   <div class="card">
-    <h3 class="box-title">Recent matches <span class="right"><a href="{% url 'matches' %}">all ➔</a></span></h3>
+    <h3 class="box-title">Recent matches <span class="right"><a href="{% url 'tests' %}">tests ➔</a> · <a href="{% url 'gauntlets' %}">gauntlets ➔</a></span></h3>
     {% if recent %}
     <div class="scroll"><table>
       <thead><tr><th>Match</th><th>State</th><th class="num">Games</th><th class="num">Score</th><th class="num">Elo</th></tr></thead>

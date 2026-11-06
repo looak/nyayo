@@ -19,10 +19,10 @@ class Errors(GameTestCase):  # a match in the list, so the page has something to
         client = Client(raise_request_exception=False)
         with mock.patch("nyayo.matches.pages.stats.summarize", side_effect=RuntimeError("the reason")):
             with self.assertLogs("django.request", level="ERROR") as logged:
-                response = client.get("/matches")
+                response = client.get("/gauntlets")
         self.assertEqual(response.status_code, 500)
         record = logged.records[0]
-        self.assertIn("/matches", record.getMessage())
+        self.assertIn("/gauntlets", record.getMessage())
         self.assertEqual(str(record.exc_info[1]), "the reason")
 
     def test_a_404_is_not_logged_as_an_error(self):
