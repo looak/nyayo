@@ -1,14 +1,9 @@
 {% extends "runs/base.html" %}
 {% load runs_extras matches_extras %}
-{% block title %}Matches · nyayo{% endblock %}
-{% block head %}{% if running or unstarted.refresh %}{% if can_act %}<script>setInterval(function () { if (!document.querySelector(".pick:checked")) location.reload(); }, 10000);</script>{% else %}<meta http-equiv="refresh" content="10">{% endif %}{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
+{% block title %}{{ title }} · nyayo{% endblock %}
+{% block head %}{% if running or unstarted.refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
 {% block content %}
-<style>
-  .pickcell { width: 2.2rem; text-align: center; } .pickcell input { width: 18px; height: 18px; }
-  .pickbar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .5rem; padding: .6rem .8rem; background: var(--card); border: 1px solid var(--line); border-radius: 3px; }
-  .pickbar .act { min-height: 44px; } .pickbar .act.danger { background: var(--danger); }
-</style>
-<h1>Matches</h1>
+<h1>{{ title }}</h1>
 {% if running %}<div class="columns">{% endif %}
 {% for c in running %}
 {% include "matches/_running_card.html" %}
@@ -16,14 +11,14 @@
 {% if running %}</div>{% endif %}
 {% include "matches/_unstarted_cards.html" %}
 <details class="filterbar"{% if kind or state or engine %} open{% endif %}>
-  <summary>Filter matches</summary>
+  <summary>Filter {{ title|lower }}</summary>
   <form class="query" method="get">
-  <label>Kind
+  {% if kinds %}<label>Kind
     <select name="kind" onchange="this.form.submit()">
       <option value="">all kinds</option>
       {% for k in kinds %}<option value="{{ k }}"{% if k == kind %} selected{% endif %}>{{ k }}</option>{% endfor %}
     </select>
-  </label>
+  </label>{% endif %}
   <label>State
     <select name="state" onchange="this.form.submit()">
       <option value="">all states</option>
@@ -37,25 +32,23 @@
     </select>
   </label>
   <button>Filter</button>
-  {% if kind or state or engine %}<a href="{% url 'matches' %}">Show all</a>{% endif %}
+  {% if kind or state or engine %}<a href="{% url jobs %}">Show all</a>{% endif %}
   </form>
 </details>
 <div class="card">
-{% if can_act and removed_count %}<p class="muted" style="float: right; margin: 0"><a href="{% url 'matches_removed' %}">{{ removed_count }} removed</a></p>{% endif %}
-<h3 class="box-title">Matches <span class="right muted">{{ page.paginator.count }} match{{ page.paginator.count|pluralize:"es" }}{% if kind or state or engine %} matching{% endif %}, latest report first</span></h3>
+{% if removed_count %}<p class="muted" style="float: right; margin: 0"><a href="{% url 'matches_removed' %}">{{ removed_count }} removed</a></p>{% endif %}
+<h3 class="box-title">{{ title }} <span class="right muted">{{ page.paginator.count }} {% if gauntlets %}gauntlet{{ page.paginator.count|pluralize }}{% else %}test{{ page.paginator.count|pluralize }}{% endif %}{% if kind or state or engine %} matching{% endif %}, latest report first</span></h3>
 {% if page.object_list %}
-{% if can_act %}<form method="get" action="{% url 'match_remove' %}" class="pickform">{% endif %}
 <div class="scroll">
 <table>
-  <thead><tr>{% if can_act %}<th class="pickcell"><input type="checkbox" aria-label="Choose every match on this page" onclick="document.querySelectorAll('.pick').forEach(function (b) { b.checked = this.checked; }, this); pickChanged()"></th>{% endif %}<th>Updated</th><th>Match</th><th>Kind</th><th>State</th><th>Engine</th><th class="num">Games</th>
+  <thead><tr><th>Updated</th><th>{% if gauntlets %}Gauntlet{% else %}Test{% endif %}</th>{% if not gauntlets %}<th>Kind</th>{% endif %}<th>State</th><th>Engine</th><th class="num">Games</th>
     <th class="num">Score</th><th class="num">Elo</th></tr></thead>
   <tbody>
   {% for match in page.object_list %}
     <tr>
-      {% if can_act %}<td class="pickcell"><input type="checkbox" class="pick" name="id" value="{{ match.pk }}" aria-label="Choose {{ match.name|default:match.pk }}" onchange="pickChanged()"></td>{% endif %}
       <td class="nowrap">{{ match.updated_at|date:"Y-m-d H:i" }}</td>
       <td class="clip" title="{{ match.name|default:match.pk }}"><a href="{% url 'match' match.pk %}">{{ match.name|default:match.pk }}</a></td>
-      <td><span class="tier">{{ match.kind }}</span></td>
+      {% if not gauntlets %}<td><span class="tier">{{ match.job_kind }}</span></td>{% endif %}
       <td>{% if match.silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ match.state }}">{{ match.state|statename }}</span>{% endif %}</td>
       <td>{{ match.subject }}</td>
       <td class="num">{{ match.summary.overall.games }}{% if match.progress.total %}<span class="muted">/{{ match.progress.total }}</span>{% endif %}</td>
@@ -66,22 +59,11 @@
   </tbody>
 </table>
 </div>
-{% if can_act %}<div class="pickbar" id="pickbar" hidden>
-  <span id="picked">0 chosen</span>
-  <button class="act danger" type="submit">Delete…</button>
-</div></form>
-<script>
-  function pickChanged() {
-    var n = document.querySelectorAll(".pick:checked").length;
-    document.getElementById("pickbar").hidden = n === 0;
-    document.getElementById("picked").textContent = n + " chosen";
-  }
-</script>{% endif %}
 {% pager page %}
 {% elif kind or state or engine %}
-<p class="muted">No matches match.</p>
+<p class="muted">None match.</p>
 {% else %}
-<p class="muted">No matches yet. A gauntlet runner reports them with <code>PUT /api/matches/{id}</code>.</p>
+{% if gauntlets %}<p class="muted">No gauntlets yet. <a href="{% url 'gauntlet' %}">Run gauntlet</a> starts one, and uwanja reports it with <code>PUT /api/matches/{id}</code>.</p>{% else %}<p class="muted">No tests yet. <a href="{% url 'create_test' %}">Create test</a> makes one.</p>{% endif %}
 {% endif %}
 </div>
 {% endblock %}

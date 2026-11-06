@@ -16,7 +16,7 @@ from .test_uploads import TWO, BatchCase
 
 
 class Frame(BatchCase):
-    def page(self, url="/matches"):
+    def page(self, url="/gauntlets"):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
@@ -50,8 +50,9 @@ class Frame(BatchCase):
         def active(page):
             return page.split('class="active"')[0].rsplit("<a ", 1)[1]
 
-        self.assertIn("/matches", active(self.page("/matches")))
-        self.assertIn("/matches", active(self.page("/matches/gauntlet-test-1")))
+        self.assertIn('href="/gauntlets"', active(self.page("/gauntlets")))
+        self.assertIn('href="/gauntlets"', active(self.page("/matches/gauntlet-test-1")))
+        self.assertIn('href="/tests"', active(self.page("/tests")))
         self.assertIn('href="/"', active(self.page("/")))  # the dashboard
         self.assertIn('href="/runs"', active(self.page("/runs")))
         self.assertIn("/games", active(self.page("/games")))

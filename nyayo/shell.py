@@ -20,6 +20,7 @@ def status():
 
     batches = Batch.objects.aggregate(games=Sum("games"), stored=Sum("stored_bytes"))
     uploads = {state: Upload.objects.filter(state=state).count() for state in ("pending", "refused")}
+    live = Match.objects.filter(state="running", hidden=False, updated_at__gte=silent_cutoff())
     return {
         "host": socket.gethostname(),
         "worker": worker.is_running(),
@@ -29,8 +30,10 @@ def status():
         "batches_here": Path(settings.NYAYO_BATCHES_DIR).is_dir(),
         "uploads_waiting": uploads["pending"],
         "uploads_refused": uploads["refused"],
-        # live: running and heard from lately, as the match list's cards count them; a silent match is left out
-        "running": Match.objects.filter(state="running", hidden=False, updated_at__gte=silent_cutoff()).count(),
+        # live: running and heard from lately, as the lists' cards count them; a silent match is left out. Tests and
+        # Gauntlets each count their own
+        "running_tests": live.exclude(kind="gauntlet").count(),
+        "running_gauntlets": live.filter(kind="gauntlet").count(),
         # the Machines page's rule for Online: approved, enabled and heard from lately; one query
         "workers_online": machines.online_count(),
         "in_play": Game.objects.filter(result="*", match__state="running", match__hidden=False).count(),

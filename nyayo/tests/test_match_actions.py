@@ -156,7 +156,7 @@ class Remove(GameTestCase):
     def test_remove_hides_it_everywhere_but_keeps_its_games(self):
         self.assertEqual(self.remove(self.match.pk).status_code, 302)
         self.assertTrue(Match.objects.get(pk=self.match.pk).hidden)
-        listing = self.client.get("/matches").content.decode()
+        listing = self.client.get("/gauntlets").content.decode()
         self.assertNotIn(reverse("match", args=[self.match.pk]), listing)
         self.assertIn("Bring it back", self.client.get(reverse("matches_removed")).content.decode())
         page = self.client.get("/matches/%s" % self.match.pk)
@@ -171,9 +171,9 @@ class Remove(GameTestCase):
 
     def test_a_removed_match_is_not_on_the_dashboard_or_the_live_count(self):
         Match.objects.update(updated_at=timezone.now())
-        self.assertIn("1 live", self.client.get("/matches").content.decode())
+        self.assertIn("1 live", self.client.get("/gauntlets").content.decode())
         self.remove(self.match.pk)
-        self.assertNotIn("1 live", self.client.get("/matches").content.decode())
+        self.assertNotIn("1 live", self.client.get("/gauntlets").content.decode())
 
     def test_bring_it_back(self):
         self.remove(self.match.pk)
@@ -235,21 +235,25 @@ class Remove(GameTestCase):
         page = self.client.get(reverse("match_remove"), {"id": self.match.pk, "mode": "delete"}).content.decode()
         self.assertIn("still being processed", page)
 
-    def test_several_at_once(self):
+    def test_one_at_a_time(self):
+        # there is no choosing many: a second id is not taken, and the confirm page is of the one match
         other = Match.objects.create(id="gauntlet-2", subject=self.match.subject, kind="gauntlet", state="finished", producer={"name": "uwanja"})
         self.remove(self.match.pk, other.pk)
-        self.assertEqual(Match.objects.filter(hidden=True).count(), 2)
-        self.remove(self.match.pk, other.pk, mode="delete")
-        self.assertEqual(Match.objects.count(), 0)
+        self.assertEqual(list(Match.objects.filter(hidden=True).values_list("pk", flat=True)), [self.match.pk])
+        page = self.client.get(reverse("match_remove"), {"id": [other.pk, self.match.pk]}).content.decode()
+        self.assertIn("Delete gauntlet-2?", page)
+        self.assertEqual(page.count('name="id"'), 1)
 
-    def test_the_list_has_boxes_only_for_someone_signed_in(self):
-        page = self.client.get("/matches").content.decode()
-        self.assertIn('name="id" value="gauntlet-test-1"', page)
-        self.assertIn("Delete…", page)
-        self.client.logout()
-        page = self.client.get("/matches").content.decode()
-        self.assertNotIn('class="pick"', page)
-        self.assertNotIn("Delete…", page)
+    def test_the_lists_have_no_boxes_to_choose_with(self):
+        for url in ("/gauntlets", "/tests"):
+            page = self.client.get(url).content.decode()
+            self.assertNotIn('class="pick"', page)
+            self.assertNotIn("pickbar", page)
+            self.assertNotIn('action="%s"' % reverse("match_remove"), page)
+
+    def test_after_it_goes_the_list_it_was_in(self):
+        response = self.remove(self.match.pk, mode="delete")
+        self.assertRedirects(response, reverse("gauntlets"), fetch_redirect_response=False)
 
 
 class DeleteALabTest(NyayoTestCase):

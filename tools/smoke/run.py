@@ -399,12 +399,12 @@ def passing_games(r):
     check(len(states) == 6 and set(states.values()) == { 'passed' }, 'the walk: %s' % (states))
     kept = r.put_away(match, expect=8)
     check(kept == 8, 'nyayo holds %d games, expected 8' % (kept))
-    pages = [r.get(path) for path in ('/matches', '/matches/%s' % (match.pk), '/games')]
+    pages = [r.get(path) for path in ('/tests', '/matches/%s' % (match.pk), '/games')]
     check(pages == [200, 200, 200], 'pages answer %s' % (pages))
     page = r.page('/matches/%s' % (match.pk))
     check('Smoke: eight games' in page and '<dt>Ended</dt>' in page, 'the match page lacks its name or its end: %s' % (
         re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', re.sub(r'(?s)<style.*?</style>', '', page)))[:1200]))
-    check(match.pk in r.page('/matches'), 'the match is not on the list')
+    check(match.pk in r.page('/tests'), 'the match is not on the list')
     # the round trip, read from the kernel's TCP_INFO of the connection the worker's calls came in on, under gunicorn
     from nyayo.lab.models import Machine
     rtt = Machine.objects.filter(name='smoke-0').order_by('-id').first().rtt_ms
@@ -808,7 +808,7 @@ def load(r):
     def poll():
         match = 'games-%d' % (test_id)
         while not stop_poll.is_set():
-            for path in ('/matches', '/matches/%s' % (match), '/healthz'):
+            for path in ('/tests', '/matches/%s' % (match), '/healthz'):
                 started = time.time()
                 status = r.get(path, timeout=30)
                 waits.append((time.time() - started, path, status))

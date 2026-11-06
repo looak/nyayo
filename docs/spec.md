@@ -276,8 +276,8 @@ cores, memory and instruction sets where the producer sends them; schema, *Machi
   few reports", "the LLR isn't moving" or "past a bound" when it can't. It's an estimate: LLR isn't linear in games.
   nyayo ports no GSPRT.
 
-A running match with no report for `NYAYO_SILENT_AFTER` minutes (30) is marked **silent** on `/matches` and on its
-page, and `/matches?state=silent` lists them. It's derived when the page is drawn and never stored; the producer still
+A running match with no report for `NYAYO_SILENT_AFTER` minutes (30) is marked **silent** on `/tests` or `/gauntlets` and on its
+page, and `?state=silent` on either lists them. It's derived when the page is drawn and never stored; the producer still
 says the state, and its next report clears the mark. The 2 minute "stale" note on a match page stays as the early hint.
 An SPRT has no schedule, so its games played are the results' count.
 
@@ -302,13 +302,13 @@ The area is redrawn by `matches/workers.js` from `/matches/{id}/workers` (JSON: 
 seconds while a step is open and every 15 seconds while the test is waiting, held or running; a change of state reloads the
 page.
 
-`/matches` and the dashboard also show the tests with no games, apart from the running cards: waiting (with a compact walk
+`/tests` and the dashboard also show the tests with no games, apart from the running cards: waiting (with a compact walk
 per worker, up to three), failed starts (red, with the reason and when each goes) and held (apart). The state filter takes
 all three, and the sidebar's live count leaves them out. `manage.py seed_demo` makes one test per page of the plan's mockup
 (waiting with no worker, waiting with workers in trouble, held, a failed compile, a failed bench, and a running test
 with workers at every stage).
 
-`/matches` shows a card for each match being played right now, above the list (games, Elo, how it is going and when
+`/tests` and `/gauntlets` each show a card for each of theirs being played right now, above the list (games, Elo, how it is going and when
 it will be done, and the boards of up to six games in play; a silent match is left out), and colours the list's score
 and Elo; its filters, like the games list's, are in a bar that opens, open while one is set. A lone running card
 spans the list's width. Every list pages 64 to a page. `manage.py seed_demo` (debug mode only) also makes two workers for the worker page, `pc-wsl` with the numbers of the design board (its 48 hours, hardware, flags, toolchains, software, 31 tests and 14,208 games) and `new-box` with two hours of history (`nyayo/lab/demo.py`), and makes seventeen simulated tests: eleven SPRTs (five of them
@@ -402,9 +402,9 @@ with OpenBench's notice. Tunes and datagens come later.
   is told to stop by `clientHeartbeat` and `clientSubmitResults`; with games played *Stop* is the way and *Unapprove* is not
   offered, and `POST` of it is a `409`). For any match it also holds *Delete…*, a link to the confirm page. A match of
   an old OpenBench test, which has no `Test`, shows no link to OpenBench's server and only that.
-- **Taking matches away** (`nyayo/matches/removal.py`, `removal_views.py`; staff only): `GET /matches-remove?id=…` (any number of `id`; `mode=delete`
-  preselects the second choice) is the confirm page of the one *Delete* action, in two steps: *Delete…*, then *Approve* or *Cancel*
-  (Cancel changes nothing). It lists what is on each match and offers *keep the games* (the default) or *with the games*, saying
+- **Taking matches away** (`nyayo/matches/removal.py`, `removal_views.py`; staff only): `GET /matches-remove?id=…` (one match: a second `id` is ignored, and the lists
+  have no boxes to choose many; `mode=delete` preselects the second choice) is the confirm page of the one *Delete* action, in two steps: *Delete…*, then *Approve* or *Cancel*
+  (Cancel changes nothing). It lists what is on the match and offers *keep the games* (the default) or *with the games*, saying
   plainly next to Approve that the second cannot be undone; `POST` does it.
   *Delete, keep the games* (the default; the code and the flag are still called remove / `hidden`) sets `Match.hidden`: the match and its test leave the lists, the dashboard, the live count
   and its own page (a 404 saying it was removed), and a running test is stopped first. Its games stay in Games and the exports,
@@ -527,7 +527,7 @@ Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar, which 
 Pi-hole's: Font Awesome Free 6.6.0's solid icons, the twelve used and no more, unchanged, under CC BY 4.0
 (`nyayo/runs/static/img/fa/`, with `LICENSE-fontawesome.txt`; `runs/_tile_icon.html` draws one). The sidebar has a status block
 (whether the worker holds its lock, the game reader, uploads waiting or refused, whether the batches' directory is
-there and how much it holds) and the links, grouped as Main (Dashboard), Actions (Create test, Create tune, Create datagen, Upload net, Run gauntlet), Lab (Engines, Books, Machines with the number of workers online: approved, enabled and heard from within 5 minutes, which is what the Machines page calls playing or idle, shown as a muted 0 when none, counted in one query), Testing (Matches with the number live: running and not silent, as the list's cards count them; Runs, Compare),
+there and how much it holds) and the links, grouped as Main (Dashboard), Actions (Create test, Create tune, Create datagen, Upload net, Run gauntlet), Lab (Engines, Books, Machines with the number of workers online: approved, enabled and heard from within 5 minutes, which is what the Machines page calls playing or idle, shown as a muted 0 when none, counted in one query), Jobs (Tests and Gauntlets, each with its number live: running and not silent, as its list's cards count them; Smokes, the runs' list at `/runs`; Compare),
 Catalogue (Games with the number kept, Exports, Uploads in the admin) and System (Admin); the page's own link is marked. The
 top bar says where the page is, names the host and the time zone the pages' times are in (`NYAYO_TIME_ZONE`, UTC by default; times are stored in UTC). and who is signed in, with a link to sign in or a button to sign out. Under 900 px the sidebar is one bar with a menu button: the status block goes and the links open and close with it, so the top bar's crumb keeps its room. The status is worked out only when a page's frame is drawn, never
 for the game page's polled fragment. The site has one colour scheme, dark.
@@ -539,7 +539,9 @@ for the game page's polled fragment. The site has one colour scheme, dark.
 | `/runs/{id}` | every check against its baseline: verdict, settings, when & how long, a score bar (pass, newly pass, newly fail, fail; minimum & baseline marked), a grid of positions; then what changed |
 | `/compare` | any two runs, or a run against its baselines or its branch's previous run; incomparable checks listed as such |
 | `/case/{check_id}/{case_id}` | one position on a board with expected & avoided moves, a lichess analysis link, and every attempt along a branch's history |
-| `/matches` | matches, newest first, filtered by kind, state (or silent) and engine; games, score and Elo (an SPRT's is its producer's) |
+| `/tests` | the tests, every match but the gauntlets, newest first, filtered by kind (sprt, tune, datagen, games, selfplay: a lab test's mode, read from its id `<mode>-<number>`, else the match's kind), state (or silent) and engine; games, score and Elo (an SPRT's is its producer's) |
+| `/gauntlets` | the gauntlets, the same list without the kind |
+| `/matches` | `301` to `/tests` with the query kept, or to `/gauntlets` when `kind=gauntlet` |
 | `/matches/{id}/workers` | the SPRT page's Workers area alone, as JSON, for its poll |
 | `/matches/{id}` | a head with the match's state and runner, Pi-hole tiles of the figures that matter (a gauntlet: played, performance, score, time to go; an SPRT: games, Elo, LLR, time to go), the settings, an opponent per card or per row of a list (the choice is remembered in a cookie): counts, score, Elo ± error, pentanomial, rating, faults; overall with the performance rating and a table to copy; an opponent can be left out of the figures from the page; a small board for every game in play, each a link to its game and drawn in the browser by chessground (`matches/minis.js`); the SPRT card when present; the games stored as data (and the uploads waiting or refused), with a link to their export; and the games, kept ones included: playing, cut off, scheduled, finished. Refreshes while the match runs. A match that isn't running never shows a game as playing |
 | `/matches/{id}/games/{game}` | a large board with a bar and a clock per engine, an eval bar from white's side, a card per engine (score, depth, time, nodes, nps, PV), the moves in a scrolling list, and graphs per metric with a line per engine (the eval graph from white's side too); stepping through the game by click or arrow keys. The board is lichess's chessground (9.1.1, GPL-3.0, vendored under `nyayo/matches/static/vendor/`), drawn in the browser from every position the page embeds, so a step shows at once and a move animates; the rest of the page then follows from the server. A game is read from its file, or from its batch once it is kept |
