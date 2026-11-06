@@ -13,6 +13,7 @@ from django.utils.functional import SimpleLazyObject
 
 
 def status():
+    from nyayo.lab import machines
     from nyayo.matches import worker
     from nyayo.matches.models import Batch, Game, Match, Upload
     from nyayo.matches.pages import silent_cutoff
@@ -33,6 +34,8 @@ def status():
         # Gauntlets each count their own
         "running_tests": live.exclude(kind="gauntlet").count(),
         "running_gauntlets": live.filter(kind="gauntlet").count(),
+        # the Machines page's rule for Online: approved, enabled and heard from lately; one query
+        "workers_online": machines.online_count(),
         "in_play": Game.objects.filter(result="*", match__state="running", match__hidden=False).count(),
     }
 

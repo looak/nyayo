@@ -197,3 +197,44 @@ class FromTheMatchPage(TestCase):
         text = render_to_string("matches/_workers.html", {"show_workers": True, "workers": rows})
         self.assertIn('<a href="/machines/hunt">hunt</a>', text)
         self.assertNotIn("/machines/stranger", text)
+
+
+class Online(TestCase):
+    """The sidebar's badge on Machines: workers online, by the rule the Machines page's status uses."""
+
+    def badge(self):
+        reply = self.client.get("/machines")
+        self.assertEqual(reply.status_code, 200)
+        text = reply.content.decode()
+        return text.split("</svg>Machines")[1].split("</a>")[0]
+
+    def test_it_counts_the_approved_enabled_workers_heard_from_lately_and_agrees_with_the_page(self):
+        self.assertIn(">0 online<", self.badge())
+        self.assertIn("count none", self.badge())  # a zero is shown, muted
+        make_machine("playing")
+        make_machine("idle")
+        make_machine("gone")
+        make_machine("off", enabled=False)
+        make_machine("waiting", state="pending")
+        make_machine("away", state="turned_away")
+        for name in ("gone", "off", "waiting", "away"):
+            Machine.objects.filter(name=name).update(updated=timezone.now())
+        Machine.objects.filter(name="gone").update(updated=timezone.now() - datetime.timedelta(minutes=6))
+        badge = self.badge()
+        self.assertIn(">2 online<", badge)
+        self.assertNotIn("count none", badge)
+        from nyayo.lab import machines
+
+        labels = {r["name"]: r["health"]["label"] for r in machines.listing()}
+        self.assertEqual(labels, {"playing": "Online", "idle": "Online", "gone": "Offline", "off": "Disabled",
+                                  "waiting": "Waiting for approval", "away": "Turned away"})
+        self.assertEqual(machines.online_count(), sum(1 for label in labels.values() if label == "Online"))
+
+    def test_every_page_has_it_for_the_price_of_one_query(self):
+        make_machine("one")
+        for path in ("/", "/tests", "/machines"):
+            self.assertIn(">1 online<", self.client.get(path).content.decode(), path)
+        from nyayo import shell
+        with CaptureQueriesContext(connection) as queries:
+            shell.status()["workers_online"]
+        self.assertEqual(len([q for q in queries if "lab_machine" in q["sql"]]), 1)

@@ -16,6 +16,7 @@ from django.shortcuts import render
 from nyayo.paging import paginate
 
 from . import cards, catalogue
+from .oldids import new_id_for
 from .selection import ENDINGS, RESULT_FILTERS, RULES, ending_choices, ending_filter
 from .models import Batch, Match, MatchResult
 from .pages import OUTCOMES
@@ -128,6 +129,7 @@ def games_list(request):
     where, params, filters = [], [], {}
     match_id = request.GET.get("match", "").strip()
     if match_id:
+        match_id = new_id_for(match_id) or match_id  # an old id (RenamedMatch) asks for the match it became
         match = Match.objects.filter(pk=match_id).first()
         filters["match"] = {"id": match_id, "name": (match.name or match.pk) if match else match_id,
                             "known": match is not None}

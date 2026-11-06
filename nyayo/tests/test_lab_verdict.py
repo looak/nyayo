@@ -337,6 +337,17 @@ def test_a_held_test_is_restarted_where_it_is():
     assert document.match_state(reload(test))[0] == 'waiting'
     assert left(hunt) == [] and row(hunt, 'compile', 'dev').tries == 0
 
+def test_a_held_test_offers_restart_without_stopping_it_first():
+    from nyayo.lab import modify_test
+    test = new_test(); hunt = new_worker(test, 'hunt')
+    assert 'restart' not in modify_test.offers(reload(test))  # running (or waiting): only Stop
+    leave(hunt)
+    assert document.match_state(reload(test))[0] == 'held'
+    assert modify_test.offers(reload(test)) == ['unapprove', 'restart', 'stop']
+    modify_test.apply(owner(), reload(test), 'restart')  # releases the hold, and the test was never stopped
+    assert not reload(test).finished and document.match_state(reload(test))[0] == 'waiting'
+    assert 'restart' not in modify_test.offers(reload(test))
+
 def test_nobody_can_place_it_but_another_worker_can_play():
     test = new_test(); hunt = new_worker(test, 'hunt'); tor = new_worker(test, 'tor')
     leave(hunt)

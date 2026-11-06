@@ -162,6 +162,13 @@ def status(machine, now, tests):
     return ('playing', test) if test else ('idle', None)
 
 
+def online_count(now=None):
+    """How many workers are online: approved, enabled and heard from within ACTIVE, which is what `status()` calls playing or
+    idle. One query; the sidebar's badge on Machines."""
+    now = now or timezone.now()
+    return Machine.objects.filter(state='approved', enabled=True, updated__gte=now - ACTIVE).count()
+
+
 def trouble_for(machine_ids):
     """{ machine id: [what is wrong] } for the workers with a failed step the worker is blamed for, or one nobody can place
     on a test now held, on a test that has not ended."""

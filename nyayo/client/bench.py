@@ -68,7 +68,7 @@ def parse_stream_output(stream):
 
 def single_core_bench(binary, outqueue):
 
-    cmd = ['./%s' % (binary), 'bench']
+    cmd = [os.path.abspath(binary), 'bench'] # The full path: a bare name is not looked for in the current folder everywhere
 
     try: # Launch the bench and wait for results
         stdout, stderr = subprocess.Popen(

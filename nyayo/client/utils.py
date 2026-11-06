@@ -49,6 +49,13 @@ class OpenBenchBuildFailedException(Exception):
         self.logs    = logs
         super().__init__(self.message)
 
+class OpenBenchRunnerFailedException(Exception):
+    # The match runner could not be started, died while playing, or ended with no finished game
+    def __init__(self, message, logs=''):
+        self.message = message
+        self.logs    = logs
+        super().__init__(self.message)
+
 class OpenBenchBadBenchException(Exception):
     def __init__(self, message):
         self.message = message

@@ -242,7 +242,7 @@ makes, with `NYAYO_PORT`, `NYAYO_WORKERS` and `NYAYO_UNIT` to change.) The trial
 ```bash
 curl -s http://172.16.100.11:8002/healthz                                      # ok
 curl -s -o /dev/null -w '%{http_code}\n' http://172.16.100.11:8002/matches     # 200
-curl -s http://172.16.100.11:8002/clientVersionRef/ -X POST                    # {"client_version": 54, "client_url": "http://172.16.100.11:8002/client.zip", ...}
+curl -s http://172.16.100.11:8002/clientVersionRef/ -X POST                    # {"client_version": 55, "client_url": "http://172.16.100.11:8002/client.zip", ...}
 ```
 
 Then in the browser, at `http://172.16.100.11:8002/`: **an old match** (Matches, open one), **an old game** (Games, open one), **Machines** (empty but for tokens, with the box that says how to start a worker), and **sign in** with the owner's
@@ -375,7 +375,7 @@ address the worker uses. From the worker's machine:
 curl -s http://172.16.100.11:8001/clientVersionRef/
 ```
 
-answers `{"client_version": 54, "client_url": "http://172.16.100.11:8001/client.zip", "client_sha256": "..."}`
+answers `{"client_version": 55, "client_url": "http://172.16.100.11:8001/client.zip", "client_sha256": "..."}`
 (`clientVersionRef` needs nothing, so a client can always update itself, and from nyayo, not GitHub). There is no path prefix for a worker to get wrong:
 with `NYAYO_SCRIPT_NAME` set it would have to be part of `-S`.
 
