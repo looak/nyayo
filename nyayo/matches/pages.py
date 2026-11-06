@@ -235,7 +235,7 @@ def penta_rows(row):
             for label, count in zip(PENTA_LABELS, row.penta)]
 
 
-PENTA_WORDS = {"LL": "lost both", "LD": "lost one, drew one", "DD": "drew both", "DW": "won one, drew one",
+PENTA_WORDS = {"LL": "lost both", "LD": "lost one, drew one", "DD": "drew both, or won one and lost one", "DW": "won one, drew one",
                "WW": "won both"}
 
 

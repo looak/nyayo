@@ -172,7 +172,7 @@ class Columns(MatchTestCase):
         cols = grid.split('<div class="pillar-col"')[1:]
         for col, (label, count, share, words) in zip(cols, (
                 ("LL", 1, "2.8%", "lost both"), ("LD", 5, "13.9%", "lost one, drew one"),
-                ("DD", 11, "30.6%", "drew both"), ("DW", 13, "36.1%", "won one, drew one"),
+                ("DD", 11, "30.6%", "drew both, or won one and lost one"), ("DW", 13, "36.1%", "won one, drew one"),
                 ("WW", 6, "16.7%", "won both"))):
             self.assertRegex(col, rf'(?s)pillar-count">{count}<.*pillar-well.*pillar-label">{label}<.*{words}')
 
