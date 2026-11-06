@@ -277,21 +277,22 @@
   tr.spec-row td { padding-top: 0; font-size: .85rem; }
   details.flags { display: inline; margin-left: .4rem; }
   details.flags summary { display: inline; cursor: pointer; }
-  .pillars { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; height: 10rem;
-             margin: 1rem 0 .4rem; align-items: end; border-bottom: 1px solid var(--line); }
-  .pillar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%;
-                min-width: 0; }
-  .pillar-count { font-size: .8rem; font-variant-numeric: tabular-nums; }
-  .pillar { display: block; width: 100%; max-width: 3.2rem; min-height: 2px; border-radius: 3px 3px 0 0;
-            background: var(--muted); }
+  .pillars { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0 .4rem; }
+  .pillar-col { display: flex; flex-direction: column; align-items: center; min-width: 0; text-align: center; }
+  .pillar-count { font-size: .9rem; font-variant-numeric: tabular-nums; margin-bottom: .2rem; }
+  .pillar-well { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 140px;
+                 border-bottom: 1px solid var(--line); }
+  .pillar { display: block; width: 60%; min-height: 2px; border-radius: 3px 3px 0 0; background: var(--muted); }
   .pillar.ll { background: var(--cell-fail); }
   .pillar.ld { background: color-mix(in srgb, var(--cell-fail) 60%, white); }
   .pillar.dd { background: var(--muted); }
   .pillar.dw { background: color-mix(in srgb, var(--cell-pass) 60%, white); }
   .pillar.ww { background: var(--cell-pass); }
-  .pillar-label { font-size: .75rem; margin-top: .15rem; }
-  table.penta { width: auto; margin: .6rem 0 .2rem; }
-  table.penta th, table.penta td { padding: .15rem .8rem; }
+  .pillar-label { font-size: .85rem; font-weight: 600; margin-top: .3rem; }
+  .pillar-share { font-size: .8rem; font-variant-numeric: tabular-nums; }
+  .pillar-words { font-size: .75rem; line-height: 1.25; }
+  .pillar-summary { margin: .4rem 0 .2rem; font-size: .85rem; }
+  @media (max-width: 36rem) { .pillars { gap: .35rem; } .pillar-words { display: none; } }
   .graph-title { margin: 1rem 0 .3rem; font-size: .9rem; }
   .badge.silent, .outcome.silent { color: var(--wip); background: var(--wip-bg); }
   .badge.error, .badge.failed_prechecks { color: var(--worse); background: var(--error-bg); }

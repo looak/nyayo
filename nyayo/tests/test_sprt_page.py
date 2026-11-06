@@ -96,8 +96,8 @@ class OnThePage(MatchTestCase):
 
     def test_the_pentanomial_and_the_faults(self):
         page = self.page()
-        self.assertIn("<th class=\"num\">LL</th>", page)
-        self.assertIn('<td class="num">13</td>', page)
+        self.assertIn('<span class="pillar-label">LL</span>', page)
+        self.assertIn('<span class="pillar-count">13</span>', page)
         self.assertIn("crashes", page)
 
     def test_a_gauntlet_keeps_its_own_page(self):
@@ -163,10 +163,29 @@ class Columns(MatchTestCase):
             self.assertIn(f'<span class="pillar {tone}" style="height: {height}%">', page)
         self.assertIn('title="DW: 13 pairs, 36.1%"', page)
 
-    def test_the_table_is_still_there(self):
+    def test_one_grid_of_five_columns_in_order_each_with_its_own_numbers(self):
         page = self.page()
-        self.assertIn('<th class="num">DW</th>', page)
-        self.assertIn('<td class="num muted">36.1%</td>', page)
+        grid = page[page.index('<div class="pillars"'):page.index('class="muted pillar-summary"')]
+        self.assertEqual(grid.count('<div class="pillar-col"'), 5)
+        self.assertNotIn("<table", grid)
+        self.assertNotIn("<table", page[page.index("<h3>Pairs</h3>"):page.index('id="workers"')])
+        cols = grid.split('<div class="pillar-col"')[1:]
+        for col, (label, count, share, words) in zip(cols, (
+                ("LL", 1, "2.8%", "lost both"), ("LD", 5, "13.9%", "lost one, drew one"),
+                ("DD", 11, "30.6%", "drew both"), ("DW", 13, "36.1%", "won one, drew one"),
+                ("WW", 6, "16.7%", "won both"))):
+            self.assertRegex(col, rf'(?s)pillar-count">{count}<.*pillar-well.*pillar-label">{label}<.*{words}')
+
+    def test_the_summary_line(self):
+        page = self.page()  # [1, 5, 11, 13, 6]: 36 pairs, ahead 19, behind 6, 45 points of 72 is 62.5%
+        self.assertIn("36 pairs · dev ahead in 19, behind in 6 · dev scored 62.5% of the points", page)
+
+    def test_zero_counts_get_a_stub_and_the_summary_still_adds_up(self):
+        document = example_document()
+        document["results"][0].update(penta=[0, 0, 4, 0, 0], games=8, wins=0, losses=0, draws=8)
+        page = self.page(document)
+        self.assertIn('<span class="pillar ll" style="height: 0.0%">', page)  # CSS min-height makes it a 2px stub
+        self.assertIn("4 pairs · dev ahead in 0, behind in 0 · dev scored 50.0% of the points", page)
 
     def test_no_pillars_before_a_pair_is_played(self):
         document = example_document()
