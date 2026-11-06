@@ -61,12 +61,18 @@ def apply(user, test, action):
     test.save()
     return message
 
+def held(test):
+
+    # A test that is held (nyayo.lab.document.match_state): open, with a failure nobody can place and no worker able to play it
+    return not test.finished and not test.deleted and bool(import_module('nyayo.lab.steps').held(test))
+
 def offers(test):
 
-    # The buttons a test has now: stop while it runs, restart once it has stopped, approve until someone has
+    # The buttons a test has now: stop while it runs, restart once it has stopped or while it is held (restarting releases
+    # the hold without stopping it), approve until someone has
     out = []
     if not test.approved: out.append('approve')
     elif not test.finished and not games_played(test): out.append('unapprove') # With games played, stop is the way
-    if test.finished or test.passed or test.failed: out.append('restart')
+    if test.finished or test.passed or test.failed or held(test): out.append('restart')
     if not test.finished: out.append('stop')
     return out
