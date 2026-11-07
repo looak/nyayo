@@ -1,5 +1,7 @@
 """The SPRT and Elo gauges: the rules in gauges.py, and the SPRT page and the match list that draw them."""
 
+import re
+
 from django.test import SimpleTestCase
 
 from nyayo.matches import gauges
@@ -86,6 +88,16 @@ class EloScale(SimpleTestCase):
     def test_the_needle_clamps_at_the_ends(self):
         self.assertEqual(gauges.elo_gauge(5000, 1, 0, 0)["angle"], 90)
         self.assertEqual(gauges.elo_gauge(-5000, 1, 0, 0)["angle"], -90)
+
+    def test_a_band_over_half_the_scale_never_takes_the_large_arc(self):
+        # 0.0 Elo, -26.8 to +26.8 on a +-50 scale spans 0.536 of the half circle
+        g = gauges.elo_gauge(0, 26.8, 0, 5)
+        self.assertEqual(g["reach"], 50)
+        arcs = re.findall(r"A[\d.]+ [\d.]+ 0 (\d) (\d)", g["band"])
+        self.assertEqual(len(arcs), 2)
+        self.assertEqual([large for large, _ in arcs], ["0", "0"])
+        for path in (g["ring"], g["band"]):
+            self.assertTrue(all(large == "0" for large, _ in re.findall(r"A[\d.]+ [\d.]+ 0 (\d) (\d)", path)))
 
     def test_no_gauge_without_an_estimate_and_no_band_without_an_error(self):
         self.assertIsNone(gauges.elo_gauge(None, 1, 0, 5))
