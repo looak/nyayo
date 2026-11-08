@@ -277,3 +277,25 @@ class Lists(Staff):
         self.assertEqual(len(ids), 1)
         self.assertTrue(all(i.startswith("games-") for i in ids))
         self.assertEqual(tunes.list_figures(["sprt-1", "games-2", "tune-99999"]), {})
+
+
+class NoInterval(Staff):
+    def test_a_check_with_no_interval_is_drawn_without_a_whisker_and_says_so(self):
+        checks = [{"iteration": 10, "elo": 30.0, "error": None}, {"iteration": 20, "elo": 5.0, "error": 12.0}]
+        chart = tunecharts.outcome_chart(checks, 20, tunecharts.EloScale(checks))
+        self.assertIsNone(chart["dots"][0]["y1"])
+        self.assertIsNotNone(chart["dots"][1]["y1"])
+        self.assertIn("no interval", chart["dots"][0]["text"])
+        last = tunecharts.outcome_chart(checks[:1], 20, tunecharts.EloScale(checks[:1]))
+        self.assertEqual(last["now"], "+30.0 Elo (no interval) at 10")
+        self.assertGreaterEqual(tunecharts.EloScale(checks[:1]).high, 30)
+
+    def test_the_page_and_the_list_say_none_not_zero(self):
+        demo.seed_tune(name="t-sweep", iterations=2000, now_iteration=1100)
+        run = SPSARun.objects.get(tune__name="t-sweep")
+        SPSASnapshot.objects.filter(spsa_run=run, iteration=1000).update(check_error=None)
+        page = self.client.get("/matches/%s" % run.tune.match_id()).content.decode()
+        self.assertIn("no interval", page)
+        self.assertIn(">none</span>", page)
+        self.assertNotIn("± 0.0", page)
+        self.assertEqual(self.client.get(reverse("tests")).status_code, 200)

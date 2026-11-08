@@ -46,6 +46,7 @@ OWNER, HELPER, PASSWORD = 'owner', 'helper', 'smoke-password'    # people who si
 CLIENT_TIMERS = { 'TIMEOUT_ERROR' : 1, 'TIMEOUT_WORKLOAD' : 1, 'REPORT_INTERVAL' : 2 }
 RETRY = 2          # seconds a worker waits before it tries a test again after a verdict that isn't the engine's
 BENCH_LIMIT = 3    # seconds before a bench is over its time (Client/bench.py's 60)
+TUNE_ITERATIONS, TUNE_MOVE = 48, 5    # the tune's length, and how far Skill must have moved from 30 toward 70
 SPRT_OPEN = { 'test_mode' : 'SPRT', 'bounds' : '[0.00, 5.00]', 'confidence' : '[0.000001, 0.000001]' }
 
 RIG_SETTINGS = '''
@@ -130,6 +131,14 @@ class Person:
     def create(self, **form):
         # (test id, None), or (None, what the page said) when it refused
         reply = self.post('/create/test', **form)
+        if reply.status_code == 302:
+            return int(reply.headers['Location'].rsplit('-', 1)[1]), None
+        said = re.findall(r'<li>([^<]+)</li>', (re.search(r'(?s)<div class="errors">.*?</div>', reply.text) or [''])[0])
+        return None, '%d: %s' % (reply.status_code, ' | '.join(said) or 'no error shown')
+
+    def create_tune(self, **form):
+        # (test id, None), or (None, what the page said), through the create-tune page
+        reply = self.post('/create/tune', **form)
         if reply.status_code == 302:
             return int(reply.headers['Location'].rsplit('-', 1)[1]), None
         said = re.findall(r'<li>([^<]+)</li>', (re.search(r'(?s)<div class="errors">.*?</div>', reply.text) or [''])[0])
@@ -239,13 +248,13 @@ class Rig:
             shutil.copy2(cache, client / 'fastchess-ob')
         return client
 
-    def start_client(self, number, name=None, join=None, extra=False, updates=False):
+    def start_client(self, number, name=None, join=None, extra=False, updates=False, threads=1):
         # No username and no password: the worker says hello with its name (and a join code, if it has one), is given a
         # token, which it keeps in worker.token beside client.py, and waits to be approved
         client = self.temp / ('Client%d' % (number))
         env = dict(os.environ, PYTHONUNBUFFERED='1', PYTHON=sys.executable,
                    PATH=os.path.dirname(sys.executable) + os.pathsep + os.environ['PATH'])
-        command = [sys.executable, '-u', str(client / 'client.py'), '-S', self.url, '-T', '1', '-N', '1', '-I', name or 'smoke-%d' % (number),
+        command = [sys.executable, '-u', str(client / 'client.py'), '-S', self.url, '-T', str(threads), '-N', '1', '-I', name or 'smoke-%d' % (number),
                    ] + ([] if updates else ['--no-client-downloads']) + (['--join', join] if join else [])
         log = open(self.temp / ('client%d.log' % (number)), 'a')
         process = subprocess.Popen(command, cwd=client, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -764,6 +773,82 @@ def idle_then_quiet(r):
     return 'idle while it polled with nothing to play, silent once stopped, offline after 5 minutes'
 
 
+def tune_to_its_best(r):
+    # The toy engine's Skill is best at 70 (tools/smoke/engine/engine.py). A tune starts it at 30, with Seed frozen at 7, and
+    # plays 48 iterations of a pair each, an outcome check every 16 and an SPRT of the result after. The checks and the SPRT
+    # are made by the server and played by the worker like any test
+    began = time.time()
+    dev = r.engine('tune')
+    form = {
+        'engine' : ENGINE_NAME, 'dev_branch' : dev['branch'], 'dev_options' : 'Threads=1 Hash=16', 'dev_tc' : 'N=1000',
+        'book' : files.BOOK_NAME, 'name' : 'Smoke: a tune', 'priority' : '1', 'workload_size' : '1',
+        'spsa_inputs' : 'Skill, int, 30, 0, 100, 10, 0.3\nSeed, int, 0, 0, 100000, 1, 0.002',
+        'spsa_frozen' : 'Seed', 'spsa_frozen_value_Seed' : '7',
+        'spsa_iterations' : str(TUNE_ITERATIONS), 'spsa_pairs_per' : '1', 'spsa_check_every' : str(TUNE_ITERATIONS // 3),
+        'spsa_check_games' : '8', 'spsa_then_sprt' : '1',
+    }
+    # a pair plays two engines at once, so a tune needs a worker with two threads: this one, stopped when the scenario is over
+    r.prepare_client(5)
+    worker = r.start_client(5, name='smoke-tune', extra=True, threads=2)
+    r.approve('smoke-tune')
+    try:
+        return tune_played(r, form, began)
+    finally:
+        stop(worker)
+        r.extras.remove(worker)
+
+
+def tune_played(r, form, began):
+    from nyayo.lab.models import SPSARun, SPSASnapshot
+    test_id, said = r.owner.create_tune(**form)
+    check(test_id, 'the create page refused: %s' % (said))
+    run = SPSARun.objects.get(tune_id=test_id)
+    check([p.name for p in run.parameters.all()] == ['Skill'] and run.frozen == [{ 'name' : 'Seed', 'value' : 7 }], 'the tune is %s, frozen %s' % (
+        [p.name for p in run.parameters.all()], run.frozen))
+    r.wait_for(lambda: r.test(test_id).finished, 300, 'the tune to finish')
+    tune_done = time.time() - began
+    run = SPSARun.objects.get(tune_id=test_id)
+    skill = run.parameters.get(name='Skill').value
+    snapshots = list(run.snapshots.all())
+    iterations = [s.iteration for s in snapshots]
+    check(iterations[0] == 0 and iterations[-1] == TUNE_ITERATIONS, 'the snapshots are at %s' % (iterations))
+    checked = [s for s in snapshots if s.check_test_id]
+    check(len(checked) >= 2, 'only %d outcome checks were made' % (len(checked)))
+    r.wait_for(lambda: all(SPSASnapshot.objects.get(pk=s.pk).check_elo is not None for s in checked), 180, 'the outcome checks to finish')
+    checked = [SPSASnapshot.objects.get(pk=s.pk) for s in checked]
+    check(all(c.check_games >= 8 for c in checked), 'a check was recorded with too few games: %s' % ([c.check_games for c in checked]))
+    # a check ends at its games or just over (a workload is whole pairs), and an interval is none when every game was the same
+    check(all(c.check_test.games == c.check_games and c.check_test.finished and c.check_test.games >= c.check_test.max_games for c in checked),
+          'a check was cut short or stored from another count: %s' % ([(c.check_games, c.check_test.games, c.check_test.max_games) for c in checked]))
+    check(all((c.check_error is None) or c.check_error > 0 for c in checked), 'a check has an interval of zero: %s' % ([c.check_error for c in checked]))
+    follow = SPSARun.objects.get(tune_id=test_id).then_test
+    check(follow is not None and follow.test_mode == 'SPRT', 'no SPRT was queued after the tune')
+    r.wait_for(lambda: r.test(follow.id).finished, 240, 'the SPRT after to finish')
+    sprt = r.test(follow.id)
+    check(sprt.passed or sprt.failed, 'the SPRT after ended with neither a pass nor a fail')
+
+    # the value moved toward the best, and the frozen Seed was played by both sides of every test the tune made
+    check(skill > 30 + TUNE_MOVE, 'Skill is %.1f after the tune: it did not move toward 70 (from 30)' % (skill))
+    averaged = tunes_averaged(run)
+    tests = [r.test(test_id)] + [c.check_test for c in checked] + [r.test(follow.id)]
+    for t in tests:
+        check('Seed=7' in t.dev_options.split() and 'Seed=7' in t.base_options.split(), 'test %d: %r against %r lacks Seed=7' % (t.id, t.dev_options, t.base_options))
+    for t in tests[1:]:
+        check(re.search(r'Skill=\d+', t.dev_options) and 'Skill=30' in t.base_options.split(), 'test %d: %r against %r' % (t.id, t.dev_options, t.base_options))
+    page = r.page('/matches/%s' % (r.match(test_id).pk))
+    check('constexpr int Skill' in page and 'Smoke: a tune' in page, 'the tune page lacks its values for the code')
+    check(r.get('/tests/%d/history.csv' % (test_id)) == 200 and r.get('/tests/%d/history.json' % (test_id)) == 200, 'the history is not served')
+    check(not any(m.pk.startswith('games-') and m.pk in r.page('/tests') for m in [r.match(c.check_test_id) for c in checked]), 'a check is on the Tests list')
+    return 'tune %d: Skill 30 -> %.1f (average %.1f of the last 20%%) in %.0f s, %d snapshots, %d checks (Elo %s), SPRT %d %s, %.0f s in all' % (
+        test_id, skill, averaged, tune_done, len(snapshots), len(checked), ', '.join('%+.0f' % (c.check_elo) for c in checked), follow.id,
+        'passed' if sprt.passed else 'failed', time.time() - began)
+
+
+def tunes_averaged(run):
+    from nyayo.lab import tunes
+    return tunes.averaged_values(run)['Skill']
+
+
 E = lambda **kw: (lambda r: r.engine('dev', **kw))
 B = lambda **kw: (lambda r: r.engine('base', **kw))
 
@@ -782,6 +867,7 @@ SCENARIOS = [
     ('unapprove-delete', unapprove_and_delete),
     ('crash-stop', crash_then_stop),
     ('two-tests', two_tests),
+    ('tune', tune_to_its_best),
     ('compile-source', engine_fails(E(broken='source'), 'compile', "Dev doesn't compile")),
     ('bench-wrong', engine_fails(E(bench=ENGINE_BENCH + 1), 'bench', "Dev's bench doesn't match its commit")),
     ('bench-slow', engine_fails(E(bench_mode='slow'), 'bench', "Dev's bench runs over 60 seconds")),

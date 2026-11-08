@@ -58,10 +58,10 @@
       {% for g in outcome.grid %}<line x1="0" x2="{{ outcome.width }}" y1="{{ g.y }}" y2="{{ g.y }}" class="{% if g.zero %}zero{% else %}grid{% endif %}" vector-effect="non-scaling-stroke"/>{% endfor %}
       <polygon points="{{ outcome.area }}" class="area"/>
       <polyline points="{{ outcome.line }}" class="outline" vector-effect="non-scaling-stroke"/>
-      {% for d in outcome.dots %}<line x1="{{ d.x }}" x2="{{ d.x }}" y1="{{ d.y1 }}" y2="{{ d.y2 }}" class="whisker" vector-effect="non-scaling-stroke"/><circle cx="{{ d.x }}" cy="{{ d.y }}" r="3.5" class="pt"><title>{{ d.text }}</title></circle>{% endfor %}
+      {% for d in outcome.dots %}{% if d.y1 %}<line x1="{{ d.x }}" x2="{{ d.x }}" y1="{{ d.y1 }}" y2="{{ d.y2 }}" class="whisker" vector-effect="non-scaling-stroke"/>{% endif %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="3.5" class="pt"><title>{{ d.text }}</title></circle>{% endfor %}
     </svg>
     <div class="xlabels">{% for l in outcome.labels %}<span style="left:{{ l.at }}%">{{ l.text }}</span>{% endfor %}</div>
-    <div class="legend"><span>gridlines every {{ scale.step }} Elo, from {{ scale.low }} to {{ scale.high }}</span><span>whiskers: 95%</span><span>the x axis is the iterations so far, out of {{ iterations|floatformat:"0g" }}</span></div>
+    <div class="legend"><span>gridlines every {{ scale.step }} Elo, from {{ scale.low }} to {{ scale.high }}</span><span>whiskers: 95%, none when every game of a check had the same result</span><span>the x axis is the iterations so far, out of {{ iterations|floatformat:"0g" }}</span></div>
   </figure>
   {% elif check_every %}<p class="muted">The first outcome check comes at iteration {{ check_every }}; it plays {{ check_games }} games.</p>{% endif %}
 
@@ -69,7 +69,7 @@
   <details class="checks"{% if not outcome %} open{% endif %}><summary>The checks ({{ checks|length }})</summary>
     <table class="tune-table"><thead><tr><th>At iteration</th><th class="num">Elo</th><th class="num">± 95%</th><th class="num">Games</th><th>Test</th></tr></thead>
     <tbody>{% for c in checks %}<tr><td>{{ c.iteration|floatformat:"0g" }}</td>
-      <td class="num">{% if c.done %}{{ c.elo|floatformat:"1" }}{% else %}–{% endif %}</td><td class="num muted">{% if c.done %}{{ c.error|floatformat:"1" }}{% else %}–{% endif %}</td>
+      <td class="num">{% if c.done %}{{ c.elo|floatformat:"1" }}{% else %}–{% endif %}</td><td class="num muted">{% if not c.done %}–{% elif c.error is None %}<span title="Every game had the same result, so there is no spread to make an interval of">none</span>{% else %}{{ c.error|floatformat:"1" }}{% endif %}</td>
       <td class="num muted">{{ c.games }}{% if not c.done %} of {{ c.max_games }}{% endif %}</td>
       <td><a href="{% url 'match' c.match %}">{{ c.match }}</a> <span class="badge {{ c.state }}">{{ c.state }}</span></td></tr>{% endfor %}</tbody></table>
   </details>{% endif %}

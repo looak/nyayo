@@ -167,7 +167,10 @@ def check_finished(test):
     if not snapshots:
         return
     lower, elo, upper = Elo(test.results())
-    snapshots.update(check_elo=elo, check_error=max(upper - elo, elo - lower), check_games=test.games)
+    error = max(upper - elo, elo - lower)
+    # Every game the same result (a sweep) has no variance, so the interval collapses to nothing, which is not certainty: it is
+    # stored as no interval (null), and the pages and the CSV say so
+    snapshots.update(check_elo=elo, check_error=error if error > 0 else None, check_games=test.games)
 
 
 def averaged_values(run):
