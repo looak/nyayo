@@ -4,6 +4,11 @@
 # on purpose: Strength 0 plays any legal move (1, the default, prefers mates and
 # captures), and CrashAfter N exits without a word after N moves (0: never).
 #
+# Skill (spin, default 30, 0 to 100) is the one thing a tune can find: once a test sets it, the engine plays the capturing
+# style (Strength 1) with a probability that is 1 at Skill 70, the hidden best value, and falls to 0 forty away from it, and
+# plays at random otherwise. So the closer the value is to 70, the more a game is won. An engine that is never told a Skill
+# plays as before, whatever its default says, so the other scenarios are unchanged.
+#
 # The makefile turns this file into the executable the worker builds.
 
 import hashlib
@@ -42,11 +47,18 @@ def material(board, color):
     return sum(value * (len(board.pieces(piece, color)) - len(board.pieces(piece, not color)))
                for piece, value in PIECE_VALUES.items())
 
-def choose_move(board, seed, strength):
+BEST_SKILL, SKILL_REACH = 70, 40
+
+def skill_share(skill):
+    return max(0.0, 1.0 - abs(skill - BEST_SKILL) / SKILL_REACH)
+
+def choose_move(board, seed, strength, skill=None):
     moves = sorted(board.legal_moves, key=lambda move: move.uci())
     digest = hashlib.sha256(('%s %d' % (board.fen(), seed)).encode()).digest()
     rng    = random.Random(digest)
     if not strength:
+        return rng.choice(moves)
+    if skill is not None and rng.random() >= skill_share(skill):
         return rng.choice(moves)
     # Mates and captures first, so random games end before the 50-move rule
     for move in moves:
@@ -71,6 +83,7 @@ def parse_position(tokens):
 def uci_loop():
     board, played = chess.Board(), 0
     options       = { 'CrashAfter' : 0, 'Seed' : 0, 'Strength' : 1 }
+    skill         = None
 
     for line in sys.stdin:
         tokens = line.split()
@@ -85,6 +98,7 @@ def uci_loop():
             print('option name CrashAfter type spin default 0 min 0 max 100000')
             print('option name Seed type spin default 0 min 0 max 100000')
             print('option name Strength type spin default 1 min 0 max 1')
+            print('option name Skill type spin default 30 min 0 max 100')
             print('uciok', flush=True)
 
         elif tokens[0] == 'isready':
@@ -95,6 +109,8 @@ def uci_loop():
             value = ' '.join(tokens[tokens.index('value') + 1:])
             if name in options:
                 options[name] = int(value)
+            elif name == 'Skill':
+                skill = int(value)
 
         elif tokens[0] == 'ucinewgame':
             board = chess.Board()
@@ -105,7 +121,7 @@ def uci_loop():
         elif tokens[0] == 'go':
             if options['CrashAfter'] and played >= options['CrashAfter']:
                 os._exit(1)
-            move    = choose_move(board, options['Seed'], options['Strength'])
+            move    = choose_move(board, options['Seed'], options['Strength'], skill)
             played += 1
             mover   = board.turn
             board.push(move)

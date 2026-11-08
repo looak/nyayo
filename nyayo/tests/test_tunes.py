@@ -383,3 +383,32 @@ class PlayedToItsEnd(Api):
         # both rules move values: the tune moved, and a plain one is tried in Update
         self.assertGreater(run.parameters.get(name="Aspiration").value, 20)
         self.assertEqual(Test.objects.filter(test_mode="SPRT").count(), 1)
+
+
+class CheckInterval(TestCase):
+    def check(self, tri, penta):
+        test = made(spsa_iterations="8", spsa_snapshot_every="4", spsa_check_every="4", spsa_check_games="10")
+        for _ in range(4):
+            test.games += 2
+            tunes.advance(test, [1.0], test.games - 2)
+        snapshot = test.spsa_run.snapshots.get(iteration=4)
+        check = snapshot.check_test
+        losses, draws, wins = tri
+        Test.objects.filter(pk=check.pk).update(games=sum(tri), losses=losses, draws=draws, wins=wins, LL=penta[0], LD=penta[1], DD=penta[2], DW=penta[3], WW=penta[4])
+        tunes.check_finished(Test.objects.get(pk=check.pk))
+        return SPSASnapshot.objects.get(pk=snapshot.pk)
+
+    def test_a_mixed_check_has_an_elo_an_interval_and_its_games(self):
+        snapshot = self.check((6, 0, 2), (2, 0, 2, 0, 0))
+        self.assertIsNotNone(snapshot.check_elo)
+        self.assertGreater(snapshot.check_error, 0)
+        self.assertEqual(snapshot.check_games, 8)
+
+    def test_a_sweep_has_an_elo_and_no_interval_not_an_interval_of_zero(self):
+        snapshot = self.check((0, 0, 10), (0, 0, 0, 0, 5))
+        self.assertGreater(snapshot.check_elo, 0)
+        self.assertIsNone(snapshot.check_error)
+        self.assertEqual(snapshot.check_games, 10)
+        row = tunes.history(snapshot.spsa_run)[1]
+        self.assertEqual((row["check_error"], row["check_games"]), (None, 10))
+        self.assertIn(",,10", tunes.history_csv(snapshot.spsa_run).splitlines()[2])

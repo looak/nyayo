@@ -39,6 +39,19 @@ nyayo receives smoke runs pushed from developer machines and shows them:
   LLR over games, and an estimate of the games and time left to a bound. A running match that has stopped reporting is
   marked silent. A test that reports its steps shows a card per worker with its walk (compile, bench, running), whose failure it is and what happens next, and waiting, held and failed-start tests on the list.
 
+## nyayo 2.1
+
+**Tunes.** nyayo 2.0 took over OpenBench's server; 2.1 adds what OpenBench's SPSA lacked. A tune (`/create/tune`) starts from
+OpenBench's SPSA input and learns with momentum by default (or plain SPSA, as OpenBench does it); any parameter can be frozen,
+and both sides then play it at the value given. The tune keeps a snapshot of every value every 1% of its iterations, plays the
+values so far against the start every 5% (an outcome check: a games test of its own, with its Elo and 95% interval kept on the
+snapshot), and its page shows progress, how far each parameter moved lately, the outcome and each parameter as charts, and the
+result (the average of the last 20%) as C++ constants, UCI options and SPSA input. It can queue an SPRT of the result against
+the start when it ends, or at any time. Its history is served as CSV and JSON. The design is in
+[looak/ramani](https://github.com/looak/ramani) `plans/nyayo-2.md`, *Tunes*; what the code does is in
+[docs/spec.md](docs/spec.md), *Lab: tunes* and *Lab: tune pages*. Updating from 2.0 is `deploy/update.sh` (one migration, `lab`
+0007); nothing else changes. The smoke test (`tools/smoke`) runs a small tune.
+
 Runs arrive as `PUT /api/runs/{id}` with a per-machine token; the format and the rules are in
 [docs/results-schema.md](docs/results-schema.md); matches as `PUT /api/matches/{id}`, in
 [docs/match-schema.md](docs/match-schema.md). Pulling CI runs from GitHub comes next. See

@@ -66,8 +66,8 @@ class EloScale:
     and gridlines at a round step."""
 
     def __init__(self, checks):
-        lows = [0.0] + [c["elo"] - c["error"] for c in checks]
-        highs = [0.0] + [c["elo"] + c["error"] for c in checks]
+        lows = [0.0] + [c["elo"] - (c["error"] or 0) for c in checks]
+        highs = [0.0] + [c["elo"] + (c["error"] or 0) for c in checks]
         low, high = min(lows), max(highs)
         step = self.step_for(high - low)
         self.step = step
@@ -112,12 +112,14 @@ def outcome_chart(checks, so_far, scale):
         "line": " ".join(points),
         "area": f"{x_of(checks[0]['iteration'], so_far, width)},{zero} " + " ".join(points) + f" {x_of(last['iteration'], so_far, width)},{zero}",
         "dots": [{"x": x_of(c["iteration"], so_far, width), "y": scale.y(c["elo"], height),
-                  "y1": scale.y(c["elo"] - c["error"], height), "y2": scale.y(c["elo"] + c["error"], height),
-                  "text": f"{c['iteration']:,}: {signed(c['elo'])} ± {c['error']:.1f}"} for c in checks],
+                  "y1": scale.y(c["elo"] - c["error"], height) if c["error"] else None,
+                  "y2": scale.y(c["elo"] + c["error"], height) if c["error"] else None,
+                  "text": f"{c['iteration']:,}: {signed(c['elo'])} " + (f"± {c['error']:.1f}" if c["error"] else "(no interval: every game the same)")}
+                 for c in checks],
         "grid": scale.grid(height),
         "labels": [{"at": n(c["iteration"] / so_far * 100) if so_far else "0.0", "text": f"{c['iteration']:,}"} for c in checks],
-        "now": f"{signed(last['elo'])} Elo ± {last['error']:.1f} at {last['iteration']:,}",
-        "positive": last["elo"] - last["error"] > 0,
+        "now": f"{signed(last['elo'])} Elo " + (f"± {last['error']:.1f}" if last["error"] else "(no interval)") + f" at {last['iteration']:,}",
+        "positive": last["elo"] - (last["error"] or 0) > 0,
         "aria": f"Outcome against the start: {signed(last['elo'])} Elo at iteration {last['iteration']:,}, after {len(checks)} checks",
     }
 

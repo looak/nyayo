@@ -458,7 +458,7 @@ games: `games // (2 * pairs_per)`, so the start is iteration 0 and the end `SPSA
   of `check_games` games, approved, priority one above the tune's, named `<tune name> check @<iteration>` (`Tune <id>` when
   it has no name), of the same engine commits, time control, book and adjudication. Its dev side plays the tune's options
   plus the snapshot's values, its base side the tune's options plus the start values; integer parameters are rounded. When
-  the check finishes, `check_elo` (dev's, from `stats.Elo`) and `check_error` go on the snapshot (`utils.update_test`).
+  the check finishes, `check_elo` (dev's, from `stats.Elo`) and `check_error` go on the snapshot (`utils.update_test`); a check whose games all had one result has no variance, so its `check_error` is null (no interval), not zero. A check ends at `check_games` or just over it: a workload reports whole pairs.
 - **Frozen parameters** are not SPSA parameters. At creation `Name=value` is appended to both sides' options of the tune
   (so also of every check and SPRT made from it) and kept in `SPSARun.frozen`.
 - **The result.** `tunes.averaged_values(run)`: per parameter, the mean of the snapshots in the last `average_tail` of the
@@ -503,7 +503,7 @@ templates `lab/create_tune.html` and `lab/tune_detail.html`.
   (`c` as `spsa_utils` has it) and **Lately**, from `tunes.lately`: *settled* under 1% of the range moved over the last tenth of
   the snapshots, *slowing* under 2.5%, *moving* above (`tunecharts.SETTLED_BELOW`, `SLOWING_BELOW`). **History:** the outcome chart (the
   finished checks' Elo with 95% whiskers by iteration, a zero line), a table of the checks (finished, playing, waiting or stopped,
-  each linked), and a small chart per parameter: its value line on its own scale, the start dashed, and the outcome shaded behind it
+  each linked; a check with no interval shows *none* and is drawn without a whisker), and a small chart per parameter: its value line on its own scale, the start dashed, and the outcome shaded behind it
   on the one shared Elo scale (`EloScale`). All server-drawn SVG, the x axis the iterations so far; CSV and JSON links. **Values for
   the code:** C++ `constexpr` lines (int or double) of `averaged_values` (the last 20% of the iterations so far, with the current
   value), the UCI options and the SPSA input to start again from them; frozen ones aren't listed. **Then:** the SPRT after, linked
