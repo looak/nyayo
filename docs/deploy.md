@@ -224,6 +224,38 @@ is refused everything else: no test, no source, no network. At most 20 workers m
 nothing and has not been approved in 7 days is removed. The token goes over plain HTTP, as a password did: fine on the LAN, and
 HTTPS beyond it. An approved worker runs what the server sends it, so a client is pointed only at a server its owner trusts.
 
+**A Windows PC as a worker, with one script.** nyayo serves `deploy/setup-windows-worker.ps1` at `/setup-windows-worker.ps1`
+(no sign-in), with its `-Server` already the address it was fetched from. In Windows PowerShell:
+
+```powershell
+Invoke-WebRequest http://172.16.100.11:8001/setup-windows-worker.ps1 -OutFile setup-windows-worker.ps1
+powershell -ExecutionPolicy Bypass -File .\setup-windows-worker.ps1
+```
+
+It installs, with winget, what is missing (Python, Git for Windows, GNU make, Visual Studio Build Tools with clang), downloads
+`/client.zip` and checks its sha256, makes a venv in `-Dir` (default `%USERPROFILE%\nyayo-worker`) and writes `run.cmd`, which sets the
+toolchain for the worker only (`CXX=clang++ -fuse-ld=lld`, `MAKEFLAGS=e`, empty `LDFLAGS`) and passes `--join` only while there is
+no `worker.token`. Options: `-Name`, `-Threads`, `-Join CODE`, `-StartAtLogon` (a logon scheduled task), `-MakeDir` (use your own
+make), `-NoInstall` (check only). Run it again at any time; what is there is kept. The worker is pending until approved on Machines
+unless it has a join code.
+
+**A Linux machine as a worker, with one script.** The same for Fedora (and RHEL-likes, with `dnf`) and Ubuntu or Debian (with
+`apt`), at `/setup-linux-worker.sh` (`deploy/setup-linux-worker.sh`, no sign-in, its default server the address it was fetched from):
+
+```bash
+curl -fsSL http://172.16.100.11:8001/setup-linux-worker.sh | bash -s -- --service
+```
+
+It installs what is missing with sudo (`git make gcc-c++ python3 curl unzip` on dnf; `git make g++ python3 python3-venv curl unzip`
+on apt; any other distribution is refused), checks `/clientVersionRef/`, downloads `/client.zip` and checks its sha256, and
+makes `~/nyayo-worker` with `client/`, `venv/`, `worker.env` (server, threads, sockets, name) and `run.sh`, which passes `--join` only
+while there is no `worker.token`. Options: `--server`, `--name` (default the hostname), `--threads` (default the physical cores, cores
+per socket times sockets; `-N` is the socket count), `--dir`, `--join CODE`, `--no-install`, and `--service`, which installs
+`nyayo-client.service` (`User=` the installing user, `ExecStart=/bin/bash <dir>/run.sh`, `Restart=always`, `RestartSec=30`), enables
+and starts it: follow it with `journalctl -u nyayo-client -f`. It runs through `/bin/bash` so SELinux (enforcing on hunt) lets a
+service start a script in a home directory. To pass options: `curl -fsSL <server>/setup-linux-worker.sh | bash -s -- --name laptop --threads 4 --join ABCD-1234 --service`.
+Run it again at any time; what is there is kept, `worker.token` included.
+
 **People.** The owner is the superuser (`python manage.py createsuperuser`): the one who signs in to `/sign-in`, makes and
 approves tests, approves workers, and uses `/admin/`. That is the only user to make.
 

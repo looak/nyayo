@@ -91,6 +91,49 @@ class Serving(TestCase):
             self.assertIn(expected, page)
         self.assertNotIn('password', page.lower())
 
+    def test_the_windows_setup_script_is_served_to_anyone_with_this_servers_address(self):
+        reply = self.client.get('/setup-windows-worker.ps1')
+        self.assertEqual(reply.status_code, 200)
+        self.assertEqual(reply['Content-Type'], 'text/plain; charset=utf-8')
+        text = reply.content.decode()
+        self.assertIn("[string]$Server = 'http://testserver',", text)
+        self.assertNotIn('172.16.100.11', text)
+        self.assertIn('NoDefaultCurrentDirectoryInExePath', text)
+        self.assertEqual(text.count('\n'), text.count('\r\n'))
+
+    @override_settings(ALLOWED_HOSTS=['bobby'])
+    def test_the_script_takes_the_host_it_was_fetched_from(self):
+        text = self.client.get('/setup-windows-worker.ps1', HTTP_HOST='bobby:8001').content.decode()
+        self.assertIn("[string]$Server = 'http://bobby:8001',", text)
+
+    def test_the_checked_in_script_keeps_a_fallback_server(self):
+        from nyayo.lab import worker_api
+        self.assertIn("[string]$Server = 'http://172.16.100.11:8001',", (worker_api.SETUP_DIR / 'setup-windows-worker.ps1').read_text(encoding='utf-8'))
+
+    def test_the_linux_setup_script_is_served_to_anyone_with_this_servers_address(self):
+        reply = self.client.get('/setup-linux-worker.sh')
+        self.assertEqual((reply.status_code, reply['Content-Type']), (200, 'text/plain; charset=utf-8'))
+        text = reply.content.decode()
+        self.assertTrue(text.startswith('#!/usr/bin/env bash\n'))
+        self.assertIn("\nSERVER='http://testserver'\n", text)
+        self.assertNotIn('172.16.100.11', text)
+        self.assertNotIn('\r', text)
+        for expected in ('nyayo-client.service', 'ExecStart=/bin/bash', 'clientVersionRef', '--no-install'):
+            self.assertIn(expected, text)
+
+    @override_settings(ALLOWED_HOSTS=['bobby'])
+    def test_the_linux_script_takes_the_host_it_was_fetched_from(self):
+        text = self.client.get('/setup-linux-worker.sh', HTTP_HOST='bobby:8001').content.decode()
+        self.assertIn("\nSERVER='http://bobby:8001'\n", text)
+
+    def test_the_checked_in_linux_script_keeps_a_fallback_server_and_is_valid_bash(self):
+        from nyayo.lab import worker_api
+        path = worker_api.SETUP_DIR / 'setup-linux-worker.sh'
+        self.assertIn("\nSERVER='http://172.16.100.11:8001'\n", path.read_text(encoding='utf-8'))
+        bash = shutil.which('bash')
+        if bash:
+            self.assertEqual(subprocess.run([bash, '-n', str(path)], capture_output=True).returncode, 0)
+
     def test_the_box_can_be_put_on_another_page(self):
         from django.template.loader import render_to_string
         text = render_to_string('lab/_get_a_worker.html', {'server': 'http://bobby:8001'})

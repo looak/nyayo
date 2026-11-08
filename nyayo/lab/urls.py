@@ -6,6 +6,8 @@ from . import client_views, worker_api as api
 urlpatterns = [
     path("clientHello/", api.client_hello),
     path("client.zip", api.client_download, name="client_zip"),
+    path("setup-windows-worker.ps1", api.setup_windows_worker, name="setup_windows_worker"),
+    path("setup-linux-worker.sh", api.setup_linux_worker, name="setup_linux_worker"),
     path("worker", client_views.worker_page, name="worker_setup"),
     path("clientVersionRef/", api.client_version_ref),
     path("clientMatchRunnerVersionRef/", api.client_match_runner_version_ref),
