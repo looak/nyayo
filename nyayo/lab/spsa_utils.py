@@ -20,6 +20,7 @@
 
 import numpy as np
 
+from nyayo.lab import tunes
 from nyayo.lab.models import SPSARun, SPSAParameter
 
 def spsa_original_input(workload):
@@ -51,15 +52,32 @@ def create_spsa_run(workload, request):
     a_ratio    = float(request.POST['spsa_A_ratio'])
     iterations = int(request.POST['spsa_iterations'])
 
+    post  = request.POST
+
+    def option(key, default):
+        return post.get(key) if post.get(key) not in (None, '') else default
+
+    pairs = int(post['spsa_pairs_per'])
+
+    # The nyayo additions are optional, so a form that is OpenBench's still makes a tune: momentum, a snapshot every
+    # 1% of the iterations, a check every 5%, 500 games each, nothing frozen
     spsa_run = SPSARun.objects.create(
         tune              = workload,
-        reporting_type    = request.POST['spsa_reporting_type'],
-        distribution_type = request.POST['spsa_distribution_type'],
+        reporting_type    = post['spsa_reporting_type'],
+        distribution_type = post['spsa_distribution_type'],
         alpha             = alpha,
         gamma             = gamma,
         iterations        = iterations,
-        pairs_per         = int(request.POST['spsa_pairs_per']),
+        pairs_per         = pairs,
         a_ratio           = a_ratio,
+        update_rule       = option('spsa_update_rule', SPSARun.UpdateRule.MOMENTUM),
+        momentum          = float(option('spsa_momentum', 0.9)),
+        average_tail      = float(option('spsa_average_tail', 0.2)),
+        snapshot_every    = int(option('spsa_snapshot_every', tunes.default_snapshot_every(iterations))),
+        check_every       = int(option('spsa_check_every', tunes.default_check_every(iterations))),
+        check_games       = int(option('spsa_check_games', 500)),
+        then_sprt         = bool(post.get('spsa_then_sprt', False)),
+        frozen            = list(post.get('spsa_frozen_list', [])),
     )
 
     params = []
@@ -87,6 +105,7 @@ def create_spsa_run(workload, request):
         ))
 
     SPSAParameter.objects.bulk_create(params)
+    tunes.start_snapshot(spsa_run)
     return spsa_run
 
 def spsa_param_digest(workload):
