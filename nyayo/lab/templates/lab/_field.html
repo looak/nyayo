@@ -1,5 +1,6 @@
 {% load lab_extras %}{% with problem=errors|get:name value=values|get:name %}<label class="field{% if wide %} wide{% endif %}{% if problem %} bad{% endif %}">{{ label }}
   {% if options %}<select name="{{ name }}" id="f-{{ name }}">{% for key, text in options %}<option value="{{ key }}"{% if key == value %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+  {% elif textarea %}<textarea name="{{ name }}" id="f-{{ name }}" rows="6" spellcheck="false"{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}>{{ value }}</textarea>
   {% else %}<input name="{{ name }}" id="f-{{ name }}" value="{{ value }}"{% if list %} autocomplete="off"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %} spellcheck="false">{% endif %}
   {% if problem %}<span class="err">{{ problem }}</span>{% elif hint %}<span class="hint">{{ hint }}</span>{% endif %}
 </label>{% endwith %}

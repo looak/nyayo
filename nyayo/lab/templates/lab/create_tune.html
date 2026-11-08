@@ -1,0 +1,71 @@
+{% extends "runs/base.html" %}
+{% load static lab_extras %}
+{% block title %}Create tune · nyayo{% endblock %}
+{% block crumb %}Actions › Create tune{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'lab/create_tune.css' %}"><script defer src="{% static 'lab/create_tune.js' %}"></script>{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>New tune</h1>
+  <span class="muted">SPSA: the engine's tunable parameters nudged up and down in pairs of games, each step moving them toward the side that scored better.</span></div>
+{% if nothing %}
+<div class="card"><p>No engine is enabled, so there is nothing to tune. An engine is added under Engines.</p></div>
+{% else %}
+{% if errors %}<div class="errors"><b>This tune can't be created yet.</b>
+  <ul>{% for field, problem in errors.items %}<li>{{ problem }}</li>{% endfor %}</ul></div>{% endif %}
+
+<form method="post" id="tune" action="{% url 'create_tune' %}" data-frozen="{{ frozen_json }}">{% csrf_token %}
+<div class="card">
+  <h3 class="box-title">Tune</h3>
+  <div class="fields">
+    {% include "lab/_field.html" with name="engine" label="Engine" options=engine_names %}
+    {% include "lab/_field.html" with name="dev_branch" label="Branch or commit" placeholder="search/…" hint="the commit is played against itself" %}
+    {% include "lab/_field.html" with name="book" label="Book" options=books %}
+    {% include "lab/_field.html" with name="name" label="Name (optional)" placeholder="worked out from the branch" hint="the match is tune-<id>" %}
+    {% include "lab/_field.html" with name="spsa_iterations" label="Iterations" id="iterations" %}
+    {% include "lab/_field.html" with name="spsa_pairs_per" label="Pairs per iteration" hint="more is smoother, slower" %}
+    {% include "lab/_field.html" with name="priority" label="Priority" %}
+  </div>
+  <h3>Time control and options</h3>
+  <div class="pill-row">{% for preset, p in presets.items %}
+    <label class="choice"><input type="radio" name="preset" value="{{ preset }}"{% if preset == values.preset %} checked{% endif %}><span>{{ preset }} <small>{{ p.dev_tc }} · {{ p.dev_options }}</small></span></label>{% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3>Parameters</h3>
+    <span class="muted">Paste OpenBench's SPSA input, one <code>name, int|float, value, min, max, c_end, r_end</code> a line. Untick a parameter to freeze it: it isn't nudged, and both sides play it at the value in “Start / frozen at”.</span>
+    <span class="card-end counts" id="counts" hidden><b id="n-tuned">0</b> tuned · <b id="n-frozen">0</b> frozen · <a href="#" id="tune-all">tune all</a> · <a href="#" id="freeze-all">freeze all</a></span></div>
+  {% include "lab/_field.html" with name="spsa_inputs" label="SPSA input" textarea=True wide=True %}
+  <div class="tune-scroll" id="param-table" hidden><table class="tune-table params">
+    <thead><tr><th>Tune</th><th>Parameter</th><th class="num">Default</th><th class="num">Start / frozen at</th><th class="num">Min</th><th class="num">Max</th><th class="num">Step at the end</th><th class="num">Rate at the end</th></tr></thead>
+    <tbody id="param-rows"></tbody></table></div>
+  <noscript><label class="field wide">Frozen: one <code>Name = value</code> a line
+    <textarea name="spsa_frozen_text" rows="3" spellcheck="false">{{ frozen_text }}</textarea>
+    <span class="hint">With script, the table has a box for this. A name here is not tuned.</span></label></noscript>
+  <div id="frozen-inputs"></div>
+</div>
+
+<details class="advanced card"{% if errors %} open{% endif %}>
+  <summary><b>How it learns</b> <span class="muted">· Advanced</span></summary>
+  <div class="fields">
+    {% include "lab/_field.html" with name="spsa_update_rule" label="Update" options=rules hint="MOMENTUM keeps 0.9 of the step before; PLAIN is OpenBench's" %}
+    {% include "lab/_field.html" with name="spsa_check_every" label="Outcome check every (iterations)" hint="blank: every 5%; 0: no checks" %}
+    {% include "lab/_field.html" with name="spsa_check_games" label="Games a check" hint="the values so far against the start" %}
+    {% include "lab/_field.html" with name="spsa_alpha" label="α" hint="how fast the rate shrinks" %}
+    {% include "lab/_field.html" with name="spsa_gamma" label="γ" hint="how fast the step shrinks" %}
+    {% include "lab/_field.html" with name="spsa_A_ratio" label="A (share of the iterations)" hint="0.1 is 10%" %}
+  </div>
+  <p class="muted">The result is the average of the last 20% of the iterations, as the page shows it. A snapshot is kept every 1% of the iterations.</p>
+</details>
+
+<div class="card">
+  <h3 class="box-title">Then</h3>
+  <label class="tick"><input type="checkbox" name="spsa_then_sprt" value="1"{% if values.spsa_then_sprt %} checked{% endif %}> When it ends, SPRT the tuned values against the start
+    <span class="muted">· the engine's default bounds, the frozen values on both sides</span></label>
+</div>
+
+<div class="actions-row"><span class="muted" id="summary">{{ values.spsa_iterations }} iterations of {{ values.spsa_pairs_per }} pair{{ values.spsa_pairs_per|pluralize }}</span>
+  <button class="act start">Create tune</button></div>
+</form>
+{{ engines|json_script:"engine-table" }}
+{% endif %}
+{% endblock %}

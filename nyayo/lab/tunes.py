@@ -246,3 +246,28 @@ def queue_sprt(tune, user=None, values=None):
     test.save()
     report()
     return test
+
+
+def check_match_ids():
+
+    # The matches of the outcome checks: tied to their tune, so the lists leave them out and the tune's page lists them
+    return [Test(id=test_id, test_mode='GAMES').match_id() for test_id in
+            SPSASnapshot.objects.exclude(check_test=None).values_list('check_test_id', flat=True).distinct()]
+
+
+def list_figures(match_ids):
+
+    # What a row of a list says of a tune instead of an Elo from its pairs, which hovers round zero: how far it is, and the
+    # newest finished check's Elo. { match id : dict }
+    from .ids import TEST_FORM
+    from .models import SPSARun
+
+    numbers = { int(found['number']): match_id for match_id in match_ids if (found := TEST_FORM.match(match_id)) and found['prefix'] == 'tune' }
+    out = {}
+    for run in SPSARun.objects.filter(tune_id__in=numbers).select_related('tune'):
+        last = run.snapshots.exclude(check_elo=None).order_by('-iteration').first()
+        out[numbers[run.tune_id]] = {
+            'iteration': iteration_of(run, run.tune.games), 'iterations': run.iterations,
+            'elo': last.check_elo if last else None, 'error': last.check_error if last else None, 'at': last.iteration if last else None,
+        }
+    return out
