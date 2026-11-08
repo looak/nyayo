@@ -1,0 +1,116 @@
+{% extends "runs/base.html" %}
+{% load static lab_extras matches_extras %}
+{% block title %}{{ match.name|default:match.pk }} · nyayo{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'lab/tune.css' %}"><script defer src="{% static 'lab/tune.js' %}"></script>{% if refresh %}<meta http-equiv="refresh" content="15">{% endif %}{% endblock %}
+{% block side_actions %}{% match_actions match %}{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1>{{ match.name|default:match.pk }}</h1>
+  <span class="tier">tune</span> <span class="badge {{ match.state }}">{{ match.state|statename:"long" }}</span>
+  <span class="muted">{{ rows|length }} parameter{{ rows|length|pluralize }} · commit {{ commit }}{% if branch %} ({{ branch }}){% endif %}</span>
+</div>
+<p class="muted tune-setup">{{ setup }}</p>
+
+{% if can_act %}
+<form method="post" action="{% url 'tune_sprt' test.id %}" class="tune-actions">{% csrf_token %}
+  <button class="act start" type="submit">SPRT these values now</button>
+  <span class="muted">queues the {{ average_tail }} average against the start, without waiting for the end</span>
+</form>
+{% endif %}
+
+<section class="card top-{{ match.state }}">
+  <div class="tune-progress">
+    <span class="big">{{ pct }}</span>
+    <span class="muted">iteration {{ iteration|floatformat:"0g" }} of {{ iterations|floatformat:"0g" }}</span>
+    <span class="muted tune-settled">{{ settled }} of {{ tuned }} settled, {{ moving }} still moving or slowing</span>
+  </div>
+  <div class="tune-bar" role="progressbar" aria-valuenow="{{ iteration }}" aria-valuemax="{{ iterations }}"><div style="width:{{ pct_width }}"></div></div>
+  <div class="tune-facts">{% for label, value in facts %}<span>{{ label }} <b>{{ value }}</b></span>{% endfor %}</div>
+</section>
+
+<section class="card">
+  <div class="card-head"><h3>Parameters</h3>
+    <span class="muted">The bar is each parameter's range: the tick is where it started, the dot where it is now. <b>Lately</b> is how far it moved over the last tenth of the snapshots, as a share of its range: settled under 1%, slowing under 2.5%, moving above. A parameter with a small whole-number range shows the float SPSA keeps beside it; the engine plays the rounded one.</span></div>
+  <div class="tune-scroll"><table class="tune-table">
+    <thead><tr><th>Parameter</th><th class="num">Start</th><th class="num">Now</th><th class="num">Change</th><th class="range">Range</th><th class="num">Step now</th><th>Lately</th></tr></thead>
+    <tbody>{% for p in rows %}
+      <tr><td class="mono">{{ p.name }}</td><td class="num muted">{{ p.start }}</td><td class="num now">{{ p.now }}</td>
+        <td class="num change {{ p.tone }}">{{ p.change }}</td>
+        <td class="range"><div class="rangebar"><span class="lo">{{ p.min }}</span>
+          <div class="track"><i class="rail"></i><i class="span {{ p.tone }}" style="left:{{ p.bar.left }}%;width:{{ p.bar.width }}%"></i><i class="start" style="left:{{ p.bar.start }}%"></i><i class="dot" style="left:{{ p.bar.now }}%"></i></div>
+          <span class="hi">{{ p.max }}</span></div></td>
+        <td class="num muted">± {{ p.step }}</td>
+        <td class="late"><i class="lamp {{ p.tone_late }}"></i>{{ p.word }} <span class="muted">{{ p.late }}</span></td></tr>
+    {% empty %}<tr><td colspan="7" class="muted">No parameters.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="card">
+  <div class="card-head"><h3>History</h3>
+    <span class="muted">a snapshot of every value each {{ snapshot_every }} iteration{{ snapshot_every|pluralize }}, {{ snapshots|length }} so far, {% if check_every %}and an outcome check every {{ check_every }}{% else %}no outcome checks{% endif %}.</span>
+    <span class="card-end"><a href="{{ history_csv }}">CSV</a> · <a href="{{ history_json }}">JSON</a></span></div>
+
+  {% if outcome %}
+  <figure class="tune-fig">
+    <figcaption><span><b>Outcome</b> <span class="muted">· the values at each check played against the start, {{ check_games }} games a check. Above zero, the tune is gaining.</span></span>
+      <span class="{% if outcome.positive %}better{% endif %} nowtext">{{ outcome.now }}</span></figcaption>
+    <svg viewBox="0 0 {{ outcome.width }} {{ outcome.height }}" width="100%" height="{{ outcome.height }}" preserveAspectRatio="none" role="img" aria-label="{{ outcome.aria }}" class="chart">
+      {% for g in outcome.grid %}<line x1="0" x2="{{ outcome.width }}" y1="{{ g.y }}" y2="{{ g.y }}" class="{% if g.zero %}zero{% else %}grid{% endif %}" vector-effect="non-scaling-stroke"/>{% endfor %}
+      <polygon points="{{ outcome.area }}" class="area"/>
+      <polyline points="{{ outcome.line }}" class="outline" vector-effect="non-scaling-stroke"/>
+      {% for d in outcome.dots %}{% if d.y1 %}<line x1="{{ d.x }}" x2="{{ d.x }}" y1="{{ d.y1 }}" y2="{{ d.y2 }}" class="whisker" vector-effect="non-scaling-stroke"/>{% endif %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="3.5" class="pt"><title>{{ d.text }}</title></circle>{% endfor %}
+    </svg>
+    <div class="xlabels">{% for l in outcome.labels %}<span style="left:{{ l.at }}%">{{ l.text }}</span>{% endfor %}</div>
+    <div class="legend"><span>gridlines every {{ scale.step }} Elo, from {{ scale.low }} to {{ scale.high }}</span><span>whiskers: 95%, none when every game of a check had the same result</span><span>the x axis is the iterations so far, out of {{ iterations|floatformat:"0g" }}</span></div>
+  </figure>
+  {% elif check_every %}<p class="muted">The first outcome check comes at iteration {{ check_every }}; it plays {{ check_games }} games.</p>{% endif %}
+
+  {% if checks %}
+  <details class="checks"{% if not outcome %} open{% endif %}><summary>The checks ({{ checks|length }})</summary>
+    <table class="tune-table"><thead><tr><th>At iteration</th><th class="num">Elo</th><th class="num">± 95%</th><th class="num">Games</th><th>Test</th></tr></thead>
+    <tbody>{% for c in checks %}<tr><td>{{ c.iteration|floatformat:"0g" }}</td>
+      <td class="num">{% if c.done %}{{ c.elo|floatformat:"1" }}{% else %}–{% endif %}</td><td class="num muted">{% if not c.done %}–{% elif c.error is None %}<span title="Every game had the same result, so there is no spread to make an interval of">none</span>{% else %}{{ c.error|floatformat:"1" }}{% endif %}</td>
+      <td class="num muted">{{ c.games }}{% if not c.done %} of {{ c.max_games }}{% endif %}</td>
+      <td><a href="{% url 'match' c.match %}">{{ c.match }}</a> <span class="badge {{ c.state }}">{{ c.state }}</span></td></tr>{% endfor %}</tbody></table>
+  </details>{% endif %}
+
+  <div class="legend keyed">
+    <span><i class="key line"></i>the parameter's value, its own scale</span>
+    <span><i class="key dash"></i>where it started</span>
+    <span><i class="key shade"></i>the outcome above, the same in every chart</span>
+  </div>
+  <div class="tune-small">{% for p in rows %}
+    <figure><figcaption><span class="mono">{{ p.name }}</span><span class="change {{ p.tone }}">{{ p.now }}</span></figcaption>
+      <svg viewBox="0 0 {{ p.chart.width }} {{ p.chart.height }}" width="100%" height="{{ p.chart.height }}" preserveAspectRatio="none" role="img" aria-label="{{ p.aria }}" class="chart">
+        <line x1="0" x2="{{ p.chart.width }}" y1="{{ p.chart.zero_y }}" y2="{{ p.chart.zero_y }}" class="grid" vector-effect="non-scaling-stroke"/>
+        {% if p.chart.area %}<polygon points="{{ p.chart.area }}" class="area"/>{% endif %}
+        <line x1="0" x2="{{ p.chart.width }}" y1="{{ p.chart.start_y }}" y2="{{ p.chart.start_y }}" class="startline" vector-effect="non-scaling-stroke"/>
+        <polyline points="{{ p.chart.line }}" class="vline {{ p.tone }}" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <div class="ends"><span>0</span><span>{{ iteration|floatformat:"0g" }}</span></div></figure>
+  {% endfor %}</div>
+</section>
+
+<div class="tune-two">
+  <section class="card">
+    <div class="card-head"><h3>Values for the code</h3></div>
+    <pre class="code" id="code-cpp">{{ code.cpp }}</pre>
+    <p class="muted">The average of the last {{ average_tail }} of the iterations so far, as snapshots, with the current value; integers rounded the way they are played. Frozen ones aren't listed.</p>
+    <details><summary>UCI options</summary><pre class="code">{{ code.options }}</pre></details>
+    <details><summary>SPSA input, to start again from these</summary><pre class="code">{{ code.spsa }}</pre></details>
+    <button type="button" class="act copy" data-copy="code-cpp" hidden>Copy the C++</button>
+  </section>
+  <section class="card">
+    <div class="card-head"><h3>Then</h3></div>
+    {% if then.test %}
+      <div class="then"><div><b><a href="{% url 'match' then.match %}">{{ then.match }}</a></b> · <span class="badge {{ then.state }}">{{ then.state }}</span></div>
+        <div class="muted">{{ then.test.dev_options }} against {{ then.test.base_options }}; bounds [{{ then.test.elolower|floatformat:"-2" }}, {{ then.test.eloupper|floatformat:"-2" }}]. It shows whether the tune gained before anything is committed.</div></div>
+    {% elif then.waits %}
+      <div class="then"><div><b>An SPRT is queued when this tune ends</b></div><div class="muted">Of the {{ average_tail }} average against the start, the engine's default bounds, the frozen values on both sides.</div></div>
+    {% else %}
+      <p class="muted">Nothing is queued when this tune ends.</p>
+    {% endif %}
+    <p class="muted">“SPRT these values now” queues the same test with the values as they stand, without waiting for the end.</p>
+  </section>
+</div>
+{% endblock %}

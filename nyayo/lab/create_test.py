@@ -12,12 +12,13 @@ import re
 
 from django.db import transaction
 
-from . import github, utils
-from .models import Book, Engine, EngineConfig, LogEvent, Network, Test
+from . import github, spsa_utils, tunes, utils
+from .models import Book, Engine, EngineConfig, LogEvent, Network, SPSARun, Test
 
 SYZYGY = ['OPTIONAL', 'DISABLED', '3-MAN', '4-MAN', '5-MAN', '6-MAN', '7-MAN']
 PGNS   = ['COMPACT', 'VERBOSE']
 MODES  = ['SPRT', 'GAMES']
+TUNE   = 'SPSA' # Not one of the page's modes: a tune is made by create_tune, with its own fields
 
 # The two things a test can ask, as the page's pills: the engine's own bounds, or a regression bound
 KINDS = {
@@ -79,6 +80,10 @@ def default_values(config):
         'syzygy_wdl' : 'DISABLED', 'syzygy_adj' : 'OPTIONAL', 'win_adj' : 'movecount=3 score=400',
         'draw_adj' : 'movenumber=40 movecount=8 score=10', 'scale_method' : 'BASE', 'scale_nps' : str(config.nps),
         'info' : '',
+        # A tune's, which OpenBench's SPSA form had, and nyayo's. A check_every of '' is a check every 5%.
+        'spsa_inputs' : '', 'spsa_alpha' : '0.602', 'spsa_gamma' : '0.101', 'spsa_A_ratio' : '0.1',
+        'spsa_iterations' : '5000', 'spsa_pairs_per' : '4', 'spsa_update_rule' : 'MOMENTUM', 'spsa_check_every' : '',
+        'spsa_check_games' : '500', 'spsa_then_sprt' : '',
     }
     values.update(preset_values(config, names[0] if names else 'default'))
     if not values['book']:
@@ -126,7 +131,7 @@ def verify(values, errors):
 
     need('book', Book.objects.filter(name=values['book'], enabled=True).exists(), 'Book was not found in the configuration')
     need('upload_pgns', values['upload_pgns'] in PGNS + ['FALSE'], '"Upload PGNs" must be COMPACT or VERBOSE')
-    need('test_mode', values['test_mode'] in MODES, 'Unknown Test Mode')
+    need('test_mode', values['test_mode'] in MODES + [TUNE], 'Unknown Test Mode')
 
     if values['test_mode'] == 'SPRT':
         pattern = r'^\[(-?\d+(?:\.\d+)?), (-?\d+(?:\.\d+)?)\]$'
@@ -220,6 +225,119 @@ def collect_github_info(values, side, config, errors):
     return { 'source' : source, 'branch' : branch, 'sha' : found['sha'], 'bench' : bench, 'message' : found['message'],
              'title' : title, 'offline' : False }
 
+def number(text):
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(text)
+    return value
+
+def parse_tune(values, errors):
+
+    # A tune's fields: OpenBench's SPSA ones and nyayo's. Returns the form for spsa_utils.create_spsa_run (the lines
+    # that are tuned only) or None, with the errors by field. `spsa_frozen` is a list of names, each with its value in
+    # `spsa_frozen_value_<name>`; a frozen parameter is not tuned, and both sides play it at that value.
+    def bad(field, message):
+        errors.setdefault(field, message)
+
+    def read(field, name, kind, low=None):
+        try:
+            value = kind(values.get(field, ''))
+            assert low is None or value >= low
+            return value
+        except Exception:
+            bad(field, '"%s" is not %s' % (name, ('an Integer' if kind is int else 'a number') + ('' if low is None else ' of at least %g' % low)))
+
+    alpha = read('spsa_alpha', 'Alpha', number, 1e-9)
+    gamma = read('spsa_gamma', 'Gamma', number, 1e-9)
+    ratio = read('spsa_A_ratio', 'A ratio', number, 0)
+    iterations = read('spsa_iterations', 'Iterations', int, 1)
+    pairs = read('spsa_pairs_per', 'Pairs per iteration', int, 1)
+
+    rule = values.get('spsa_update_rule') or SPSARun.UpdateRule.MOMENTUM
+    if rule not in SPSARun.UpdateRule.values:
+        bad('spsa_update_rule', 'Update rule must be one of %s' % ', '.join(SPSARun.UpdateRule.values))
+
+    every = values.get('spsa_check_every', '')
+    if str(every).strip() == '':
+        every = tunes.default_check_every(iterations) if iterations else 0
+    else:
+        every = read('spsa_check_every', 'Check every', int, 0)
+        if every is not None and iterations and every > iterations:
+            bad('spsa_check_every', 'A check every %d iterations never happens in %d' % (every, iterations))
+    games = read('spsa_check_games', 'Check games', int, 1)
+
+    # The parameters, line by line
+    lines, seen = [], set()
+    for position, line in enumerate((values.get('spsa_inputs') or '').splitlines(), 1):
+        if not line.strip():
+            continue
+        parts = [part.strip() for part in line.split(',')]
+        try:
+            assert len(parts) == 7, 'needs seven fields: name, int|float, value, min, max, c_end, r_end'
+            name, kind = parts[0], parts[1]
+            assert re.fullmatch(r'[^\s=,]+', name), 'the name has a space or an equals sign in it'
+            assert name not in seen, '%s is in the list twice' % name
+            assert kind in ('int', 'float'), 'the type is int or float'
+            value, low, high, c_end, r_end = map(number, parts[2:])
+            assert low < high, 'the minimum is not below the maximum'
+            assert low <= value <= high, '%s is out of its range' % parts[2]
+            assert c_end > 0 and r_end > 0, 'c_end and r_end need to be above 0'
+        except AssertionError as error:
+            bad('spsa_inputs', 'Line %d (%s): %s' % (position, line.strip(), error))
+            continue
+        except ValueError:
+            bad('spsa_inputs', 'Line %d (%s): a number is not a number' % (position, line.strip()))
+            continue
+        seen.add(name)
+        lines.append((name, line))
+
+    frozen_names = values.get('spsa_frozen') or []
+    if isinstance(frozen_names, str):
+        frozen_names = [frozen_names]
+    frozen = []
+    for name in frozen_names:
+        if name not in seen:
+            bad('spsa_frozen', '%s is frozen but not in the list of parameters' % name)
+            continue
+        try:
+            value = number(values.get('spsa_frozen_value_' + name, ''))
+        except ValueError:
+            bad('spsa_frozen', 'The frozen value of %s is not a number' % name)
+            continue
+        if name not in [f['name'] for f in frozen]:
+            frozen.append({ 'name' : name, 'value' : int(value) if value.is_integer() else value })
+
+    tuned = [line for name, line in lines if name not in frozen_names]
+    if not tuned and not errors.get('spsa_inputs') and not errors.get('spsa_frozen'):
+        bad('spsa_inputs', 'Nothing is left to tune: the list is empty, or every parameter is frozen')
+
+    if errors:
+        return None
+
+    return {
+        'spsa_alpha' : alpha, 'spsa_gamma' : gamma, 'spsa_A_ratio' : ratio, 'spsa_iterations' : iterations,
+        'spsa_pairs_per' : pairs, 'spsa_reporting_type' : 'BULK', 'spsa_distribution_type' : 'SINGLE',
+        'spsa_inputs' : '\n'.join(tuned), 'spsa_update_rule' : rule, 'spsa_check_every' : every, 'spsa_check_games' : games,
+        'spsa_snapshot_every' : tunes.default_snapshot_every(iterations),
+        'spsa_then_sprt' : str(values.get('spsa_then_sprt', '')).strip().lower() in ('1', 'true', 'on', 'yes'),
+        'spsa_frozen_list' : frozen,
+    }
+
+def create_tune(values, user, anyway=False):
+
+    # (test, errors, behind), as create_test: a tune is made when there are no errors
+    return create_test({ **values, 'test_mode' : TUNE }, user, anyway)
+
+def apply_sprt(test, bounds, confidence):
+
+    # The page's "[elo0, elo1]" and "[beta, alpha]" as the test's fields
+    test.elolower = float(bounds.split(',')[0].lstrip('['))
+    test.eloupper = float(bounds.split(',')[1].rstrip(']'))
+    test.alpha    = float(confidence.split(',')[1].rstrip(']'))
+    test.beta     = float(confidence.split(',')[0].lstrip('['))
+    test.lowerllr = math.log(test.beta / (1.0 - test.alpha))
+    test.upperllr = math.log((1.0 - test.beta) / test.alpha)
+
 def create_test(values, user, anyway=False):
 
     # (test, errors, behind). A test only when there are no errors and the branch isn't behind its base, or it was
@@ -227,6 +345,15 @@ def create_test(values, user, anyway=False):
     errors = {}
     config = verify(values, errors)
     dev = base = None
+    spec = parse_tune(values, errors) if values['test_mode'] == TUNE else None
+
+    # Frozen values go on both sides, the way a preset's options do, and each side must still fit its field
+    if spec:
+        frozen = [(f['name'], tunes.number(float(f['value']))) for f in spec['spsa_frozen_list']]
+        options = { side : tunes.append_options(values[side + '_options'], frozen) for side in ('dev', 'base') }
+        for side, text in options.items():
+            if len(text) > 256:
+                errors.setdefault(side + '_options', '%s Options are too long with the frozen values on' % side.capitalize())
 
     if config and not errors.get('engine'):
         dev  = collect_github_info(values, 'dev', config, errors)
@@ -253,14 +380,14 @@ def create_test(values, user, anyway=False):
         test.dev               = Engine.objects.create(name=dev['branch'], source=dev['source'], sha=dev['sha'], bench=dev['bench'])
         test.dev_repo          = values['dev_repo'].strip()
         test.dev_engine        = values['engine']
-        test.dev_options       = values['dev_options']
+        test.dev_options       = options['dev'] if spec else values['dev_options']
         test.dev_network       = values['dev_network']
         test.dev_time_control  = utils.TimeControl.parse(values['dev_tc'])
 
         test.base              = Engine.objects.create(name=base['branch'], source=base['source'], sha=base['sha'], bench=base['bench'])
         test.base_repo         = values['base_repo'].strip()
         test.base_engine       = values['engine']
-        test.base_options      = values['base_options']
+        test.base_options      = options['base'] if spec else values['base_options']
         test.base_network      = values['base_network']
         test.base_time_control = utils.TimeControl.parse(values['base_tc'])
 
@@ -279,12 +406,7 @@ def create_test(values, user, anyway=False):
         test.test_mode         = values['test_mode']
 
         if test.test_mode == 'SPRT':
-            test.elolower = float(values['bounds'].split(',')[0].lstrip('['))
-            test.eloupper = float(values['bounds'].split(',')[1].rstrip(']'))
-            test.alpha    = float(values['confidence'].split(',')[1].rstrip(']'))
-            test.beta     = float(values['confidence'].split(',')[0].lstrip('['))
-            test.lowerllr = math.log(test.beta / (1.0 - test.alpha))
-            test.upperllr = math.log((1.0 - test.beta) / test.alpha)
+            apply_sprt(test, values['bounds'], values['confidence'])
 
         if test.test_mode == 'GAMES':
             test.max_games = int(values['max_games'])
@@ -298,6 +420,9 @@ def create_test(values, user, anyway=False):
         # The people who may sign in here are the approvers; a test made by a user who isn't the owner waits to be approved
         test.approved = user.is_superuser
         test.save()
+
+        if spec:
+            spsa_utils.create_spsa_run(test, type('Form', (), { 'POST' : spec })())
 
         LogEvent.objects.create(author=user.get_username(), summary='CREATE P=%d TP=%d' % (test.priority, test.throughput),
                                 log_file='', test_id=test.id)

@@ -313,12 +313,23 @@ def playing_entries(match, limit):
              "opponent_name": names.get(g.opponent, g.opponent)} for g in rows]
 
 
+def hidden_checks():
+    """The match ids of a tune's outcome checks, which the lists leave out (nyayo.lab.tunes)."""
+    from nyayo.lab import tunes
+    return tunes.check_match_ids()
+
+
+def tune_figures(match_ids):
+    from nyayo.lab import tunes
+    return tunes.list_figures(match_ids) if match_ids else {}
+
+
 def running_cards(cutoff, now, gauntlets=None):
     """The matches being played right now, newest first, for the top of the list: running, and reported lately (a
     silent match is likely dead). Each as what a glance needs: games, Elo, how it is going and when it will be done.
     gauntlets: True for only the gauntlets, False for only the tests, None for both (the dashboard)."""
     cards = []
-    running = match_queryset().filter(state="running", updated_at__gte=cutoff)
+    running = match_queryset().filter(state="running", updated_at__gte=cutoff).exclude(pk__in=hidden_checks())
     if gauntlets is not None:
         running = running.filter(kind="gauntlet") if gauntlets else running.exclude(kind="gauntlet")
     for match in running.order_by("-updated_at")[:RUNNING_CARDS]:
@@ -349,7 +360,7 @@ def unstarted_cards(now):
     found = {}
     for state in UNSTARTED:
         cards = []
-        for match in match_queryset().filter(state=state).order_by("-updated_at")[:UNSTARTED_CARDS]:
+        for match in match_queryset().filter(state=state).exclude(pk__in=hidden_checks()).order_by("-updated_at")[:UNSTARTED_CARDS]:
             workers = sprtview.workers(match.machines, 0, now, match.state)
             walking = [w for w in workers if w["has_steps"]]
             cards.append({"match": match, "workers": walking[:WALKS_ON_A_CARD],
@@ -430,6 +441,10 @@ def jobs_list(request, gauntlets):
     """Tests (SPRTs, tunes, datagens, the lab's games and self-play) or Gauntlets: the same list, of one or the other."""
     matches = match_queryset().order_by("-updated_at")
     matches = matches.filter(kind="gauntlet") if gauntlets else matches.exclude(kind="gauntlet")
+    # a tune's outcome checks belong to the tune's page; they are listed here only when asked for with ?checks=1
+    checks = not gauntlets and request.GET.get("checks") == "1"
+    if not gauntlets and not checks:
+        matches = matches.exclude(pk__in=hidden_checks())
     kind, state, engine = request.GET.get("kind", ""), request.GET.get("state", ""), request.GET.get("engine", "")
     kind = "" if gauntlets else kind
     if kind in TEST_KINDS:
@@ -446,8 +461,10 @@ def jobs_list(request, gauntlets):
     running = running_cards(cutoff, now, gauntlets)
     # the tests that haven't played a game are the lab's, never a gauntlet
     unstarted = {"groups": [], "any": False, "refresh": False} if gauntlets else unstarted_cards(now)
+    tunes_here = tune_figures([m.pk for m in page.object_list if m.pk.startswith("tune-")])
     for match in page.object_list:
         match.job_kind = job_kind(match)
+        match.tune = tunes_here.get(match.pk)
         match.summary = stats.summarize(match.results.all())
         match.silent = is_silent(match, cutoff)
         # an SPRT's Elo is its producer's; the rest are nyayo's from the counts
@@ -457,7 +474,7 @@ def jobs_list(request, gauntlets):
         match.gauge = list_gauge(match)
     shown = Match.objects.filter(kind="gauntlet") if gauntlets else Match.objects.exclude(kind="gauntlet")
     return render(request, "matches/matches_list.html", {
-        "page": page, "kind": kind, "kinds": [] if gauntlets else TEST_KINDS, "state": state, "states": STATES + ["silent"],
+        "page": page, "checks": checks, "kind": kind, "kinds": [] if gauntlets else TEST_KINDS, "state": state, "states": STATES + ["silent"],
         "engine": engine, "gauntlets": gauntlets, "jobs": "gauntlets" if gauntlets else "tests",
         "title": "Gauntlets" if gauntlets else "Tests", "running": running, "unstarted": unstarted,
         "removed_count": shown.filter(hidden=True).count() if may_act(request.user) else 0,
@@ -545,6 +562,11 @@ def match_detail(request, match_id):
     match = match_queryset().filter(pk=match_id).first()
     if match is None:
         return missing(request, match_id)
+    if match.pk.startswith("tune-"):
+        # a tune of the lab is not a field of opponents either: its own page, from the lab's rows
+        from nyayo.lab import tuneview
+        if (tune_page := tuneview.page(request, match)) is not None:
+            return tune_page
     excluded = {o for o in request.GET.getlist("exclude") if o}
     entries = game_entries(match)
     groups = {name: [e for e in entries if e["state"] == name] for name in STATE_ORDER}

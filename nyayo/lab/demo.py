@@ -10,7 +10,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from nyayo.lab import hours
-from nyayo.lab.models import Engine, Machine, MachineHour, Result, Test
+from nyayo.lab.models import Engine, Machine, MachineHour, Result, SPSAParameter, Test
 
 GAMES = [92, 88, 95, 101, 97, 90, 84, 0, 0, 0, 76, 88, 93, 99, 104, 96, 91, 87, 82, 90, 98, 102, 95, 89, 86, 91, 0, 0, 72, 84, 90, 96,
          101, 108, 99, 94, 88, 85, 92, 97, 103, 99, 94, 90, 87, 93, 96, 58]
@@ -76,3 +76,75 @@ def seed(now=None):
         MachineHour.objects.create(box='new-box', hour=this - hours.HOUR * ago, games=games, heard=3000, rtt_sum=ms, rtt_n=1)
     Machine.objects.filter(pk=new.pk).update(updated=now - timedelta(seconds=20), first_seen=now - timedelta(hours=2), rtt_ms=1.2)
     return ['/machines/pc-wsl', '/machines/new-box']
+
+
+TUNE_PARAMS = [  # name, start, min, max, c_end, where it heads (share of the range), how fast it settles
+    ('LmrBase', 75, 25, 150, 6, 0.10, 0.9), ('LmrDivisor', 225, 100, 400, 15, -0.08, 0.7), ('NmpBase', 3, 1, 6, 0.5, 0.0, 1.0),
+    ('NmpDepthDivisor', 4, 2, 8, 0.5, 0.06, 0.8), ('RfpMargin', 80, 30, 200, 8, -0.09, 0.6), ('RfpMaxDepth', 7, 3, 12, 0.5, 0.05, 1.0),
+    ('FutilityMargin', 100, 40, 250, 10, 0.12, 0.35), ('LmpBase', 3, 1, 8, 0.5, 0.02, 1.0),
+    ('AspirationWindow', 25, 8, 60, 3, -0.11, 0.8), ('SeeQuietMargin', -60, -150, -10, 6, 0.07, 0.5),
+    ('HistoryDivisor', 8192, 2048, 16384, 600, -0.04, 0.9), ('SingularMargin', 2, 1, 5, 0.25, 0.03, 0.7)]
+
+
+def seed_tune(now=None, name='demo-search-params', iterations=20000, now_iteration=7420, finished=False):
+    """A tune with the numbers of the design board's running page (TuneRunning.dc.html): snapshots every 100 iterations, a check
+    every 1000 with its Elo, and, for a finished one, the SPRT queued after it. Invented, like the rest."""
+    import random
+
+    from nyayo.lab import document, spsa_utils, tunes
+    from nyayo.lab.models import SPSARun, SPSASnapshot
+
+    now = now or timezone.now()
+    Test.objects.filter(name=name).delete()
+    owner = User.objects.get_or_create(username='owner')[0]
+    dev, _ = Engine.objects.get_or_create(name='search-params', sha='3f1c9a2' + '0' * 33, defaults=dict(source='https://github.com/looak/elephant', bench=5732794))
+    test = Test.objects.create(author=owner, dev=dev, base=dev, dev_repo=dev.source, base_repo=dev.source, dev_engine='Elephant', base_engine='Elephant',
+                               dev_options='Threads=1 Hash=8 SingularDepth=6 IirDepth=4', base_options='Threads=1 Hash=8 SingularDepth=6 IirDepth=4',
+                               dev_time_control='8.0+0.08', base_time_control='8.0+0.08', book_name='8moves_v3.epd', workload_size=4, throughput=100,
+                               approved=True, test_mode='SPSA', name=name)
+    post = {'spsa_alpha': '0.602', 'spsa_gamma': '0.101', 'spsa_A_ratio': '0.1', 'spsa_iterations': str(iterations), 'spsa_pairs_per': '2',
+            'spsa_reporting_type': 'BULK', 'spsa_distribution_type': 'SINGLE', 'spsa_check_every': '1000', 'spsa_snapshot_every': '100', 'spsa_then_sprt': finished,
+            'spsa_inputs': '\n'.join('%s, int, %s, %s, %s, %s, 0.002' % (n, s, lo, hi, c) for n, s, lo, hi, c, _, _ in TUNE_PARAMS),
+            'spsa_frozen_list': [{'name': 'SingularDepth', 'value': 6}, {'name': 'IirDepth', 'value': 4}]}
+    run = spsa_utils.create_spsa_run(test, type('Form', (), {'POST': post})())
+    run.snapshots.all().delete()
+
+    rng = random.Random(1003)
+    games = lambda it: it * 2 * run.pairs_per
+    series = {}
+    for n, start, lo, hi, c, aim, speed in TUNE_PARAMS:
+        value, vals = float(start), [float(start)]
+        for i in range(1, now_iteration // 100 + 1):
+            t = i / (now_iteration // 100)
+            value += (start + aim * (hi - lo) - value) * 0.06 * speed + rng.gauss(0, 1) * (hi - lo) * 0.012 * (1.15 - t * 0.6)
+            value = max(lo, min(hi, value))
+            vals.append(value)
+        series[n] = vals
+    for i in range(now_iteration // 100 + 1):
+        snap = SPSASnapshot.objects.create(spsa_run=run, iteration=i * 100, games=games(i * 100), values={n: v[i] for n, v in series.items()})
+        SPSASnapshot.objects.filter(pk=snap.pk).update(created=now - timedelta(minutes=(now_iteration // 100 - i) * 11))
+        if i * 100 and i * 100 % 1000 == 0:
+            check = tunes.make_check(test, run, snap)
+            elo = 1.8 * (i * 100 / 1000) ** 0.9 + rng.gauss(0, 0.6)
+            Test.objects.filter(pk=check.pk).update(finished=True, games=500, wins=250, losses=200, draws=50)
+            SPSASnapshot.objects.filter(pk=snap.pk).update(check_elo=elo, check_error=15.0 + rng.gauss(0, 0.2), check_games=500)
+    for param in run.parameters.all():
+        SPSAParameter.objects.filter(pk=param.pk).update(value=series[param.name][-1])
+    g = games(now_iteration)
+    Test.objects.filter(pk=test.pk).update(games=g, wins=g * 3 // 10, draws=g - g * 3 // 10 - g * 3 // 10, losses=g * 3 // 10,
+                                           DD=g // 2 - g * 3 // 20 * 2, LD=g * 3 // 20, DW=g * 3 // 20, finished=finished, passed=finished)
+    if machine := Machine.objects.filter(name='pc-wsl').first():
+        g = games(now_iteration)
+        result = Result.objects.create(test=test, machine=machine, games=g, wins=g * 3 // 10, draws=g - g * 3 // 10 - g * 3 // 10, losses=g * 3 // 10,
+                                       DD=g // 2 - g * 3 // 20 * 2, LD=g * 3 // 20, DW=g * 3 // 20, workloads=now_iteration // 2)
+        Result.objects.filter(pk=result.pk).update(updated=now)
+    test = Test.objects.get(pk=test.pk)
+    if finished:
+        sprt = tunes.queue_sprt(test)
+        run.then_test = sprt
+        run.save(update_fields=['then_test'])
+        document.report_test(sprt)
+    for check_test in Test.objects.filter(tune_snapshots__spsa_run=run):
+        document.report_test(check_test)
+    document.report_test(test)
+    return '/matches/%s' % test.match_id()

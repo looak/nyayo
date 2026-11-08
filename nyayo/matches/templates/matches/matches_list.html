@@ -10,7 +10,7 @@
 {% endfor %}
 {% if running %}</div>{% endif %}
 {% include "matches/_unstarted_cards.html" %}
-<details class="filterbar"{% if kind or state or engine %} open{% endif %}>
+<details class="filterbar"{% if kind or state or engine or checks %} open{% endif %}>
   <summary>Filter {{ title|lower }}</summary>
   <form class="query" method="get">
   {% if kinds %}<label>Kind
@@ -31,8 +31,9 @@
       {% for e in engines %}<option value="{{ e.pk }}"{% if e.pk|stringformat:"s" == engine %} selected{% endif %}>{{ e }}</option>{% endfor %}
     </select>
   </label>
+  {% if not gauntlets %}<label title="A tune's outcome checks are on the tune's page; tick this to list them here too"><input type="checkbox" name="checks" value="1"{% if checks %} checked{% endif %} onchange="this.form.submit()"> tune checks</label>{% endif %}
   <button>Filter</button>
-  {% if kind or state or engine %}<a href="{% url jobs %}">Show all</a>{% endif %}
+  {% if kind or state or engine or checks %}<a href="{% url jobs %}">Show all</a>{% endif %}
   </form>
 </details>
 <div class="card">
@@ -56,7 +57,8 @@
       <td>{{ match.subject }}</td>
       <td class="num">{{ match.summary.overall.games }}{% if match.progress.total %}<span class="muted">/{{ match.progress.total }}</span>{% endif %}</td>
       <td class="num {% if match.summary.overall.score > 0.5 %}better{% elif match.summary.overall.score < 0.5 %}worse{% endif %}">{{ match.summary.overall.score|percent }}</td>
-      <td class="num"><span{% if match.stats %} title="{{ match.producer_name }}'s figure"{% endif %} class="{% if match.elo > 0 %}better{% elif match.elo < 0 %}worse{% endif %}">{{ match.elo|elo }}</span> <span class="muted">{{ match.elo_error|error }}</span></td>
+      {% if match.tune %}<td class="num" title="Its pairs play nudged values against each other, so an Elo from them would hover round zero. This is the newest outcome check's: the values so far against the start."><span class="muted">iteration {{ match.tune.iteration }}/{{ match.tune.iterations }}</span>{% if match.tune.elo is not None %} <span class="{% if match.tune.elo > 0 %}better{% elif match.tune.elo < 0 %}worse{% endif %}">{{ match.tune.elo|elo }}</span> {% if match.tune.error is not None %}<span class="muted">{{ match.tune.error|error }}</span>{% endif %}{% endif %}</td>
+      {% else %}<td class="num"><span{% if match.stats %} title="{{ match.producer_name }}'s figure"{% endif %} class="{% if match.elo > 0 %}better{% elif match.elo < 0 %}worse{% endif %}">{{ match.elo|elo }}</span> <span class="muted">{{ match.elo_error|error }}</span></td>{% endif %}
     </tr>
   {% endfor %}
   </tbody>
