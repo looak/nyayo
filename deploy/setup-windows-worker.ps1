@@ -198,7 +198,7 @@ $readme = @"
 
 - Keep this folder: ``client\worker.token`` is who this worker is, and the client updates itself in place.
 - It waits until it is approved on nyayo's Lab, Machines page, unless it was started with a join code.
-- Stop it cleanly: create the file ``client\openbench.exit``. It finishes its workload first.
+- Stop it: create the file ``client\openbench.exit``. It stops at once, mid-workload; the last results since its 30-second report are lost, the finished games are still uploaded.
 - A token is good for one server. If the server changes, edit ``run.cmd``, delete ``client\worker.token`` and start it again.
 - Set up again, or change the name or threads: run ``setup-windows-worker.ps1`` again.
 "@

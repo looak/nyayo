@@ -108,7 +108,7 @@ class Serving(TestCase):
 
     def test_the_checked_in_script_keeps_a_fallback_server(self):
         from nyayo.lab import worker_api
-        self.assertIn("[string]$Server = 'http://172.16.100.11:8001',", worker_api.SETUP_SCRIPT.read_text(encoding='utf-8'))
+        self.assertIn("[string]$Server = 'http://172.16.100.11:8001',", (worker_api.SETUP_DIR / 'setup-windows-worker.ps1').read_text(encoding='utf-8'))
 
     def test_the_linux_setup_script_is_served_to_anyone_with_this_servers_address(self):
         reply = self.client.get('/setup-linux-worker.sh')

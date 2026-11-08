@@ -165,7 +165,6 @@ SETUP_SERVER_DEFAULTS = {
     'setup-windows-worker.ps1' : re.compile(r"(\[string\]\$Server\s*=\s*)'[^'\r\n]*'"),
     'setup-linux-worker.sh'    : re.compile(r"^(SERVER=)'[^'\r\n]*'", re.M),
 }
-SETUP_SCRIPT = SETUP_DIR / 'setup-windows-worker.ps1'
 
 def _setup_script(request, name, newline):
 

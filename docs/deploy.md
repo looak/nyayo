@@ -233,8 +233,7 @@ powershell -ExecutionPolicy Bypass -File .\setup-windows-worker.ps1
 ```
 
 It installs, with winget, what is missing (Python, Git for Windows, GNU make, Visual Studio Build Tools with clang), downloads
-`/client.zip` and checks its sha256, makes a venv in `-Dir` (default `~
-yayo-worker`) and writes `run.cmd`, which sets the
+`/client.zip` and checks its sha256, makes a venv in `-Dir` (default `%USERPROFILE%\nyayo-worker`) and writes `run.cmd`, which sets the
 toolchain for the worker only (`CXX=clang++ -fuse-ld=lld`, `MAKEFLAGS=e`, empty `LDFLAGS`) and passes `--join` only while there is
 no `worker.token`. Options: `-Name`, `-Threads`, `-Join CODE`, `-StartAtLogon` (a logon scheduled task), `-MakeDir` (use your own
 make), `-NoInstall` (check only). Run it again at any time; what is there is kept. The worker is pending until approved on Machines
