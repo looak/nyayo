@@ -159,20 +159,31 @@ def client_download(request):
     response['ETag'] = '"%s"' % sha
     return response
 
-SETUP_SCRIPT = clientzip.BUNDLED.parent.parent / 'deploy' / 'setup-windows-worker.ps1'
-SERVER_DEFAULT = re.compile(r"(\[string\]\$Server\s*=\s*)'[^'\r\n]*'")
+SETUP_DIR = clientzip.BUNDLED.parent.parent / 'deploy'
+SETUP_SERVER_DEFAULTS = {
+    # the line that holds the default server of each setup script, which is replaced when it is served
+    'setup-windows-worker.ps1' : re.compile(r"(\[string\]\$Server\s*=\s*)'[^'\r\n]*'"),
+    'setup-linux-worker.sh'    : re.compile(r"^(SERVER=)'[^'\r\n]*'", re.M),
+}
+SETUP_SCRIPT = SETUP_DIR / 'setup-windows-worker.ps1'
 
-def setup_windows_worker(request):
+def _setup_script(request, name, newline):
 
-    # The script that sets a Windows PC up as a worker, to anyone, as the client is. Its -Server default is the address it was
+    # A script that sets a machine up as a worker, to anyone, as the client is. Its default server is the address it was
     # fetched from (the request's scheme and host, and the path prefix if there is one), so one file serves any server.
     server = request.build_absolute_uri('/').rstrip('/')
-    text   = SETUP_SCRIPT.read_text(encoding='utf-8')
-    text   = SERVER_DEFAULT.sub(lambda m: m.group(1) + "'" + server.replace("'", "''") + "'", text, count=1)
-    text   = text.replace('\r\n', '\n').replace('\n', '\r\n')
+    text   = (SETUP_DIR / name).read_text(encoding='utf-8')
+    text   = SETUP_SERVER_DEFAULTS[name].sub(lambda m: m.group(1) + "'" + server.replace("'", "''") + "'", text, count=1)
+    text   = text.replace('\r\n', '\n').replace('\n', newline)
     response = HttpResponse(text, content_type='text/plain; charset=utf-8')
-    response['Content-Disposition'] = 'inline; filename=setup-windows-worker.ps1'
+    response['Content-Disposition'] = 'inline; filename=' + name
     return response
+
+def setup_windows_worker(request):
+    return _setup_script(request, 'setup-windows-worker.ps1', '\r\n')
+
+def setup_linux_worker(request):
+    return _setup_script(request, 'setup-linux-worker.sh', '\n')
 
 @csrf_exempt
 def client_match_runner_version_ref(request):

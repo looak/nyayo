@@ -581,6 +581,10 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
     its `-Server` parameter replaced by the address the request came to (scheme, host and path prefix), so the same file works
     for any server. It installs what a Windows worker needs (Python, Git, make, Visual Studio Build Tools with clang), fetches
     `/client.zip` and checks its sha256, makes a venv and writes `run.cmd`; `docs/deploy.md` has the one-liner.
+  - `GET /setup-linux-worker.sh`, the same with no sign-in, is `deploy/setup-linux-worker.sh` as `text/plain` (LF), the line
+    `SERVER='...'` replaced by the address of the request. For Fedora/RHEL-likes (dnf) and Ubuntu/Debian (apt) it installs what is
+    missing, fetches and checks `/client.zip`, makes `~/nyayo-worker` (`client/`, `venv/`, `worker.env`, `run.sh`) and, with
+    `--service`, a systemd unit `nyayo-client.service`; `docs/deploy.md` has the one-liner.
   - A worker starts from that zip (the page `/worker` has the commands, and the same box, `lab/_get_a_worker.html`, is on `/machines`):
     unpack, `pip install -r requirements.txt`, `client.py --server URL [--join CODE]`. It updates itself the way it did: a call
     answered `Bad Client Version` makes `client.py` fetch `client_url` (a path is the server's own), check `client_sha256`, and
