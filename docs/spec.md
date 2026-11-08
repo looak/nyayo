@@ -339,7 +339,7 @@ OpenBench's server (looak/ramani `plans/nyayo-2.md`). It has the models, the wor
 - **Models** are OpenBench's (openbench_eg `da629d7`), with its names and fields, trimmed of what this lab doesn't
   use: `Test`, `Result`, `Step`, `Machine` (a worker; `runs.Machine` is a token that reports runs), `Engine` (the commit
   under test; `matches.Engine` is a build as it names itself), `EngineConfig`, `Book`, `Network`, `SPSARun`,
-  `SPSAParameter`, `LogEvent`, and `ServerState` (one row, the build checksum a worker restarts on, refreshed whenever
+  `SPSAParameter`, `SPSASnapshot` (tunes, below), `LogEvent`, and `ServerState` (one row, the build checksum a worker restarts on, refreshed whenever
   an `EngineConfig` is saved). `Profile` is gone: `Machine.user` and `Test.author` are Django's `auth.User`. There is
   no `PGN`: an upload of games becomes one of nyayo's batches. All are registered plainly in the admin.
 - **A test and its match.** A test's match has the id `<mode>-<test id>` (`nyayo.lab.ids.match_id(test id, test_mode)`): `sprt-1000`
@@ -373,7 +373,7 @@ OpenBench's server (looak/ramani `plans/nyayo-2.md`). It has the models, the wor
 
 `/create/test` (staff only) makes an SPRT or a fixed-games test; the logic is OpenBench's `create_workload.py`,
 `verify_workload.py` and `modify_workload.py` (`nyayo/lab/create_test.py`, `github.py`, `modify_test.py`, `utils.py`),
-with OpenBench's notice. Tunes and datagens come later.
+with OpenBench's notice. Tunes are below; datagens come later.
 
 - **The form** is filled from the chosen `EngineConfig`: its `default` preset, then the first preset; a preset's pill
   sets time control, options, workload size and whatever else it names; the *Gain* pill takes the engine's bounds and
@@ -430,6 +430,53 @@ with OpenBench's notice. Tunes and datagens come later.
   producer sends the match again, which makes it anew. A match with an upload still being processed waits (the page says so). Test
   ids are not reused. The Matches list has a checkbox per row, for staff only, with one *Delete…* going to the same
   confirm page for all that are chosen. The sidebar group has the same one *Delete…*.
+
+### Lab: tunes
+
+A tune is SPSA as OpenBench has it (each pair of games plays every parameter nudged up against nudged down; the worker
+reports the step it measured as `spsa_delta`, `r*c*result*flip` summed over a report), with what OpenBench lacked
+(`nyayo/lab/tunes.py`; design in looak/ramani `plans/nyayo-2.md`, *Tunes*). An *iteration* is a completed `2 * pairs_per`
+games: `games // (2 * pairs_per)`, so the start is iteration 0 and the end `SPSARun.iterations`.
+
+- **`SPSARun`** has, besides OpenBench's fields: `update_rule` (`PLAIN` or `MOMENTUM`, default `MOMENTUM`), `momentum`
+  (0.9), `average_tail` (0.2), `snapshot_every` (iterations; made as `max(1, iterations // 100)`), `check_every`
+  (iterations; made as `iterations // 20`, `0` is no checks), `check_games` (500), `then_sprt` (queue an SPRT of the
+  result when the tune ends), `then_test` (that SPRT, once queued) and `frozen` (a JSON list of `{"name", "value"}`).
+  `SPSAParameter` has `velocity`. **`SPSASnapshot`** (`spsa_run.snapshots`, ordered by iteration) is `iteration`, `games`,
+  `created`, `values` (a JSON object, name to float, of the tuned parameters) and, once an outcome check exists,
+  `check_test` (the check's `Test`; the field is not called `check` because that is a method of Django's `Model`),
+  `check_elo`, `check_error` (the 95% interval is `check_elo` plus or minus it) and `check_games`, null until the check
+  finishes.
+- **The update** (`utils.update_test` calls `tunes.advance` for a tune's report, in the transaction that has the test
+  locked). `PLAIN` adds the delta to the value, as OpenBench does. `MOMENTUM` keeps a share of the step before:
+  `velocity = momentum * velocity + (1 - momentum) * delta`, `value += velocity`; a steady delta settles on the same step
+  plain SPSA takes, noise cancels. Values are clipped to `min`/`max` in both.
+- **Snapshots** are written in that update: one at creation (iteration 0, the start values), one when the iteration
+  crosses a multiple of `snapshot_every` (a report that crosses several writes one, at the iteration reached), and one
+  when the tune finishes (at `iterations`). One snapshot per iteration.
+- **Outcome checks.** When the iteration crosses a multiple of `check_every`, its snapshot gets a check: a `GAMES` test
+  of `check_games` games, approved, priority one above the tune's, named `<tune name> check @<iteration>` (`Tune <id>` when
+  it has no name), of the same engine commits, time control, book and adjudication. Its dev side plays the tune's options
+  plus the snapshot's values, its base side the tune's options plus the start values; integer parameters are rounded. When
+  the check finishes, `check_elo` (dev's, from `stats.Elo`) and `check_error` go on the snapshot (`utils.update_test`).
+- **Frozen parameters** are not SPSA parameters. At creation `Name=value` is appended to both sides' options of the tune
+  (so also of every check and SPRT made from it) and kept in `SPSARun.frozen`.
+- **The result.** `tunes.averaged_values(run)`: per parameter, the mean of the snapshots in the last `average_tail` of the
+  iterations so far (not the start's) and the current value. `tunes.lately(run)`: the share of each parameter's range it
+  moved over the last 10% of the snapshots. `tunes.history(run)`: the snapshot rows. `tunes.queue_sprt(tune, user=None,
+  values=None)` makes an approved SPRT of the values (averaged by default) against the start values, of the same commits,
+  with the engine's default bounds and confidence and the tune's time control; with `then_sprt` set, a finishing tune
+  makes one and stores it in `then_test`.
+- **Creating** (`create_test.create_tune`, also what the create page's POST does when `test_mode` is `SPSA`): the fields
+  are OpenBench's (`spsa_inputs` lines `name, int|float, value, min, max, c_end, r_end`; `spsa_alpha`, `spsa_gamma`,
+  `spsa_A_ratio`, `spsa_iterations`, `spsa_pairs_per`) and `spsa_update_rule`, `spsa_check_every` (blank is the default),
+  `spsa_check_games`, `spsa_then_sprt`, a list `spsa_frozen` of names each with `spsa_frozen_value_<name>`. Errors are by
+  field: a bad line, a value out of its range, a frozen name not in the list or without a number, nothing left to tune.
+  Reporting and distribution are `BULK` and `SINGLE`. The page's HTML for these fields is not built yet.
+- **Endpoints.** `POST /tests/<id>/sprt` (staff, like stop and restart) queues the SPRT of the averaged values now and
+  redirects to its match; `GET /tests/<id>/history.json` (`{"tune": <match id>, "history": [{iteration, games, created,
+  values, check, check_elo, check_error, check_games}]}`) and `GET /tests/<id>/history.csv` (one column a parameter) are
+  open, as the live pages are. All three are `404` for a test that is not a tune.
 
 ### Lab: the worker's API
 
@@ -522,7 +569,7 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
   named `<result id>.<book index>` (the match is reported first if nyayo has none yet; a workload that played nothing sends
   an empty archive, which is dropped). nyayo's worker puts the games away as for any producer. Nothing is kept as OpenBench
   kept it: the PGN tar, `api_pgns` and the watcher are not here.
-- **Not here:** the pages for tunes and datagens, the networks' upload (a network is a file `networks/<sha256>` under the data directory, served by
+- **Not here:** the pages for tunes (their create and running pages) and datagens, the networks' upload (a network is a file `networks/<sha256>` under the data directory, served by
   `clientGetNetwork`), `api_*` of OpenBench's own scripts.
 
 The smoke test, `tools/smoke/run.py` (WSL or Linux; its docstring says how to set it up), runs nyayo as deployed (gunicorn,

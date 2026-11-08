@@ -35,7 +35,8 @@ from django.utils import timezone
 
 from nyayo.lab import hours
 from nyayo.lab.document import report_test
-from nyayo.lab.models import Machine, Result, SPSAParameter, Test
+from nyayo.lab import tunes
+from nyayo.lab.models import Machine, Result, Test
 from nyayo.lab.stats import TrinomialSPRT, PentanomialSPRT
 
 
@@ -267,17 +268,14 @@ def update_test(request, machine):
             test.failed   = test.games >= test.max_games and test.wins <  test.losses
             test.finished = test.passed or test.failed
 
+            # If it was a tune's outcome check, its Elo goes on the snapshot
+            if test.finished:
+                tunes.check_finished(test)
+
         elif test.test_mode == 'SPSA':
 
-            # Apply updates to every Parameter, ensuring clipping
-            parameters = list(test.spsa_run.parameters.order_by('index'))
-            for delta, param in zip(spsa_delta, parameters):
-                param.value = max(param.min_value, min(param.max_value, param.value + delta))
-
-            # Bulk update to fire off all the .save()s
-            SPSAParameter.objects.bulk_update(parameters, ['value'])
-
-            test.finished = test.games >= 2 * test.spsa_run.pairs_per * test.spsa_run.iterations
+            # Move the values by the rule, write the snapshots and checks that are due, and see if it is over
+            tunes.advance(test, spsa_delta, test.games - games)
 
         elif test.test_mode == 'DATAGEN':
 

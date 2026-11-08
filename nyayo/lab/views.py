@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 
 from nyayo.actions.access import action_required
 
-from . import create_test as creating, github, modify_test, utils
+from . import create_test as creating, github, modify_test, tunes, utils
 from .models import Book, EngineConfig, Test
 
 
@@ -29,6 +29,9 @@ def create_test_page(request):
     errors, behind, offline = {}, None, False
     if request.method == 'POST':
         values.update({key: request.POST[key].strip() for key in values if key in request.POST})
+        if values['test_mode'] == creating.TUNE:
+            values['spsa_frozen'] = request.POST.getlist('spsa_frozen')
+            values.update({key: request.POST[key].strip() for key in request.POST if key.startswith('spsa_frozen_value_')})
         test, errors, behind = creating.create_test(values, request.user, anyway='anyway' in request.POST)
         if test:
             modify_test.report(test)
@@ -111,3 +114,31 @@ def modify(request, test_id, action):
     modify_test.apply(request.user, test, action)
     modify_test.report(test)
     return redirect('match', match_id=test.match_id())
+
+
+def tune_of(test_id):
+    test = get_object_or_404(Test, pk=test_id, test_mode='SPSA')
+    return test
+
+
+@action_required
+@require_POST
+def tune_sprt(request, test_id):
+    """POST: queue an SPRT of the tune's averaged values against its start now, the page's "SPRT these values now"."""
+    test = tune_of(test_id)
+    queued = tunes.queue_sprt(test, user=request.user)
+    return redirect('match', match_id=queued.match_id())
+
+
+def tune_history_json(request, test_id):
+    """GET: the tune's snapshot rows, with the checks' columns. Open, as the live pages are."""
+    test = tune_of(test_id)
+    return JsonResponse({'tune': test.match_id(), 'history': tunes.history(test.spsa_run)})
+
+
+def tune_history_csv(request, test_id):
+    """GET: the same rows, one column a parameter."""
+    test = tune_of(test_id)
+    response = HttpResponse(tunes.history_csv(test.spsa_run), content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="%s-history.csv"' % test.match_id()
+    return response

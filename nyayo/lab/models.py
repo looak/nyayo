@@ -442,6 +442,20 @@ class SPSARun(Model):
     pairs_per  = IntegerField()
     a_ratio    = FloatField()
 
+    class UpdateRule(TextChoices):
+        PLAIN    = 'PLAIN'   , 'PLAIN'    # OpenBench's: value += delta
+        MOMENTUM = 'MOMENTUM', 'MOMENTUM' # velocity = momentum * velocity + (1 - momentum) * delta; value += velocity
+
+    update_rule    = CharField(max_length=16, choices=UpdateRule.choices, default=UpdateRule.MOMENTUM)
+    momentum       = FloatField(default=0.9)
+    average_tail   = FloatField(default=0.2) # The result is the mean over the last share of the iterations
+    snapshot_every = IntegerField(default=1)  # In iterations
+    check_every    = IntegerField(default=0)  # In iterations; 0 is no checks
+    check_games    = IntegerField(default=500)
+    then_sprt      = BooleanField(default=False)
+    then_test      = ForeignKey(Test, on_delete=SET_NULL, related_name='tune_followed_by', null=True, blank=True)
+    frozen         = JSONField(default=list, blank=True) # [{ 'name' : ..., 'value' : ... }], played by both sides, not tuned
+
 class SPSAParameter(Model):
 
     spsa_run  = ForeignKey(SPSARun, on_delete=CASCADE, related_name='parameters')
@@ -458,3 +472,23 @@ class SPSAParameter(Model):
 
     c_value   = FloatField() # Constants pre-computed for speed
     a_value   = FloatField()
+
+    velocity  = FloatField(default=0.0) # Changes with the value, under the MOMENTUM rule
+
+class SPSASnapshot(Model):
+
+    # The values as they stood at an iteration; written in the same locked update that moved them
+    spsa_run   = ForeignKey(SPSARun, on_delete=CASCADE, related_name='snapshots')
+    iteration  = IntegerField()
+    games      = IntegerField()
+    created    = DateTimeField(auto_now_add=True)
+    values     = JSONField(default=dict) # { name : float }
+
+    # The outcome check: a games test of these values against the start, and what it found once it finished
+    check_test  = ForeignKey(Test, on_delete=SET_NULL, related_name='tune_snapshots', null=True, blank=True)
+    check_elo   = FloatField(null=True, blank=True)
+    check_error = FloatField(null=True, blank=True) # The 95% interval is check_elo +- check_error
+    check_games = IntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['iteration', 'id']

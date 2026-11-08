@@ -239,7 +239,7 @@ class Scheduling(Api):
         class Request:
             POST = {'spsa_alpha': '0.602', 'spsa_gamma': '0.101', 'spsa_A_ratio': '0.1', 'spsa_iterations': '5000',
                     'spsa_reporting_type': 'BATCHED', 'spsa_distribution_type': 'MULTIPLE', 'spsa_pairs_per': '4',
-                    'spsa_inputs': 'Aspiration, int, 20, 5, 50, 4, 0.002'}
+                    'spsa_inputs': 'Aspiration, int, 20, 5, 50, 4, 0.002', 'spsa_update_rule': 'PLAIN'}
 
         test = make_test(test_mode='SPSA')
         create_spsa_run(test, Request())
@@ -409,7 +409,7 @@ class Results(Api):
         class Request:
             POST = {'spsa_alpha': '0.602', 'spsa_gamma': '0.101', 'spsa_A_ratio': '0.1', 'spsa_iterations': '5000',
                     'spsa_reporting_type': 'BATCHED', 'spsa_distribution_type': 'SINGLE', 'spsa_pairs_per': '4',
-                    'spsa_inputs': 'Aspiration, int, 20, 5, 50, 4, 0.002'}
+                    'spsa_inputs': 'Aspiration, int, 20, 5, 50, 4, 0.002', 'spsa_update_rule': 'PLAIN'}
 
         test = make_test(test_mode='SPSA')
         create_spsa_run(test, Request())
