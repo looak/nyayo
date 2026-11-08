@@ -27,6 +27,7 @@
 import json
 import logging
 import os
+import re
 import secrets
 
 from django.conf import settings
@@ -156,6 +157,21 @@ def client_download(request):
     response  = HttpResponse(data, content_type='application/zip')
     response['Content-Disposition'] = 'attachment; filename=nyayo-client.zip'
     response['ETag'] = '"%s"' % sha
+    return response
+
+SETUP_SCRIPT = clientzip.BUNDLED.parent.parent / 'deploy' / 'setup-windows-worker.ps1'
+SERVER_DEFAULT = re.compile(r"(\[string\]\$Server\s*=\s*)'[^'\r\n]*'")
+
+def setup_windows_worker(request):
+
+    # The script that sets a Windows PC up as a worker, to anyone, as the client is. Its -Server default is the address it was
+    # fetched from (the request's scheme and host, and the path prefix if there is one), so one file serves any server.
+    server = request.build_absolute_uri('/').rstrip('/')
+    text   = SETUP_SCRIPT.read_text(encoding='utf-8')
+    text   = SERVER_DEFAULT.sub(lambda m: m.group(1) + "'" + server.replace("'", "''") + "'", text, count=1)
+    text   = text.replace('\r\n', '\n').replace('\n', '\r\n')
+    response = HttpResponse(text, content_type='text/plain; charset=utf-8')
+    response['Content-Disposition'] = 'inline; filename=setup-windows-worker.ps1'
     return response
 
 @csrf_exempt

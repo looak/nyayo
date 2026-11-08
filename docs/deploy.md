@@ -224,6 +224,22 @@ is refused everything else: no test, no source, no network. At most 20 workers m
 nothing and has not been approved in 7 days is removed. The token goes over plain HTTP, as a password did: fine on the LAN, and
 HTTPS beyond it. An approved worker runs what the server sends it, so a client is pointed only at a server its owner trusts.
 
+**A Windows PC as a worker, with one script.** nyayo serves `deploy/setup-windows-worker.ps1` at `/setup-windows-worker.ps1`
+(no sign-in), with its `-Server` already the address it was fetched from. In Windows PowerShell:
+
+```powershell
+Invoke-WebRequest http://172.16.100.11:8001/setup-windows-worker.ps1 -OutFile setup-windows-worker.ps1
+powershell -ExecutionPolicy Bypass -File .\setup-windows-worker.ps1
+```
+
+It installs, with winget, what is missing (Python, Git for Windows, GNU make, Visual Studio Build Tools with clang), downloads
+`/client.zip` and checks its sha256, makes a venv in `-Dir` (default `~
+yayo-worker`) and writes `run.cmd`, which sets the
+toolchain for the worker only (`CXX=clang++ -fuse-ld=lld`, `MAKEFLAGS=e`, empty `LDFLAGS`) and passes `--join` only while there is
+no `worker.token`. Options: `-Name`, `-Threads`, `-Join CODE`, `-StartAtLogon` (a logon scheduled task), `-MakeDir` (use your own
+make), `-NoInstall` (check only). Run it again at any time; what is there is kept. The worker is pending until approved on Machines
+unless it has a join code.
+
 **People.** The owner is the superuser (`python manage.py createsuperuser`): the one who signs in to `/sign-in`, makes and
 approves tests, approves workers, and uses `/admin/`. That is the only user to make.
 
