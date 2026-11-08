@@ -41,9 +41,10 @@ def point(fraction, radius):
 def wedge(f0, f1, inner, outer):
     """A path for the band of the half circle between two fractions and two radii."""
     a, b, c, d = point(f0, outer), point(f1, outer), point(f1, inner), point(f0, inner)
-    big = 1 if f1 - f0 > 0.5 else 0
-    return (f"M{n(a[0])} {n(a[1])} A{outer} {outer} 0 {big} 1 {n(b[0])} {n(b[1])} "
-            f"L{n(c[0])} {n(c[1])} A{inner} {inner} 0 {big} 0 {n(d[0])} {n(d[1])} Z")
+    # Every wedge lies on one half circle, so its arcs never exceed 180 degrees: the
+    # large-arc flag is always 0 (set, the browser draws the long way round).
+    return (f"M{n(a[0])} {n(a[1])} A{outer} {outer} 0 0 1 {n(b[0])} {n(b[1])} "
+            f"L{n(c[0])} {n(c[1])} A{inner} {inner} 0 0 0 {n(d[0])} {n(d[1])} Z")
 
 
 def needle(radius, half_width):
