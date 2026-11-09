@@ -322,7 +322,7 @@ class Approval(TestCase):
                      logical_cores=16, cpu_name="Ryzen")
         text = page(self.client, "/machines/tor")
         for expected in ("Waiting for your approval", "It gets no tests until then", "Its first job", "What it could play, once approved",
-                         "16 threads", "32 GB", "version 55", "Can build", "Not found", "no gcc or clang"):
+                         "16 threads", "32 GB", "version 56", "Can build", "Not found", "no gcc or clang"):
             self.assertIn(expected, text)
         self.assertNotIn("Last 48 hours", text)
         self.assertNotIn('value="approve"', text)

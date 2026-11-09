@@ -738,15 +738,17 @@ def client_update(r):
     while r.clients:    # started with --no-client-downloads, and not of this version once it goes up: it would refuse to update
         stop(r.clients.pop())
     worker = r.served / 'worker.py'
-    worker.write_text(worker.read_text().replace('CLIENT_VERSION   = 54', 'CLIENT_VERSION   = 55', 1))
+    current = int(regex.search(r'^CLIENT_VERSION\s*=\s*(\d+)', worker.read_text(), regex.M).group(1))    # the next one up, whatever this one is
+    newer = current + 1
+    worker.write_text(regex.sub(r'^(CLIENT_VERSION\s*=\s*)\d+', lambda found: found.group(1) + str(newer), worker.read_text(), 1, regex.M))
     r.wait_for(lambda: 'Downloading newer version of Client' in log.read_text(errors='replace'), 90, 'the worker to be told to update')
-    r.wait_for(lambda: Machine.objects.get(pk=before.id).secret != before.secret and Machine.objects.get(pk=before.id).info.get('client_ver') == 55, 90,
-               'the updated worker to start a session as client 55')
+    r.wait_for(lambda: Machine.objects.get(pk=before.id).secret != before.secret and Machine.objects.get(pk=before.id).info.get('client_ver') == newer, 90,
+               'the updated worker to start a session as client %d' % (newer))
     after = Machine.objects.get(pk=before.id)
-    check('CLIENT_VERSION   = 55' in (r.temp / 'Client3' / 'worker.py').read_text(), 'its worker.py is not the new one')
+    check('CLIENT_VERSION   = %d' % (newer) in (r.temp / 'Client3' / 'worker.py').read_text(), 'its worker.py is not the new one')
     check((r.temp / 'Client3' / 'worker.token').read_text() == token, 'the update changed its token')
     check(Machine.objects.filter(name='smoke-update').count() == 1 and after.state == 'approved', 'the update made a row or lost its approval')
-    return 'a worker from the downloaded client updated to version 55 from here, kept its token, its row and its approval'
+    return 'a worker from the downloaded client updated to version %d from here' % (newer) + ', kept its token, its row and its approval'
 
 
 def idle_then_quiet(r):

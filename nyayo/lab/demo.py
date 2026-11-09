@@ -39,7 +39,7 @@ def seed(now=None):
     for name in ('pc-wsl', 'new-box'):
         MachineHour.objects.filter(box=name).delete()
 
-    wsl = machine('pc-wsl', now, client_ver=55, concurrency=10, sockets=1, physical_cores=12, logical_cores=24, syzygy_max=0, cpu_flags=FLAGS,
+    wsl = machine('pc-wsl', now, client_ver=56, concurrency=10, sockets=1, physical_cores=12, logical_cores=24, syzygy_max=0, cpu_flags=FLAGS,
                   toolchains=TOOLCHAINS, tokens={}, os_name='Linux', os_ver='6.18.54-microsoft-standard-WSL2', supported=['Elephant'],
                   cpu_name='AMD Ryzen 9 9900X', isa_name='x86-64-avx512icl', ram_total_mb=31 * 1024, huge_pages='madvise',
                   gpus=['NVIDIA GeForce RTX 4080 SUPER'], python_ver='3.12.3', fastchess_ver='1.8.2')
@@ -69,7 +69,7 @@ def seed(now=None):
         Result.objects.filter(pk=result.pk).update(updated=now - timedelta(minutes=9) if last else now - timedelta(hours=30 + n))
 
     # a worker new to nyayo: two hours of history
-    new = machine('new-box', now, client_ver=55, concurrency=4, sockets=1, physical_cores=4, logical_cores=8, syzygy_max=0, cpu_flags=FLAGS[:8],
+    new = machine('new-box', now, client_ver=56, concurrency=4, sockets=1, physical_cores=4, logical_cores=8, syzygy_max=0, cpu_flags=FLAGS[:8],
                   toolchains=TOOLCHAINS, tokens={}, os_name='Linux', os_ver='6.8.0', supported=['Elephant'], cpu_name='Intel Core i7-8700',
                   isa_name='x86-64-avx2', ram_total_mb=16 * 1024, python_ver='3.12.3', fastchess_ver='1.8.2')
     for ago, games, ms in ((1, 41, 1.4), (0, 12, 1.2)):

@@ -104,10 +104,20 @@ def record_step(result, form):
 
 
 def number(value, kind):
+    # What the worker sent as a number, or None. A negative one is clamped to 0 (a clock that stepped back gave a
+    # step -0.2 seconds, and the match schema wants these 0 or more); one that isn't finite is dropped.
     try:
-        return kind(value) if value not in (None, '') else None
-    except (TypeError, ValueError):
+        found = kind(value) if value not in (None, '') else None
+    except (TypeError, ValueError, OverflowError):
         return None
+    return nonnegative(found)
+
+
+def nonnegative(value):
+    # A stored number made safe for the match document: 0 or more, or None when it isn't a finite number
+    if value is None or isinstance(value, bool) or value != value or value in (float('inf'), float('-inf')):
+        return None
+    return max(0, value)
 
 
 def walk_document(rows, iso):
@@ -130,9 +140,12 @@ def walk_document(rows, iso):
         entry['state'] = row.state
         if row.state == 'failed' and row.blame == 'unclear' and row.tries >= TRIES_UNCLEAR:
             row.effect = leaving_effect(row)  # Written again each time: it changes as other workers come and go
-        for name, value in (('at', iso(row.at)), ('seconds', None if row.seconds is None else round(row.seconds, 1)),
+        # Numbers are clamped again here: a row stored before the intake did it must not make ingest reject the match
+        seconds = nonnegative(row.seconds)
+        for name, value in (('at', iso(row.at)), ('seconds', None if seconds is None else round(seconds, 1)),
                             ('cached', row.cached), ('detail', row.detail), ('log', tail(row.log, 4096)),
-                            ('nodes', row.nodes), ('nps', row.nps), ('tries', row.tries or None),
+                            ('nodes', nonnegative(row.nodes)), ('nps', nonnegative(row.nps)),
+                            ('tries', nonnegative(row.tries) or None),
                             ('blame', row.blame), ('evidence', row.evidence), ('effect', row.effect),
                             ('retry_at', iso(row.retry_at))):
             if value not in (None, '', []):

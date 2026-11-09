@@ -40,8 +40,8 @@ class Zip(SimpleTestCase):
         self.assertNotIn(b'\r\n', archive.read('client.py'))
 
     def test_the_version_is_the_workers_and_54_is_what_it_still_is(self):
-        self.assertEqual(clientzip.version(), 55)
-        self.assertEqual(config.client_version(), 55)
+        self.assertEqual(clientzip.version(), 56)
+        self.assertEqual(config.client_version(), 56)
 
     @override_settings(NYAYO_CLIENT_VERSION=60)
     def test_a_setting_overrides_it(self):

@@ -37,7 +37,7 @@ class FakeSocket:
 
 
 SYSTEM = {
-    'client_ver': 55, 'machine_name': 'hunt', 'concurrency': 4, 'sockets': 1, 'physical_cores': 4, 'syzygy_max': 0,
+    'client_ver': 56, 'machine_name': 'hunt', 'concurrency': 4, 'sockets': 1, 'physical_cores': 4, 'syzygy_max': 0,
     'cpu_flags': ['POPCNT', 'AVX2'], 'tokens': {}, 'os_name': 'Linux',
     'toolchains': {'gcc': '13.3.0', 'g++': '13.3.0', 'clang': None, 'clang++': None, 'dotnet': None, 'rustc': None, 'cargo': None,
                    'python3': '3.12.3', 'make': '4.3'},
@@ -54,7 +54,7 @@ class Api(TestCase):
             return self.client.post(f'/{path}/', form)
 
     def hello(self, name='hunt', **form):
-        answer = self.post('clientHello', name=name, client_ver=55, **form).json()
+        answer = self.post('clientHello', name=name, client_ver=56, **form).json()
         self.token = answer.get('token', self.token)
         return answer
 
@@ -80,7 +80,7 @@ class Settings(Api):
     def test_the_client_to_fetch_is_nyayos_own(self):
         answer = self.client.get('/clientVersionRef/').json()
         self.assertEqual(sorted(answer), ['client_sha256', 'client_url', 'client_version'])
-        self.assertEqual((answer['client_version'], answer['client_url']), (55, 'http://testserver/client.zip'))
+        self.assertEqual((answer['client_version'], answer['client_url']), (56, 'http://testserver/client.zip'))
         self.assertNotIn('github', json.dumps(answer))
 
     def test_the_fastchess_to_build(self):
@@ -94,9 +94,9 @@ class Settings(Api):
             'path': 'ob_build', 'compilers': ['g', 'clang'], 'cpuflags': ['POPCNT'], 'systems': ['Linux', 'Windows'],
             'private': False})
 
-    @override_settings(NYAYO_CLIENT_VERSION=55)
+    @override_settings(NYAYO_CLIENT_VERSION=56)
     def test_the_version_may_be_a_setting(self):
-        self.assertEqual(self.client.get('/clientVersionRef/').json()['client_version'], 55)
+        self.assertEqual(self.client.get('/clientVersionRef/').json()['client_version'], 56)
 
 
 class SigningIn(Api):
@@ -134,8 +134,8 @@ class SigningIn(Api):
     def test_an_old_client_is_told_to_update(self):
         self.hello()
         answer = self.post('clientWorkerInfo', token=self.token, system_info=json.dumps({**SYSTEM, 'client_ver': 53})).json()
-        self.assertEqual(answer, {'error': 'Bad Client Version: Expected 55'})
-        self.assertEqual(self.post('clientHello', name='old', client_ver=53).json(), {'error': 'Bad Client Version: Expected 55'})
+        self.assertEqual(answer, {'error': 'Bad Client Version: Expected 56'})
+        self.assertEqual(self.post('clientHello', name='old', client_ver=53).json(), {'error': 'Bad Client Version: Expected 56'})
         self.assertEqual(Machine.objects.count(), 1)
 
     def test_it_supports_only_the_engines_it_can_build(self):
