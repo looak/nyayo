@@ -119,6 +119,25 @@ def test_waiting_until_a_worker_reaches_running():
     assert document.match_state(other.test) == ('running', None)
 
 
+def test_a_negative_number_from_a_worker_is_stored_as_0():
+    # A wall clock that stepped back gave a bench -0.2 seconds; the match schema wants 0 or more
+    result = make_result()
+    steps.start_walk(result)
+    report(result, 'bench', 'dev', 'passed', seconds='-0.2', nodes='-5', nps='-1')
+    row = Step.objects.get(result=result, step='bench', side='dev')
+    assert (row.seconds, row.nodes, row.nps) == (0, 0, 0)
+    report(result, 'compile', 'dev', 'failed', seconds='nan')
+    assert Step.objects.get(result=result, step='compile', side='dev').seconds is None
+
+def test_a_row_already_holding_negative_numbers_still_builds_a_valid_document():
+    result = make_result()
+    steps.start_walk(result)
+    report(result, 'bench', 'dev', 'passed', seconds='1', nodes='5', nps='7')
+    Step.objects.filter(result=result, step='bench').update(seconds=-0.2, nodes=-5, nps=-1, tries=-2)
+    rows = steps.walk_document(Step.objects.filter(result=result), lambda x: None if x is None else x.isoformat())
+    bench = [x for x in rows if x['step'] == 'bench' and x.get('side') == 'dev'][0]
+    assert bench['seconds'] == 0 and bench['nodes'] == 0 and bench['nps'] == 0 and 'tries' not in bench
+
 class Walk(TestCase):
     pass
 

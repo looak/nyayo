@@ -54,7 +54,7 @@ class Hello(Api):
         self.hello('hunt')
         Machine.objects.update(state='turned_away')
         self.token = None
-        reply = self.client.post('/clientHello/', {'name': 'HUNT', 'client_ver': 55})
+        reply = self.client.post('/clientHello/', {'name': 'HUNT', 'client_ver': 56})
         self.assertEqual((reply.status_code, reply.json()['state']), (403, 'turned_away'))
         self.assertEqual(Machine.objects.count(), 1)
 
@@ -69,11 +69,11 @@ class Hello(Api):
             self.token = None
             self.hello('w%d' % number)
         self.token = None
-        reply = self.client.post('/clientHello/', {'name': 'one more', 'client_ver': 55})
+        reply = self.client.post('/clientHello/', {'name': 'one more', 'client_ver': 56})
         self.assertEqual(reply.status_code, 429)
         self.assertEqual(Machine.objects.count(), registration.PENDING_LIMIT)
         code, _ = registration.make_code('owner')
-        answer = self.client.post('/clientHello/', {'name': 'one more', 'client_ver': 55, 'join_code': code}).json()
+        answer = self.client.post('/clientHello/', {'name': 'one more', 'client_ver': 56, 'join_code': code}).json()
         self.assertEqual(answer['state'], 'approved')
 
     def test_a_pending_worker_with_no_approval_goes_after_seven_days(self):
@@ -100,20 +100,20 @@ class JoinCodes(Api):
         self.assertEqual(answer['state'], 'approved')
         self.assertEqual(JoinCode.objects.get().used_by_id, answer['worker_id'])
         self.token = None
-        reply = self.client.post('/clientHello/', {'name': 'other', 'client_ver': 55, 'join_code': code})
+        reply = self.client.post('/clientHello/', {'name': 'other', 'client_ver': 56, 'join_code': code})
         self.assertEqual((reply.status_code, reply.json()['error']), (403, 'Bad join code'))
         self.assertEqual(Machine.objects.count(), 1)
 
     def test_the_client_sends_it_as_join(self):
         code, _ = registration.make_code('owner')
-        answer = self.client.post('/clientHello/', {'name': 'hunt', 'client_ver': 55, 'join': code}).json()
+        answer = self.client.post('/clientHello/', {'name': 'hunt', 'client_ver': 56, 'join': code}).json()
         self.assertEqual((answer['state'], answer['approved']), ('approved', True))
 
     def test_an_expired_or_unknown_code_is_refused(self):
         code, row = registration.make_code('owner')
         JoinCode.objects.update(expires=timezone.now() - datetime.timedelta(seconds=1))
         for bad in (code, 'nope'):
-            reply = self.client.post('/clientHello/', {'name': 'x', 'client_ver': 55, 'join_code': bad})
+            reply = self.client.post('/clientHello/', {'name': 'x', 'client_ver': 56, 'join_code': bad})
             self.assertEqual(reply.status_code, 403)
         self.assertFalse(Machine.objects.exists())
 
@@ -390,7 +390,7 @@ class OnThePage(TestCase):
         self.assertEqual(JoinCode.objects.get().code_hash, registration.digest(code))
         self.assertNotIn(code, self.client.get('/machines').content.decode())
         self.assertIn('A code until', self.client.get('/machines').content.decode())
-        answer = self.client.post('/clientHello/', {'name': 'joiner', 'client_ver': 55, 'join_code': code}).json()
+        answer = self.client.post('/clientHello/', {'name': 'joiner', 'client_ver': 56, 'join_code': code}).json()
         self.assertEqual(answer['state'], 'approved')
         self.assertNotIn('A code until', self.client.get('/machines').content.decode())
         self.assertEqual(self.client.post('/machine-join-code', {'hours': 'x'}).status_code, 400)

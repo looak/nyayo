@@ -22,7 +22,7 @@ def make_test(**fields):
 
 def make_machine(name="hunt", state="approved", enabled=True, described=True, **info):
     """An approved worker, as one that said hello and described itself is: a row of its own, named, with a token's hash."""
-    base = dict(client_ver=55, concurrency=2, sockets=1, physical_cores=2, syzygy_max=0,
+    base = dict(client_ver=56, concurrency=2, sockets=1, physical_cores=2, syzygy_max=0,
                 cpu_flags=["POPCNT"], toolchains={"g++": "13.3.0", "gcc": "13.3.0", "make": "4.3"}, tokens={}, os_name="Linux",
                 supported=["Elephant"])
     base.update(info)

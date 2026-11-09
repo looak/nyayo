@@ -187,7 +187,7 @@ Check that the paths are those and not the `-2` ones, with `grep -E '^NYAYO_(DAT
 
 nyayo is OpenBench's server: it makes the tests, hands the workers their work, and takes their results.
 The worker that plays is OpenBench's own `Client/`, which nyayo carries (`nyayo/client/`, from looak/openbench_eg `6a072fa`) and hands out at `/client.zip`, with the registration of *Workers register themselves* below: no username and no password. OpenBench's own server is not run any more: nyayo
-is what the workers talk to (`/client.zip`, client 55).
+is what the workers talk to (`/client.zip`, client 56).
 
 **What is new in the environment**
 
@@ -208,7 +208,7 @@ address the worker uses. From the worker's machine:
 curl -s http://172.16.100.11:8001/clientVersionRef/
 ```
 
-answers `{"client_version": 55, "client_url": "http://172.16.100.11:8001/client.zip", "client_sha256": "..."}`
+answers `{"client_version": 56, "client_url": "http://172.16.100.11:8001/client.zip", "client_sha256": "..."}`
 (`clientVersionRef` needs nothing, so a client can always update itself, and from nyayo, not GitHub). There is no path prefix for a worker to get wrong:
 with `NYAYO_SCRIPT_NAME` set it would have to be part of `-S`.
 

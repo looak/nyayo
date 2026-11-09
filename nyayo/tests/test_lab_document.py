@@ -6,7 +6,7 @@ from unittest import mock
 from django.test import TestCase, override_settings
 
 from nyayo.lab import document, steps
-from nyayo.lab.models import LogEvent
+from nyayo.lab.models import LogEvent, Step
 from nyayo.matches.ingest import validate
 from nyayo.matches.models import Match
 
@@ -82,6 +82,24 @@ class Document(TestCase):
         result.save()
         self.assertFalse(document.report_test(test).created)
         self.assertEqual(Match.objects.get().results.get().games, 2)
+
+    def test_a_step_stored_with_negative_numbers_does_not_stop_the_match_being_reported(self):
+        # babylon-wsl's clock stepped back and its bench was stored as -0.2 seconds; ingest then rejected every report
+        test = make_test()
+        result = make_result(test, make_machine())
+        steps.start_walk(result)
+        steps.record_step(result, {"step": "bench", "side": "dev", "state": "passed", "seconds": "1", "nodes": "5", "nps": "7"})
+        self.assertTrue(document.report_test(test).created)
+        Step.objects.filter(result=result, step="bench").update(seconds=-0.2, nodes=-5, nps=-1)
+        test.games, test.wins = 2, 2
+        test.save()
+        result.games, result.wins = 2, 2
+        result.save()
+        self.assertFalse(document.report_test(test).created)
+        match = Match.objects.get()
+        self.assertEqual(match.results.get().games, 2)
+        bench = [x for x in document.build_document(test)["machines"][0]["steps"] if x["step"] == "bench" and x.get("side") == "dev"][0]
+        self.assertEqual((bench["seconds"], bench["nodes"], bench["nps"]), (0, 0, 0))
 
     def test_a_failed_report_is_logged_and_not_raised(self):
         test = make_test()

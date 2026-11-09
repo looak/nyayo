@@ -121,7 +121,7 @@ def test_the_failed_step_is_reported_with_its_message_and_the_worker_leaves_the_
     sent = []
     monkeypatch.setattr(worker.ServerReporter, 'report_step', lambda config, step, side, state, **fields: sent.append((step, side, state, fields)))
     with pytest.raises(worker.utils.OpenBenchRunnerFailedException) as raised:
-        worker.fail_running(None, 'Match runner #0 ended with no finished games', 'the log', worker.time.time() - 2)
+        worker.fail_running(None, 'Match runner #0 ended with no finished games', 'the log', worker.time.monotonic() - 2)
     assert str(raised.value) == 'Match runner #0 ended with no finished games'
     (step, side, state, fields), = sent
     assert (step, side, state) == ('running', None, 'failed')

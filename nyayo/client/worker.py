@@ -66,7 +66,7 @@ from client import save_token
 
 ## Basic configuration of the Client. These timeouts can be changed at will
 
-CLIENT_VERSION   = 55 # Client version to send to the Server
+CLIENT_VERSION   = 56 # Client version to send to the Server
 TIMEOUT_HTTP     = 30 # Timeout in seconds for HTTP requests
 TIMEOUT_ERROR    = 60 # Timeout in seconds when any errors are thrown
 TIMEOUT_WORKLOAD = 60 # Timeout in seconds between workload requests
@@ -1374,7 +1374,8 @@ def complete_workload(config):
     # Launch and manage all of the match runner workers
     with ThreadPoolExecutor(max_workers=runner_cnt) as executor:
 
-        timestamp  = time.time()
+        timestamp  = time.time() # Names the PGN files, so it is the wall clock
+        began      = time.monotonic() # Times the running step: the wall clock may jump back
         results    = multiprocessing.Queue()
         abort_flag = threading.Event()
 
@@ -1393,7 +1394,7 @@ def complete_workload(config):
             # Match runners that played nothing, or died, are a failed step
             failure = runner_failure(tasks, abort_flag)
             if failure:
-                fail_running(config, failure[0], failure[1], timestamp)
+                fail_running(config, failure[0], failure[1], began)
 
         # Kill everything during an Exception, but print it
         except (Exception, KeyboardInterrupt) as error:
@@ -1403,7 +1404,7 @@ def complete_workload(config):
             # An exception while playing is a failed step too, unless it is the server's to handle or already reported
             if isinstance(error, Exception) and not isinstance(error, (BadVersionException, utils.OpenBenchFatalWorkerException,
                                                                     utils.OpenBenchRunnerFailedException)):
-                fail_running(config, 'Playing failed: %s: %s' % (type(error).__name__, error), traceback.format_exc()[-4096:], timestamp)
+                fail_running(config, 'Playing failed: %s: %s' % (type(error).__name__, error), traceback.format_exc()[-4096:], began)
             raise
 
         pgn_files = [MatchRunner.pgn_name(config, timestamp, x) for x in range(runner_cnt)]
@@ -1455,7 +1456,7 @@ def safe_download_engine(config, branch, net_path):
     sha       = config.workload['test'][branch]['sha']
     out_path  = os.path.join('Engines', utils.engine_binary_name(engine, sha, net_path))
     cached    = bool(utils.check_for_engine_binary(out_path))
-    started   = time.time()
+    started   = time.monotonic()
 
     ServerReporter.report_step(config, 'compile', branch, 'active')
 
@@ -1464,7 +1465,7 @@ def safe_download_engine(config, branch, net_path):
 
     except utils.OpenBenchBuildFailedException as error:
         ServerReporter.report_step(config, 'compile', branch, 'failed',
-            detail=failure_line(error.logs), log=error.logs, seconds=round(time.time() - started, 1))
+            detail=failure_line(error.logs), log=error.logs, seconds=round(time.monotonic() - started, 1))
         raise
 
     except (BadVersionException, utils.OpenBenchFatalWorkerException):
@@ -1475,7 +1476,7 @@ def safe_download_engine(config, branch, net_path):
         raise
 
     ServerReporter.report_step(config, 'compile', branch, 'passed',
-        seconds=round(time.time() - started, 1), cached='true' if cached else 'false')
+        seconds=round(time.monotonic() - started, 1), cached='true' if cached else 'false')
     return name
 
 def download_engine(config, branch, net_path):
@@ -1533,7 +1534,7 @@ def safe_run_benchmarks(config, branch, engine):
     expected = int(config.workload['test'][branch]['bench'])
     binary   = os.path.join('Engines', engine)
 
-    started = time.time()
+    started = time.monotonic()
     ServerReporter.report_step(config, 'bench', branch, 'active')
 
     try:
@@ -1545,12 +1546,12 @@ def safe_run_benchmarks(config, branch, engine):
         if detail.startswith('Wrong Bench') and expected:
             detail = 'Wrong bench: %s, expected %d' % (detail.split(':')[-1].strip(), expected)
         ServerReporter.report_step(config, 'bench', branch, 'failed',
-            detail=detail, seconds=round(time.time() - started, 1))
+            detail=detail, seconds=round(time.monotonic() - started, 1))
         ServerReporter.report_bad_bench(config, error.message)
         raise
 
     ServerReporter.report_step(config, 'bench', branch, 'passed',
-        seconds=round(time.time() - started, 1), nodes=nodes, nps=speed)
+        seconds=round(time.monotonic() - started, 1), nodes=nodes, nps=speed)
 
     print('Bench for %s is %d' % (name, nodes))
     print('Speed for %s is %d' % (name, speed))
@@ -1663,7 +1664,7 @@ def fail_running(config, message, log, started):
     # Playing did not work: the last step of the walk failed, which the server shows like a failed build. It answers how
     # long the test is left for, which leave_for_a_while uses.
     ServerReporter.report_step(config, 'running', None, 'failed',
-        detail=message[:500], log=log, seconds=round(time.time() - started, 1))
+        detail=message[:500], log=log, seconds=round(time.monotonic() - started, 1))
     raise utils.OpenBenchRunnerFailedException(message, log)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
