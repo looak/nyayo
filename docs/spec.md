@@ -431,6 +431,29 @@ with OpenBench's notice. Tunes are below; datagens come later.
   ids are not reused. The Matches list has a checkbox per row, for staff only, with one *Delete…* going to the same
   confirm page for all that are chosen. The sidebar group has the same one *Delete…*.
 
+### Lab: the test API
+
+A script makes a test the way the page does (`nyayo/lab/tests_api.py`; Elephant's `test/ob_sprt.py` is its client).
+
+- **The token.** `lab.ApiToken` (name, `token_hash` the sha256 as `registration.digest` makes it, user, created, `last_used`,
+  `revoked`). `manage.py api_token create <name> --user <username>` prints the token once; `list` and `revoke <name>`. In
+  the admin it is read only, with a *Revoke* action. A call sends `Authorization: Bearer <token>` and acts as the token's
+  user (an inactive user's token, or a revoked one, is as good as unknown); it is not CSRF checked. No token, a bad or a
+  revoked one: `401 {"errors": ["..."]}`. A user who is not staff: `403` the same way. `last_used` is set on every call.
+- **`POST /api/tests`**, a JSON object: `engine` (an enabled `EngineConfig`'s name), `preset` (one of
+  `create_test.preset_names`), `dev_branch` and `base_branch` (a branch, tag or sha), and any other field of the create
+  page by the name its form posts (`bounds`, `confidence`, `book`, `dev_tc`, `dev_options`, `priority`, `win_adj`...),
+  which overrides the engine's defaults and the preset: the values are `default_values(config, preset)` with what is sent
+  on top, values sent as strings or numbers. `"anyway": true` is the page's *Create it anyway*. An unknown field, or
+  `test_mode` `SPSA` (tunes are not made here), is a `400`. It is then `create_test.create_test(values, user, anyway)`,
+  the page's own checks (GitHub, bench, allowlist, approval by the user's rights), and `modify_test.report`.
+  `201 {"id", "match", "url" (absolute, the match page), "warnings": []}`. `400 {"errors": [...], "warnings": [...]}`
+  when the page would refuse (`errors` are its messages, in field order), when there is a warning and no `anyway` (the
+  *behind base* one, `warnings` has its text), for an unknown engine or preset (the message lists the valid names) or a
+  body that is not a JSON object.
+- **`GET /api/tests/presets?engine=Elephant`**, same token: `{"engine", "default": {...}, "presets": {"STC": {...}}}`,
+  the form's fields the page's script starts from (`engine_table`); `400` with the engine names for an unknown one.
+
 ### Lab: tunes
 
 A tune is SPSA as OpenBench has it (each pair of games plays every parameter nudged up against nudged down; the worker
@@ -719,6 +742,7 @@ data. Not built: rebuilding the database from the archive alone.
 | in | runs from `results.py` on developer machines | results schema v1 ([results-schema.md](results-schema.md)) |
 | in | matches and their games from uwanja: reports (whole, or by changes with a seq), live games whole or by `PATCH` | match schema v1 ([match-schema.md](match-schema.md)) |
 | in | the worker's calls: workloads asked for, steps, results, errors, games | the `client*` endpoints of OpenBench's Client (openbench_eg), above |
+| in | tests made from a script (`ob_sprt.py`): `POST /api/tests`, a bearer `ApiToken` | *Lab: the test API*, above |
 | in | SPRTs and fixed-games tests from OpenBench: the match whole, with `stats`; each workload's games as an upload | match schema v1, *OpenBench* |
 | in | the game reader, a binary nyayo runs: PGN on standard input, one JSON line per game | `phant-indexer`'s entries, format 1 or 2 (`indexer/README.md` in [looak/elephant](https://github.com/looak/elephant)) |
 | out | web pages for people | above |

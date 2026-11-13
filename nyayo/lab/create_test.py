@@ -66,13 +66,14 @@ def engine_table():
 
 DEFAULT_BASE = 'main'
 
-def default_values(config):
+def default_values(config, preset=None):
 
-    # What the form starts with: the engine, its defaults, its first preset
+    # What the form starts with: the engine, its defaults, its first preset (or the one named)
     names  = preset_names(config)
+    first  = preset or (names[0] if names else 'default')
     values = {
         'engine' : config.name, 'dev_branch' : '', 'base_branch' : DEFAULT_BASE, 'name' : '', 'test_kind' : 'gain',
-        'preset' : names[0] if names else '', 'dev_repo' : config.source, 'base_repo' : config.source,
+        'preset' : first if names else '', 'dev_repo' : config.source, 'base_repo' : config.source,
         'dev_bench' : '', 'base_bench' : '', 'dev_network' : '', 'base_network' : '',
         'dev_options' : 'Threads=1 Hash=8', 'base_options' : 'Threads=1 Hash=8', 'dev_tc' : '8.0+0.08', 'base_tc' : '8.0+0.08',
         'test_mode' : 'SPRT', 'bounds' : '[0.00, 5.00]', 'confidence' : '[0.05, 0.05]', 'max_games' : '',
@@ -85,7 +86,7 @@ def default_values(config):
         'spsa_iterations' : '5000', 'spsa_pairs_per' : '4', 'spsa_update_rule' : 'MOMENTUM', 'spsa_check_every' : '',
         'spsa_check_games' : '500', 'spsa_then_sprt' : '',
     }
-    values.update(preset_values(config, names[0] if names else 'default'))
+    values.update(preset_values(config, first))
     if not values['book']:
         book = Book.objects.filter(enabled=True).order_by('name').first()
         values['book'] = book.name if book else ''

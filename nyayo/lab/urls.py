@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import client_views, worker_api as api
+from . import client_views, tests_api, worker_api as api
 
 # The worker's endpoints, at the paths OpenBench's Client has always used
 urlpatterns = [
@@ -24,4 +24,6 @@ urlpatterns = [
     path("clientSubmitNPSStats/", api.client_submit_nps_stats),
     path("clientHeartbeat/", api.client_heartbeat),
     path("clientSubmitPGN/", api.client_submit_pgn),
+    path("api/tests", tests_api.create, name="api_tests"),
+    path("api/tests/presets", tests_api.presets, name="api_tests_presets"),
 ]
