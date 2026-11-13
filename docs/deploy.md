@@ -522,6 +522,19 @@ python test/results.py sync                         # uploads every run nyayo do
 `test/smoke.sh` and Elephant's post-commit hook sync on their own after that. Deleting `logs/results/uploaded.json`
 makes the next sync upload everything again.
 
+## Tokens for making tests from a script
+
+Elephant's `test/ob_sprt.py` signs in with a token of its own, made by the owner for a user (the superuser, to have the
+test approved). On bobby, in the nyayo checkout:
+
+```sh
+python manage.py api_token create ob_sprt --user <username>    # in the conda env; prints the token once
+```
+
+Put it in the environment of the machine that runs the script, where `ob_sprt.py` reads it (see its `--help` for the
+variable names; the URL is nyayo's, `http://172.16.100.11:8001`). `api_token list` shows them and when they were last
+used; `api_token revoke ob_sprt` (or *Revoke* in the admin, under Lab, Api tokens) makes it a `401` at once.
+
 ## Behind a reverse proxy later
 
 If nyayo moves behind nginx or Caddy at a path such as `https://bobby.home/nyayo`, set `NYAYO_SCRIPT_NAME=/nyayo`,

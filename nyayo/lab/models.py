@@ -168,6 +168,20 @@ class JoinCode(Model):
     def __str__(self):
         return '%s..., until %s' % (self.code_hash[:8], self.expires)
 
+class ApiToken(Model):
+
+    # A token a script signs in with, made by the owner with `manage.py api_token create`: shown once, kept as a hash
+    # (registration.digest), for a user whose rights it has. `revoked` set means a 401.
+    name       = CharField(max_length=100, unique=True)
+    token_hash = CharField(max_length=64, unique=True)
+    user       = ForeignKey(User, CASCADE, related_name='api_tokens')
+    created    = DateTimeField(default=timezone.now)
+    last_used  = DateTimeField(null=True, blank=True)
+    revoked    = DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return '%s (%s)%s' % (self.name, self.user.get_username(), ', revoked' if self.revoked else '')
+
 class Place(Model):
 
     # Where a box is in the world, as its owner types it ("Stockholm, SE"): the server cannot work it out on a LAN, and
