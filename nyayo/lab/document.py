@@ -177,6 +177,8 @@ def build_document(test):
                     'syzygy_wdl': test.syzygy_wdl, 'syzygy_adj': test.syzygy_adj,
                     'scale_method': test.scale_method,
                     'dev_network': test.dev_netname, 'base_network': test.base_netname,
+                    # a tune's builds (and its checks' and SPRT's) are made with the engine's tune flags: `TUNE=1`
+                    **({ 'make_args': test.make_args } if test.make_args else {}),
                 },
             },
         },

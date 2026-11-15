@@ -32,6 +32,7 @@ import sys
 
 from nyayo.lab import config, rtt, steps, utils
 from nyayo.lab.document import report_test
+from nyayo.lab import makeargs
 from nyayo.lab.models import Book, EngineConfig, Machine, Result, Test
 from nyayo.lab.spsa_utils import spsa_workload_assignment_dict
 
@@ -259,6 +260,7 @@ def workload_to_dictionary(test, result, machine):
         'play_reverses' : test.play_reverses,
         'scale_method'  : test.scale_method,
         'scale_nps'     : test.scale_nps,
+        'make_args'     : makeargs.words(test.make_args), # extra `make` words of both builds, [] for most tests
     }
 
     # Book could have been deleted after this workload was created

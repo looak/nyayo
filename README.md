@@ -47,7 +47,9 @@ and both sides then play it at the value given. The tune keeps a snapshot of eve
 values so far against the start every 5% (an outcome check: a games test of its own, with its Elo and 95% interval kept on the
 snapshot), and its page shows progress, how far each parameter moved lately, the outcome and each parameter as charts, and the
 result (the average of the last 20%) as C++ constants, UCI options and SPSA input. It can queue an SPRT of the result against
-the start when it ends, or at any time. Its history is served as CSV and JSON. The design is in
+the start when it ends, or at any time. An engine that only exposes its tunable options in a special build is tuned with that
+build: the engine's *Tune make args* (Elephant: `TUNE=1`) go to `make` for the tune, its checks and its SPRT, and for nothing else
+(client 57). Its history is served as CSV and JSON. The design is in
 [looak/ramani](https://github.com/looak/ramani) `plans/nyayo-2.md`, *Tunes*; what the code does is in
 [docs/spec.md](docs/spec.md), *Lab: tunes* and *Lab: tune pages*. Updating from 2.0 is `deploy/update.sh` (one migration, `lab`
 0007); nothing else changes. The smoke test (`tools/smoke`) runs a small tune.

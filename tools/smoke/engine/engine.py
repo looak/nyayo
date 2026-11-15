@@ -7,7 +7,8 @@
 # Skill (spin, default 30, 0 to 100) is the one thing a tune can find: once a test sets it, the engine plays the capturing
 # style (Strength 1) with a probability that is 1 at Skill 70, the hidden best value, and falls to 0 forty away from it, and
 # plays at random otherwise. So the closer the value is to 70, the more a game is won. An engine that is never told a Skill
-# plays as before, whatever its default says, so the other scenarios are unchanged.
+# plays as before, whatever its default says, so the other scenarios are unchanged. Skill exists only in the build made with
+# `make TUNE=1` (the makefile sets TUNE_BUILD), as Elephant's tunable constants do; a normal build exits when told one.
 #
 # The makefile turns this file into the executable the worker builds.
 
@@ -98,7 +99,8 @@ def uci_loop():
             print('option name CrashAfter type spin default 0 min 0 max 100000')
             print('option name Seed type spin default 0 min 0 max 100000')
             print('option name Strength type spin default 1 min 0 max 1')
-            print('option name Skill type spin default 30 min 0 max 100')
+            if TUNE_BUILD:
+                print('option name Skill type spin default 30 min 0 max 100')
             print('uciok', flush=True)
 
         elif tokens[0] == 'isready':
@@ -109,8 +111,12 @@ def uci_loop():
             value = ' '.join(tokens[tokens.index('value') + 1:])
             if name in options:
                 options[name] = int(value)
-            elif name == 'Skill':
+            elif name == 'Skill' and TUNE_BUILD:
                 skill = int(value)
+            elif name == 'Skill':
+                # like Elephant's normal build, which keeps its tunable constants constexpr: no such option
+                print('info string Unknown option: Skill', flush=True)
+                os._exit(2)
 
         elif tokens[0] == 'ucinewgame':
             board = chess.Board()

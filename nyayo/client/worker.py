@@ -66,7 +66,7 @@ from client import save_token
 
 ## Basic configuration of the Client. These timeouts can be changed at will
 
-CLIENT_VERSION   = 56 # Client version to send to the Server
+CLIENT_VERSION   = 57 # Client version to send to the Server
 TIMEOUT_HTTP     = 30 # Timeout in seconds for HTTP requests
 TIMEOUT_ERROR    = 60 # Timeout in seconds when any errors are thrown
 TIMEOUT_WORKLOAD = 60 # Timeout in seconds between workload requests
@@ -1335,6 +1335,9 @@ def server_request_workload(config):
 
 def complete_workload(config):
 
+    # Refuse a workload whose make words don't fit, before anything is downloaded or built
+    make_args_of(config)
+
     # Download the opening book, throws an exception on corruption
     utils.download_opening_book(
         config.workload['test']['book']['sha'   ],
@@ -1446,6 +1449,11 @@ def failure_line(logs):
             return line.strip()[:240]
     return 'Compilation failed'
 
+def make_args_of(config):
+
+    # The extra make words of the workload's builds (a tune's `TUNE=1`), checked: a word that doesn't fit refuses the workload
+    return utils.checked_make_args(config.workload['test'].get('make_args'))
+
 def safe_download_engine(config, branch, net_path):
 
     # Wraps download_engine() in the compile step of the walk: started, then passed (built now, or found
@@ -1454,7 +1462,7 @@ def safe_download_engine(config, branch, net_path):
 
     engine    = config.workload['test'][branch]['engine']
     sha       = config.workload['test'][branch]['sha']
-    out_path  = os.path.join('Engines', utils.engine_binary_name(engine, sha, net_path))
+    out_path  = os.path.join('Engines', utils.engine_binary_name(engine, sha, net_path, make_args_of(config)))
     cached    = bool(utils.check_for_engine_binary(out_path))
     started   = time.monotonic()
 
@@ -1489,14 +1497,15 @@ def download_engine(config, branch, net_path):
     source      = config.workload['test'][branch]['source']
     private     = config.workload['test'][branch]['private']
 
-    bin_name = utils.engine_binary_name(engine, commit_sha, net_path)
+    make_args = make_args_of(config)
+    bin_name  = utils.engine_binary_name(engine, commit_sha, net_path, make_args)
     out_path = os.path.join('Engines', bin_name)
 
     make_path = config.workload['test'][branch]['build']['path']
     compiler  = config.compilers[engine][0] if engine in config.compilers else config.cxx_comp
 
     try:
-        return utils.prepare_engine(engine, net_path, branch_name, source, make_path, out_path, private, compiler)
+        return utils.prepare_engine(engine, net_path, branch_name, source, make_path, out_path, private, compiler, make_args)
 
     except utils.OpenBenchBuildFailedException as error:
 

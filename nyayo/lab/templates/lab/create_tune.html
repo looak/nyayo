@@ -5,7 +5,7 @@
 {% block head %}<link rel="stylesheet" href="{% static 'lab/create_tune.css' %}"><script defer src="{% static 'lab/create_tune.js' %}"></script>{% endblock %}
 {% block content %}
 <div class="pagehead"><h1>New tune</h1>
-  <span class="muted">SPSA: the engine's tunable parameters nudged up and down in pairs of games, each step moving them toward the side that scored better.</span></div>
+  <span class="muted">SPSA: the engine's tunable parameters nudged up and down in pairs of games, each step moving them toward the side that scored better.{% if make_args %} Built with <code>{{ make_args }}</code>, which exposes them.{% endif %}</span></div>
 {% if nothing %}
 <div class="card"><p>No engine is enabled, so there is nothing to tune. An engine is added under Engines.</p></div>
 {% else %}

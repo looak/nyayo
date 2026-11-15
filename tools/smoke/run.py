@@ -201,7 +201,7 @@ class Rig:
         EngineConfig.objects.all().delete()
         EngineConfig.objects.create(
             name=ENGINE_NAME, nps=ENGINE_NPS, source=SOURCE, build_path='.', build_compilers='g++', build_cpuflags='',
-            build_systems='Linux', presets={ 'test_presets' : { 'default' : {} } })
+            build_systems='Linux', tune_make_args='TUNE=1', presets={ 'test_presets' : { 'default' : {} } })
         Book.objects.all().delete()
         Book.objects.create(name=files.BOOK_NAME, sha=files.book_sha(), source=self.file_server.add('/books/smoke.zip', files.book_zip()))
 
@@ -807,6 +807,8 @@ def tune_played(r, form, began):
     run = SPSARun.objects.get(tune_id=test_id)
     check([p.name for p in run.parameters.all()] == ['Skill'] and run.frozen == [{ 'name' : 'Seed', 'value' : 7 }], 'the tune is %s, frozen %s' % (
         [p.name for p in run.parameters.all()], run.frozen))
+    # the tune is built with the engine's tune flags (the toy engine has no Skill without them), so are its checks and SPRT
+    check(r.test(test_id).make_args == 'TUNE=1', 'the tune is built with %r' % (r.test(test_id).make_args))
     r.wait_for(lambda: r.test(test_id).finished, 300, 'the tune to finish')
     tune_done = time.time() - began
     run = SPSARun.objects.get(tune_id=test_id)
@@ -825,6 +827,7 @@ def tune_played(r, form, began):
     check(all((c.check_error is None) or c.check_error > 0 for c in checked), 'a check has an interval of zero: %s' % ([c.check_error for c in checked]))
     follow = SPSARun.objects.get(tune_id=test_id).then_test
     check(follow is not None and follow.test_mode == 'SPRT', 'no SPRT was queued after the tune')
+    check(follow.make_args == 'TUNE=1' and all(c.check_test.make_args == 'TUNE=1' for c in checked), 'the checks or the SPRT after are not built with the tune flags')
     r.wait_for(lambda: r.test(follow.id).finished, 240, 'the SPRT after to finish')
     sprt = r.test(follow.id)
     check(sprt.passed or sprt.failed, 'the SPRT after ended with neither a pass nor a fail')

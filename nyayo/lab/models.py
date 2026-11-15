@@ -33,6 +33,8 @@ from django.db.models import JSONField, ForeignKey, DateTimeField, OneToOneField
 from django.db.models import CASCADE, PROTECT, SET_NULL, Model, TextChoices
 from django.utils import timezone
 
+from .makeargs import validate as validate_make_args
+
 from nyayo.lab.ids import match_id
 
 class Engine(Model):
@@ -71,6 +73,10 @@ class EngineConfig(Model):
     build_compilers = CharField(max_length=64, blank=True)
     build_cpuflags  = CharField(max_length=64, blank=True)
     build_systems   = CharField(max_length=64, blank=True)
+
+    # Extra `make` arguments (NAME=value words, `TUNE=1`) of the build a tune plays: an engine that only exposes its tunable
+    # options in a special build says how to make it here. Blank: the engine has no such build.
+    tune_make_args  = CharField(max_length=128, blank=True, default='', db_default='', validators=[validate_make_args])
 
     # { 'test_presets' : {...}, 'tune_presets' : {...}, 'datagen_presets' : {...} }
     presets = JSONField(default=dict, blank=True)
@@ -291,6 +297,10 @@ class Test(Model):
     info        = CharField(max_length=1024, default='', blank=True)
     name        = CharField(max_length=200, default='', blank=True) # The match's name in nyayo, if not <engine> <branch> vs <branch>
     runner      = CharField(max_length=16, default='fastchess') # What played its games
+
+    # Extra `make` arguments of the build, copied from the engine's tune_make_args for a tune and what it makes (its outcome
+    # checks and the SPRT after it), blank for every other test
+    make_args  = CharField(max_length=128, blank=True, default='', db_default='', validators=[validate_make_args])
 
     # Opening book settings
     book_name  = CharField(max_length=32)

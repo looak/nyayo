@@ -127,13 +127,14 @@ def start_snapshot(run):
 def queue_test(tune, name, dev_values, base_values, **fields):
 
     # A test of the tune's engine at its commit and time control, the tune's options and the frozen values on both
-    # sides, dev playing `dev_values` and base `base_values`. Returns the Test, reported once committed.
+    # sides, dev playing `dev_values` and base `base_values`, built the way the tune is (its make_args: the options only
+    # exist in that build). Returns the Test, reported once committed.
     from . import modify_test
 
     run  = tune.spsa_run
     test = Test(
         author=fields.pop('author', None) or tune.author, name=name[:200], info=fields.pop('info', ''),
-        upload_pgns=tune.upload_pgns, runner=tune.runner, book_name=tune.book_name,
+        upload_pgns=tune.upload_pgns, runner=tune.runner, book_name=tune.book_name, make_args=tune.make_args,
         dev=tune.dev, dev_repo=tune.dev_repo, dev_engine=tune.dev_engine, dev_network=tune.dev_network,
         dev_netname=tune.dev_netname, dev_time_control=tune.dev_time_control,
         dev_options=append_options(tune.dev_options, as_options(run, dev_values)),
