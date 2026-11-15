@@ -14,6 +14,11 @@
   .current .figures b { display: block; font-size: 1.5rem; color: var(--bright); font-variant-numeric: tabular-nums; }
   .current .figures span { font-size: .75rem; color: var(--muted); }
   table.exports form { display: inline; }
+  details.players { position: relative; font-size: .85rem; }
+  details.players .list { position: absolute; right: 0; z-index: 5; background: var(--card, #fff); border: 1px solid #8884;
+                          padding: .5rem; max-height: 18rem; overflow: auto; min-width: 22rem; }
+  details.players .list label { display: block; color: inherit; font-size: .85rem; }
+  .exports-head { flex-wrap: wrap; }
   td.wdl-cell { min-width: 16rem; }
   .small-line { display: block; font-size: .78rem; margin-bottom: .15rem; }
   .wdl-bar { display: flex; height: 18px; border-radius: 3px; overflow: hidden; font-size: .7rem; font-weight: 700;
@@ -28,7 +33,11 @@
   <h1>Exports</h1><span class="muted">position datasets for the tuner</span>
   <form method="post">{% csrf_token %}<input type="hidden" name="action" value="new">
     <label class="merge" title="each position written once, with its results averaged"><input type="checkbox" name="merge"> merge</label>
-    <button class="act">New dataset</button></form>
+    <label class="merge" title="no games that began before this date; blank for no limit">no games before <input type="date" name="from"></label>
+    <button class="act">New dataset</button>
+    {% if players %}<details class="players"><summary>Players <span class="muted">none picked: every player</span></summary>
+      <div class="list">{% for name, games, usable in players %}<label><input type="checkbox" name="player" value="{{ name }}"> {{ name }} <span class="muted">{{ games|thousands }} games{% if usable != games %}, {{ usable|thousands }} usable{% endif %}</span></label>{% endfor %}</div>
+      <span class="muted">a game goes in when either side is a player picked</span></details>{% endif %}</form>
 </div>
 
 {% if current %}{% with d=current %}
@@ -54,7 +63,7 @@
     <tbody>
     {% for d in datasets %}
       <tr>
-        <td><a href="{% url 'export' d.pk %}">Dataset {{ d.pk }}</a>{% if d.note %} <span class="muted">{{ d.note|truncatechars:60 }}</span>{% endif %}</td>
+        <td><a href="{% url 'export' d.pk %}">Dataset {{ d.pk }}</a>{% if d.filters %} <span class="muted">{{ d.filters|truncatechars:80 }}</span>{% endif %}{% if d.note %} <span class="muted">{{ d.note|truncatechars:60 }}</span>{% endif %}</td>
         <td>{% if d.state == "requested" %}<span class="badge stopped">queued</span>{% elif d.state == "running" %}<span class="badge running">running</span>{% elif d.state == "done" %}<span class="badge finished">done</span>{% else %}<span class="badge error" title="{{ d.error }}">failed</span>{% endif %}</td>
         <td class="nowrap" title="requested {{ d.requested_at|date:'Y-m-d H:i' }}">{{ d.requested_at|timesince }}</td>
         <td class="num">{% if d.state == "done" %}{{ d.positions|thousands }}{% endif %}</td>

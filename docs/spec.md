@@ -226,8 +226,9 @@ its export. The games page below filters by match and by opening; a position is 
 **Position datasets** (milestone 10) are made by the worker, as jobs: requested from the Exports page (`/exports`)
 or `POST /api/exports` with a machine token, one at a time, and only when there is nothing else to do, a batch a
 turn, so uploads never wait behind one. The worker resolves the selection to a manifest of sealed batches and their
-games (V1: every game that read and has a result, ended by rule, resignation or adjudication, inferred ones included;
-the filters are `nyayo.matches.selection`, which the games page shares), then feeds each batch's chosen games, as
+games (every game that read and has a result, ended by rule, resignation or adjudication, inferred ones included, and,
+if asked, **limited to players and a date**: see below; the filters are `nyayo.matches.selection`, which the games
+page shares), then feeds each batch's chosen games, as
 stored, to one `phant-indexer --draw 10 --quiet --seed S` process (with `--merge` when the dataset asks for it) open
 from the first batch to the last,
 so positions are deduped across the dataset, and writes its `<fen> [result]` lines to `positions-<id>.txt.zst` in
@@ -244,7 +245,7 @@ book's minimum as a `[DrawMinPly "P"]` tag in the copy fed (the stored games are
 standard input over `--min-ply` (looak/elephant#34). The Exports page (V1) is one list: every dataset, newest
 first, with its state (queued, running, done, failed), age, positions and whether its file is there or was deleted
 and needs rebuilding; a download link where the file is, a Rebuild button where it's gone; the dataset in progress on
-top with its progress, the page refreshing while one runs; and a New dataset button, with a merge checkbox. Each row shows its draw's settings and quiet share in a line (`10/game · merged · 80% quiet`) over a bar of
+top with its progress, the page refreshing while one runs; and a New dataset button, with a merge checkbox, a date field (*no games before*) and a Players list (see below). Each row shows its draw's settings and quiet share in a line (`10/game · merged · 80% quiet`) over a bar of
 the written positions' white wins, draws and black wins in green, grey and red, each share to one decimal on it, and
 links to the dataset's own page (`/exports/{id}`), built like an SPRT's or a gauntlet's: tiles (positions written,
 games used, quiet positions a game, when it finished, with the download or a Rebuild), the results bar, three rings
@@ -252,7 +253,22 @@ games used, quiet positions a game, when it finished, with the download or a Reb
 candidate positions past the first ply: written, duplicates dropped or merged into one, quiet but not drawn, not
 quiet), the quiet positions a game (mean, median, 5th percentile, minimum, each with a tooltip saying what it is),
 every figure the reader's `--stats` wrote (`"stats": 1`, read through `datasets.STATS`), and the settings (the seed and
-book map among them) and record. No filter form yet.
+book map among them) and record.
+
+**Dataset filters** (both optional, together or alone; none is every game, as before). *Players*: the engines' names
+as they report themselves over UCI, which is what the PGN's `White` and `Black` tags carry (fastchess writes `id name`
+there, e.g. `Elephant 1.4.0`; it is not `matches.Engine`'s name and version, which can differ), kept on each card
+(`white_name`, `black_name`, the `names` extractor). A game is taken when **either side** is one of the players picked.
+The New dataset form lists every player in the catalogue with how many games it has (and how many of those a dataset
+could take, when fewer), most games first; `POST /api/exports` takes `players`, a list of those names, an unknown one is
+`400` naming it. *Date*: no games that began before a date (`from`, `YYYY-MM-DD`, UTC midnight, the form's *no games
+before*; a bad date is `400`). A game's start is its own `GameStartTime`, else its `GameEndTime`, else (a game with
+neither) its match's `started_at`; a game none of them dates is left out when a date is asked. This is not the card's
+`played_at`, which prefers a finish and falls back to dates and arrival times. Both filters are kept in the dataset's
+`selection` (`players`, `since`) and shown on its row and page (`Elephant 1.4.0, Stash 36 · from 2026-10-01`); the
+manifest is resolved once, so a rebuild reads the same games and the sha256 check holds. The games page takes them too:
+`?player=` (repeatable) and `?from=`. The cards get these columns by `manage.py reindex --only names` (index schema 4),
+and games kept before it are not found by either filter until it has run.
 
 ### Matches: SPRT viewer
 
@@ -685,7 +701,7 @@ for the game page's polled fragment. The site has one colour scheme, dark.
 | `/matches/{id}/workers` | the SPRT page's Workers area alone, as JSON, for its poll |
 | `/matches/{id}` | a head with the match's state and runner, Pi-hole tiles of the figures that matter (a gauntlet: played, performance, score, time to go; an SPRT: games, Elo, LLR, time to go), the settings, an opponent per card or per row of a list (the choice is remembered in a cookie): counts, score, Elo ± error, pentanomial, rating, faults; overall with the performance rating and a table to copy; an opponent can be left out of the figures from the page; a small board for every game in play, each a link to its game and drawn in the browser by chessground (`matches/minis.js`); the SPRT card when present; the games stored as data (and the uploads waiting or refused), with a link to their export; and the games, kept ones included: playing, cut off, scheduled, finished. Refreshes while the match runs. A match that isn't running never shows a game as playing |
 | `/matches/{id}/games/{game}` | a large board with a bar and a clock per engine, an eval bar from white's side, a card per engine (score, depth, time, nodes, nps, PV), the moves in a scrolling list, and graphs per metric with a line per engine (the eval graph from white's side too); stepping through the game by click or arrow keys. The board is lichess's chessground (9.1.1, GPL-3.0, vendored under `nyayo/matches/static/vendor/`), drawn in the browser from every position the page embeds, so a step shows at once and a move animates; the rest of the page then follows from the server. A game is read from its file, or from its batch once it is kept |
-| `/games` | Pi-hole's query log: a filter bar that opens, and every game kept as data, newest first, 64 to a page, its row tinted by a win or a loss for the engine under test: when it was played (a time only where the game has one), its id (a link to its page), white and black (from the card's colour and the match's engines), its moves, result (and win, draw or loss for the engine under test), how it ended (deduced endings marked), the book position it started from with a link to the other games from it, and the match it came from. `?match=`, `?result=` (win, draw, loss), `?ended=` (a rule such as `checkmate` or `repetition`, or another ending such as `resignation` or `time_forfeit`), `?moves_from=` and `?moves_to=` (whole moves) and `?opening=` (16 hex digits) filter it, all together; a bad `ended`, moves or opening is `400`. It reads a page of cards from the index and fills in matches and engines for those 64 rows, so it takes about 0.2 s wherever it is in the list, and it shows a game once the worker has put it away. There are no opening names: the books start 16 plies in, and lichess's table names 0.2% of the games |
+| `/games` | Pi-hole's query log: a filter bar that opens, and every game kept as data, newest first, 64 to a page, its row tinted by a win or a loss for the engine under test: when it was played (a time only where the game has one), its id (a link to its page), white and black (from the card's colour and the match's engines), its moves, result (and win, draw or loss for the engine under test), how it ended (deduced endings marked), the book position it started from with a link to the other games from it, and the match it came from. `?match=`, `?result=` (win, draw, loss), `?ended=` (a rule such as `checkmate` or `repetition`, or another ending such as `resignation` or `time_forfeit`), `?moves_from=` and `?moves_to=` (whole moves), `?opening=` (16 hex digits), `?player=` (an engine's name as it reports itself, repeatable: a game of either side) and `?from=` (a date, `YYYY-MM-DD`: no games that began before it, as for datasets) filter it, all together; a bad `ended`, moves, opening or date is `400`. It reads a page of cards from the index and fills in matches and engines for those 64 rows, so it takes about 0.2 s wherever it is in the list, and it shows a game once the worker has put it away. There are no opening names: the books start 16 plies in, and lichess's table names 0.2% of the games |
 | `/sign-in`, `/sign-out` | Django's own login against the admin's users (`LOGIN_URL`), for staff users only: anyone else, or a wrong password, is refused with the form's reason. `?next=` goes back to the page that asked, and only to this site. Signing out is a `POST` from the top bar |
 | `/create/test`, `/create/test/lookup`, `/create/test/branches`, `/tests/{id}/{stop,restart,approve,unapprove}`, `/matches-remove`, `/matches-removed`, `/matches-restore` | the lab's page that creates a test, the lookup it asks as a branch is typed, the branch names it suggests, the four actions on a test, and the pages that take matches away and bring them back: all staff only, as above |
 | `/create/tune` | the create-tune page (*Lab: tune pages*). Staff only |

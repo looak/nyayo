@@ -31,7 +31,7 @@
 <div class="pagehead">
   <h1>Dataset {{ d.pk }}</h1>
   {% if d.state == "requested" %}<span class="badge stopped">queued</span>{% elif d.state == "running" %}<span class="badge running">running</span>{% elif d.state == "done" %}<span class="badge finished">done</span>{% else %}<span class="badge error">failed</span>{% endif %}
-  <span class="muted">{{ settings.compact }} · requested {{ d.requested_at|date:"Y-m-d H:i" }}{% if d.requested_by %} by {{ d.requested_by }}{% endif %}{% if d.note %} · {{ d.note }}{% endif %}</span>
+  <span class="muted">{{ settings.compact }}{% if filters %} · {{ filters }}{% endif %} · requested {{ d.requested_at|date:"Y-m-d H:i" }}{% if d.requested_by %} by {{ d.requested_by }}{% endif %}{% if d.note %} · {{ d.note }}{% endif %}</span>
 </div>
 
 {% with f=stats.found %}
@@ -97,7 +97,7 @@
     <h3 class="box-title">Settings and record <span class="right"><a href="{% url 'api_export' d.pk %}">JSON, with the manifest</a></span></h3>
     <table class="figures">
       {% for label, value in settings.rows %}<tr><td class="muted">{{ label }}</td><td>{{ value }}</td></tr>{% endfor %}
-      <tr><td class="muted">selection</td><td>endings {{ d.selection.endings|join:", " }}</td></tr>
+      <tr><td class="muted">selection</td><td>endings {{ d.selection.endings|join:", " }}{% if d.selection.players %}; games of {{ d.selection.players|join:", " }} (either side){% endif %}{% if d.selection.since %}; began from {{ d.selection.since }}{% endif %}</td></tr>
       <tr><td class="muted">batches</td><td>{{ d.batches_total|thousands }}, each with its sha256 in the manifest</td></tr>
       <tr><td class="muted">requested</td><td>{{ d.requested_at|date:"Y-m-d H:i:s" }}{% if d.requested_by %} by {{ d.requested_by }}{% endif %}</td></tr>
       {% if d.started_at %}<tr><td class="muted">ran</td><td>{{ d.started_at|date:"Y-m-d H:i:s" }}{% if d.finished_at %} to {{ d.finished_at|date:"H:i:s" }}{% endif %}</td></tr>{% endif %}

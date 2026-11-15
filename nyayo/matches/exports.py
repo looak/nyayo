@@ -16,7 +16,7 @@ from django.views.decorators.http import require_http_methods
 
 from nyayo.runs.views import machine_for, text, unauthorized
 
-from . import datasets
+from . import datasets, selection
 from .models import Dataset
 
 NOTE_MAX = 2000
@@ -49,8 +49,8 @@ def stamp(when):
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def api_exports(request):
-    """GET: every dataset, newest first. POST, with a machine's token: a new one, `{"note": ..., "merge": ...}`
-    optional; 201."""
+    """GET: every dataset, newest first. POST, with a machine's token: a new one, `{"note": ..., "merge": ...,
+    "players": [...], "from": "2026-10-01"}`, all optional; 201, or 400 naming an unknown player or a bad date."""
     if request.method == "GET":
         return JsonResponse({"exports": [described(d, request) for d in Dataset.objects.all()]})
     machine = machine_for(request)
@@ -60,11 +60,18 @@ def api_exports(request):
         body = json.loads(request.body or b"{}")
     except ValueError:
         return text(400, "the body must be JSON, or empty")
+    names = body.get("players", []) if isinstance(body, dict) else None
     if (not isinstance(body, dict) or not isinstance(body.get("note", ""), str)
-            or not isinstance(body.get("merge", False), bool)):
-        return text(400, 'the body is {"note": "...", "merge": false}, both optional')
-    dataset = datasets.request(requested_by=machine.name, note=body.get("note", "")[:NOTE_MAX],
-                               merge=body.get("merge", False))
+            or not isinstance(body.get("merge", False), bool) or not isinstance(names, list)
+            or not all(isinstance(name, str) for name in names) or not isinstance(body.get("from") or "", str)):
+        return text(400, 'the body is {"note": "...", "merge": false, "players": ["Elephant 1.4.0"], '
+                         '"from": "2026-10-01"}, all optional')
+    try:
+        dataset = datasets.request(requested_by=machine.name, note=body.get("note", "")[:NOTE_MAX],
+                                   merge=body.get("merge", False), players=names,
+                                   since=selection.parse_since(body.get("from")))
+    except selection.BadSelection as error:
+        return text(400, str(error))
     return JsonResponse(described(dataset, request), status=201)
 
 
@@ -101,7 +108,12 @@ def exports_page(request):
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "new":
-            datasets.request(requested_by="page", merge=request.POST.get("merge") == "on")
+            try:
+                datasets.request(requested_by="page", merge=request.POST.get("merge") == "on",
+                                 players=request.POST.getlist("player"),
+                                 since=selection.parse_since(request.POST.get("from")))
+            except selection.BadSelection as error:
+                return text(400, str(error))
         elif action == "rebuild":
             dataset = get_object_or_404(Dataset, pk=request.POST.get("id") or 0)
             if dataset.state == "done" and dataset.file_deleted_at is not None:
@@ -111,9 +123,11 @@ def exports_page(request):
     for dataset in rows:
         dataset.stats_view = datasets.stats_view(dataset.stats)
         dataset.settings_view = datasets.settings_view(dataset.draw)
+        dataset.filters = datasets.selection_of(dataset).label()
     current = next((d for d in rows if d.state == "running"), None) or next(
         (d for d in reversed(rows) if d.state == "requested"), None)
-    return render(request, "matches/exports.html", {"datasets": rows, "current": current})
+    return render(request, "matches/exports.html", {
+        "datasets": rows, "current": current, "players": selection.players()})
 
 
 # the rings' colours: Pi-hole's, and the results' green, grey and red as everywhere else
@@ -171,7 +185,7 @@ def export_page(request, dataset_id):
              (("mean", "per_game_mean", "mean"), ("median", "per_game_median", "median"),
               ("p5", "per_game_p5", "5th percentile"), ("min", "per_game_min", "minimum"))]
     return render(request, "matches/export.html", {
-        "d": dataset, "stats": stats, "rings": rings(found) if stats else None, "quiet": quiet,
+        "d": dataset, "filters": datasets.selection_of(dataset).label(), "stats": stats, "rings": rings(found) if stats else None, "quiet": quiet,
         "settings": datasets.settings_view(dataset.draw), "has_file": dataset.state == "done"
         and dataset.file_deleted_at is None, "running": dataset.state in ("requested", "running"),
         "took": (dataset.finished_at - dataset.started_at).total_seconds()

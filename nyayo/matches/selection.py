@@ -7,11 +7,12 @@ index's `card` table: `where()` gives the clause and its parameters.
 """
 
 import re
+from datetime import date, datetime, timezone
 
 from django.db.models import Q
 
-from . import cards
-from .models import Match, RenamedMatch
+from . import cards, catalogue
+from .models import Batch, Match, RenamedMatch
 
 # how a position ended a game by the rules (cards.ENDED), and the other endings (cards.ENDINGS)
 RULES = {1: "Checkmate", 2: "Stalemate", 3: "Insufficient material", 4: "Fifty-move rule", 5: "Threefold repetition"}
@@ -81,23 +82,84 @@ def parse_versions(text):
     return bounds
 
 
+def parse_since(text):
+    """The date a selection starts from, `2026-10-01`, as a date; None for blank. BadSelection for anything else."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        try:
+            return date.fromisoformat(text)
+        except ValueError:
+            pass
+    raise BadSelection(f"from must be a date, like 2026-10-01, not {text!r}")
+
+
+def players(where="1"):
+    """[(name, games, usable)] for every player in the cards, by the name the engine reports (the PGN's White and
+    Black tags), the most games first: the games it played, and those `where` (SQL over the cards) lets through, a
+    dataset's by default. A game between two of one name counts once."""
+    both = ("SELECT white_name AS name, result, ending, ended FROM card WHERE white_name IS NOT NULL "
+            "UNION ALL SELECT black_name, result, ending, ended FROM card WHERE black_name IS NOT NULL "
+            "AND black_name IS NOT white_name")
+    rows = catalogue.index().execute(
+        f"SELECT name, count(*), sum(CASE WHEN {where} THEN 1 ELSE 0 END) FROM ({both}) GROUP BY name "
+        f"ORDER BY count(*) DESC, name").fetchall()
+    return [(name, games, usable or 0) for name, games, usable in rows]
+
+
+def players_filter(names):
+    """(SQL, params) for the cards of games either side of which is one of names; None for none."""
+    if not names:
+        return None
+    marks = ",".join("?" * len(names))
+    return f"(white_name IN ({marks}) OR black_name IN ({marks}))", list(names) * 2
+
+
+def since_filter(since):
+    """(SQL, params) for the cards of games that began on or after a date (UTC): by the game's own start, else its
+    finish (`begun_at`), else, for a game with neither, by when its match began. None for no date."""
+    if not since:
+        return None
+    start = datetime(since.year, since.month, since.day, tzinfo=timezone.utc)
+    late = Batch.objects.filter(match__started_at__gte=start).values_list("pk", flat=True)
+    ids = ",".join(str(pk) for pk in late)  # integers, so inlined: there may be more than a query's parameters
+    return f"(begun_at >= ?{f' OR (begun_at IS NULL AND batch IN ({ids}))' if ids else ''})", [int(start.timestamp())]
+
+
+def known_players():
+    return {name for name, _, _ in players()}
+
+
 class Selection:
     """The games a set of filters chooses. Every filter is optional; none is every game with a result.
 
     matches: match ids; openbench: test numbers (the N of `sprt-N`, or of the old `openbench-<host>-<N>`, or OpenBench's test URL); kind: a match kind;
     versions: (low, high) from parse_versions(), the engine under test's version; book and tc: as the match's settings
-    say them; endings: the cards.ENDINGS codes kept (endings_kept()), None for any."""
+    say them; endings: the cards.ENDINGS codes kept (endings_kept()), None for any; players: names as the engines
+    report them, a game is kept when either side is one of them, none for every game; since: a date (parse_since()),
+    no games began before it, None for no limit. A game's start is its own `GameStartTime`, else its `GameEndTime`,
+    else its match's start; a game none of them dates is left out when a date is asked."""
 
-    def __init__(self, matches=(), openbench=(), kind=None, versions=None, book=None, tc=None, endings=None):
+    def __init__(self, matches=(), openbench=(), kind=None, versions=None, book=None, tc=None, endings=None,
+                 players=(), since=None):
         self.match_ids, self.openbench, self.kind = list(matches), [str(n) for n in openbench], kind
         self.versions, self.book, self.tc, self.endings = versions, book, tc, endings
+        self.players, self.since = list(players), since
 
     def described(self):
         """The filters as given, for a manifest: plain JSON."""
         return {"matches": self.match_ids, "openbench": self.openbench, "kind": self.kind,
                 "versions": [".".join(map(str, v)) if v else None for v in self.versions] if self.versions else None,
                 "book": self.book, "tc": self.tc,
-                "endings": [cards.ENDINGS[code] for code in self.endings] if self.endings is not None else None}
+                "endings": [cards.ENDINGS[code] for code in self.endings] if self.endings is not None else None,
+                "players": self.players, "since": self.since.isoformat() if self.since else None}
+
+    def label(self):
+        """The filters that narrow a dataset, as a line for the pages: `Elephant 1.4.0, Stash 36 · from 2026-10-01`;
+        empty for none."""
+        parts = [", ".join(self.players)] if self.players else []
+        return " · ".join(parts + ([f"from {self.since.isoformat()}"] if self.since else []))
 
     def matches(self):
         """The matches chosen, as a queryset when no version is asked for, else a list."""
@@ -131,6 +193,10 @@ class Selection:
     def where(self):
         """(SQL, params) choosing the cards of the chosen matches' games: decided, and ended as asked."""
         clauses, params = [DECIDED], []
+        for found in (players_filter(self.players), since_filter(self.since)):
+            if found:
+                clauses.append(found[0])
+                params += found[1]
         if self.endings is not None:
             clauses.append(f"ending IN ({','.join('?' * len(self.endings))})" if self.endings else "0")
             params += self.endings

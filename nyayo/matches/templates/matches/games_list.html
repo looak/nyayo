@@ -34,6 +34,12 @@
         <input name="moves_to" size="4" inputmode="numeric" placeholder="to" value="{{ asked.moves_to }}"></span></label>
     <label>Opening
       <input name="opening" class="mono" size="18" placeholder="16 hex digits" value="{{ asked.opening }}"></label>
+    <label>Player
+      <select name="player" multiple size="3" title="a game of either side; ctrl-click for more than one">
+        {% for name, games, usable in choices.players %}<option value="{{ name }}"{% if name in picked %} selected{% endif %}>{{ name }} ({{ games|thousands }})</option>{% endfor %}
+      </select></label>
+    <label>No games before
+      <input type="date" name="from" value="{{ asked.from }}"></label>
     <button>Filter</button>
     {% if filters %}<a href="{% url 'games' %}">Show all</a>{% endif %}
   </form>
@@ -48,6 +54,8 @@
     {% if filters.result %}A {{ filters.result }} for the engine under test.{% endif %}
     {% if filters.ended %}Ended by {{ filters.ended|lower }}.{% endif %}
     {% if filters.moves_from or filters.moves_to %}{% if filters.moves_from %}From {{ filters.moves_from }}{% endif %}{% if filters.moves_to %} up to {{ filters.moves_to }}{% endif %} moves.{% endif %}
+    {% if filters.player %}Games of {{ filters.player|join:", " }}.{% endif %}
+    {% if filters.from %}Began from {{ filters.from }}.{% endif %}
     {% if filters.opening %}Opening position <span class="mono">{{ filters.opening }}</span>.{% endif %}
     <a href="{% url 'games' %}">Show all</a>
   </p>

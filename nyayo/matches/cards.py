@@ -13,6 +13,9 @@ of each filled its cards, so `manage.py reindex` visits only batches an extracto
   one; else, for a game with only a `Date` tag, when nyayo received it (its upload's arrival, about when the workload
   ended) if that is near its date, else that date at midnight UTC; else when nyayo received it. Only the first is
   exact (a bit says so).
+- **names**: the players' names as the PGN gives them (`White`, `Black`: what the engine reports as `id name`), and
+  when the game began, as a Unix time: its `GameStartTime`, else its `GameEndTime`, else nothing (a dataset's date
+  filter then falls back to the match's start). Both go in the dataset filters (selection.py).
 """
 
 import re
@@ -23,6 +26,7 @@ from .models import MatchResult
 ENDING_VERSION = "1"
 EVAL_VERSION = "1"
 PLAYED_VERSION = "2"
+NAMES_VERSION = "1"
 
 ENDED = ("", "checkmate", "stalemate", "insufficient_material", "fifty_moves", "repetition")
 ENDINGS = ("unexplained", "rule", "resignation", "draw_adjudication", "adjudication", "time_forfeit", "illegal_move",
@@ -48,7 +52,7 @@ ADJUDICATION = re.compile(r"(\w+)\s*=\s*(-?\d+)")
 
 def versions(reader):
     return {"reader": reader.name + (f" format {reader.format}" if hasattr(reader, "format") else ""),
-            "ending": ENDING_VERSION, "eval": EVAL_VERSION, "played": PLAYED_VERSION}
+            "ending": ENDING_VERSION, "eval": EVAL_VERSION, "played": PLAYED_VERSION, "names": NAMES_VERSION}
 
 
 def hash_int(text):
@@ -232,10 +236,24 @@ def played_fields(record, received=None):
     return {"played_at": found, "played_flags": 0}
 
 
+def names_fields(record):
+    """{"white_name", "black_name", "begun_at"}: the PGN's player names (None for a missing or empty one) and the
+    game's own start, else its finish, as a Unix time; None for neither."""
+    tags = record.get("tags") or {}
+    begun = None
+    for name in ("GameStartTime", "GameEndTime"):
+        begun = parse_time(tags.get(name))
+        if begun is not None:
+            break
+    return {"white_name": (tags.get("White") or "").strip()[:200] or None,
+            "black_name": (tags.get("Black") or "").strip()[:200] or None, "begun_at": begun}
+
+
 def all_fields(record, pgn, context, received=None):
     """Every extractor's columns for one game."""
     fields = reader_fields(record)
     fields.update(played_fields(record, received))
+    fields.update(names_fields(record))
     fields.update(ending_fields(record, pgn, context))
     fields.update(eval_fields(pgn, record.get("plies") or 0))
     return fields
