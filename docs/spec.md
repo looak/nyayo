@@ -496,6 +496,16 @@ games: `games // (2 * pairs_per)`, so the start is iteration 0 and the end `SPSA
   `spsa_check_games`, `spsa_then_sprt`, a list `spsa_frozen` of names each with `spsa_frozen_value_<name>`. Errors are by
   field: a bad line, a value out of its range, a frozen name not in the list or without a number, nothing left to tune.
   Reporting and distribution are `BULK` and `SINGLE`. The page is below.
+- **The tune's build.** An engine that only exposes its tunable options in a special build (Elephant: `make TUNE=1`, which adds
+  `-DELEPHANT_TUNE`; a normal build keeps the constants `constexpr` and answers *Unknown option*) says how in
+  `EngineConfig.tune_make_args`: `NAME=value` words, blank when it has no such build, `TUNE=1` for Elephant (migration `0010`),
+  edited in the admin. Each word fits ``[A-Za-z_][A-Za-z0-9_]*=[^\s;&|`$<>]*`` and is not `EXE`, `CC`, `CXX`, `EVALFILE`,
+  `MAKEFLAGS` or `SHELL`, which the worker sets itself (`nyayo/lab/makeargs.py`). `Test.make_args` carries them: a tune takes
+  its engine's at creation, its outcome checks and the SPRT queued after it (`tunes.queue_test`) take the tune's, every other
+  test has none. The workload's `test` has `make_args`, a list of the words (`[]` for most tests), and the worker runs
+  `make -j4 EXE=<name> [CC=|CXX=] [EVALFILE=] <words>` for both sides. The tune's page, and the match page of the tune, its
+  checks and its SPRT, say *built with TUNE=1* when it is not blank (the match document's `settings.openbench.make_args`, left
+  out when blank).
 - **Endpoints.** `POST /tests/<id>/sprt` (staff, like stop and restart) queues the SPRT of the averaged values now and
   redirects to its match; `GET /tests/<id>/history.json` (`{"tune": <match id>, "history": [{iteration, games, created,
   values, check, check_elo, check_error, check_games}]}`) and `GET /tests/<id>/history.csv` (one column a parameter) are
@@ -613,7 +623,7 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
     answered `Bad Client Version` makes `client.py` fetch `client_url` (a path is the server's own), check `client_sha256`, and
     copy every file of the zip over its own but `client.py`, which is running, and `worker.token`, which is its own, with the time
     of the copy (Python keeps compiled files by the time and size of their source, and 54 and 55 are the same size). `client.py`
-    itself is not updated by an update, as before. The worker's version was 54 while the protocol did not change, only where it fetches; it is 55 since the client starts the match runner, the bench and genfens by their full paths (a bare name is not looked for in the current folder where Windows has `NoDefaultCurrentDirectoryInExePath` set) and reports a match runner that could not start, died or finished no game as a failed `running` step; it is 56 since every step is timed with `time.monotonic()`, so a wall clock that jumps back (WSL's did) no longer gives a step negative seconds.
+    itself is not updated by an update, as before. The worker's version was 54 while the protocol did not change, only where it fetches; it is 55 since the client starts the match runner, the bench and genfens by their full paths (a bare name is not looked for in the current folder where Windows has `NoDefaultCurrentDirectoryInExePath` set) and reports a match runner that could not start, died or finished no game as a failed `running` step; it is 56 since every step is timed with `time.monotonic()`, so a wall clock that jumps back (WSL's did) no longer gives a step negative seconds; it is 57 since it builds with the workload's `make_args`, checks them again and refuses a word that doesn't fit, and names a binary built with them with a short hash of the words after the commit (`Elephant-1A2B3C4D-9F8E7D`), so a tune build and a normal build of one commit never share a cached binary. The server hands a workload only to a client of its own version, so an older client updates first.
   - The worker's own behaviour (hello and `worker.token`, the describe job and *wait*, `gpus`, fastchess from the server with the
     build as a fallback, a game named and tagged with its `Termination` and the whole comment of each move, steps and the retry
     the server asks for) is what *Worker registration* above and the match schema describe from the server's side.

@@ -106,7 +106,7 @@ def create_tune_page(request):
         'rules': [(x, x) for x in SPSARun.UpdateRule.values], 'engines': table,
         'frozen_json': json.dumps({name: values.get('spsa_frozen_value_' + name, '') for name in values.get('spsa_frozen', [])}),
         'frozen_text': chr(10).join('%s = %s' % (name, values.get('spsa_frozen_value_' + name, '')) for name in values.get('spsa_frozen', [])),
-        'here': 'create_tune',
+        'here': 'create_tune', 'make_args': config.tune_make_args,
     }
     return render(request, 'lab/create_tune.html', context, status=400 if errors else 200)
 

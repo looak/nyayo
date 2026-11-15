@@ -22,6 +22,7 @@ import argparse
 import hashlib
 import os
 import platform
+import re
 import requests
 import shutil
 import subprocess
@@ -165,10 +166,27 @@ def read_git_credentials(engine):
     raise OpenBenchMissingAPICredentialsException('%s not found' % fname)
 
 
-def engine_binary_name(engine, commit_sha, net_path):
+# Extra `make` words of a build (`TUNE=1`), as the server's nyayo/lab/makeargs.py checks them: the client runs what it is told,
+# so it checks again, and refuses a workload with a word that doesn't fit
+MAKE_WORD     = re.compile(r'[A-Za-z_][A-Za-z0-9_]*=[^\s;&|`$<>]*')
+MAKE_RESERVED = ('EXE', 'CC', 'CXX', 'EVALFILE', 'MAKEFLAGS', 'SHELL')
+
+def checked_make_args(make_args):
+    words = list(make_args or [])
+    for word in words:
+        if not isinstance(word, str) or not MAKE_WORD.fullmatch(word) or word.partition('=')[0] in MAKE_RESERVED:
+            raise OpenBenchBuildFailedException('Refusing a workload with the make argument %r: it is not NAME=value' % (word,), '')
+    return words
+
+def engine_binary_name(engine, commit_sha, net_path, make_args=()):
     name = '%s-%s' % (engine, commit_sha.upper()[:8])
     if net_path:
         name += '-%s' % (net_path[-8:])
+
+    # A build made with other make arguments (a tune build) is another binary, never to be found as the plain one
+    words = checked_make_args(make_args)
+    if words:
+        name += '-%s' % (hashlib.sha256(' '.join(words).encode('utf-8')).hexdigest()[:6])
     return name
 
 def check_for_engine_binary(out_path):
@@ -189,7 +207,7 @@ def check_for_engine_binary(out_path):
         os.rename(out_path, '%s.exe' % (out_path))
         return '%s.exe' % (out_path)
 
-def makefile_command(net_path, make_path, out_path, compiler):
+def makefile_command(net_path, make_path, out_path, compiler, make_args=()):
 
     # Build with -j, and EXE= to contol the output location
     # limiting to 4 threads to avoid OOM on low-RAM systems
@@ -204,7 +222,8 @@ def makefile_command(net_path, make_path, out_path, compiler):
     if net_path:
         command += ['EVALFILE=%s' % (os.path.abspath(net_path).replace('\\', '/'))]
 
-    return command
+    # Build with the test's own words, such as TUNE=1 for the build that exposes an engine's tunable options
+    return command + checked_make_args(make_args)
 
 
 def download_opening_book(book_sha, book_source, book_name):
@@ -285,7 +304,7 @@ def download_network(server, token, engine, net_name, net_sha, net_path):
         os.remove(net_path)
         raise OpenBenchCorruptedNetworkException('Invalid SHA for %s' % (net_name))
 
-def prepare_engine(engine, net_path, branch, source, make_path, out_path, private, compiler=None):
+def prepare_engine(engine, net_path, branch, source, make_path, out_path, private, compiler=None, make_args=()):
 
     # Check to see if we already have the binary
     if check_for_engine_binary(out_path):
@@ -318,7 +337,7 @@ def prepare_engine(engine, net_path, branch, source, make_path, out_path, privat
         # Prepare the MAKEFILE command
         make_path = os.path.join(src_path, make_path)
         bin_path  = os.path.join(make_path, os.path.basename(out_path))
-        make_cmd  = makefile_command(net_path, make_path, os.path.basename(out_path), compiler)
+        make_cmd  = makefile_command(net_path, make_path, os.path.basename(out_path), compiler, make_args)
 
         # Build the engine, which will produce a binary to bin_path, to be moved after
         process     = subprocess.Popen(make_cmd, cwd=make_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)

@@ -187,7 +187,7 @@ Check that the paths are those and not the `-2` ones, with `grep -E '^NYAYO_(DAT
 
 nyayo is OpenBench's server: it makes the tests, hands the workers their work, and takes their results.
 The worker that plays is OpenBench's own `Client/`, which nyayo carries (`nyayo/client/`, from looak/openbench_eg `6a072fa`) and hands out at `/client.zip`, with the registration of *Workers register themselves* below: no username and no password. OpenBench's own server is not run any more: nyayo
-is what the workers talk to (`/client.zip`, client 56).
+is what the workers talk to (`/client.zip`, client 57).
 
 **What is new in the environment**
 
@@ -208,7 +208,7 @@ address the worker uses. From the worker's machine:
 curl -s http://172.16.100.11:8001/clientVersionRef/
 ```
 
-answers `{"client_version": 56, "client_url": "http://172.16.100.11:8001/client.zip", "client_sha256": "..."}`
+answers `{"client_version": 57, "client_url": "http://172.16.100.11:8001/client.zip", "client_sha256": "..."}`
 (`clientVersionRef` needs nothing, so a client can always update itself, and from nyayo, not GitHub). There is no path prefix for a worker to get wrong:
 with `NYAYO_SCRIPT_NAME` set it would have to be part of `-S`.
 
@@ -263,6 +263,10 @@ approves tests, approves workers, and uses `/admin/`. That is the only user to m
 built with `ob_build`, compilers `g` and `clang`, presets STC, LTC, SMP STC and SMP LTC with time controls such as
 `8.0+0.08`) and OpenBench's twelve books. They are under Lab, Engine configs and Books in the admin (the Engines and Books
 pages in the sidebar are not built yet).
+
+**An engine's tune flags.** A tune needs the engine built with the flags that expose its tunable options (Elephant: `make TUNE=1`).
+They are the engine config's *Tune make args* in the admin, `NAME=value` words separated by spaces (the migration sets Elephant's to
+`TUNE=1`); a tune and its checks and SPRT are built with them, every other test is not, and the two never share a cached binary.
 
 **What a worker needs** (hunt): Python 3 with the packages in the client's `requirements.txt` (`requests`, `psutil`,
 `py-cpuinfo`, and optionally `zstandard`), and access to `github.com` and `raw.githubusercontent.com`, from where it downloads

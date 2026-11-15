@@ -150,6 +150,7 @@
         {% if tc_text %}<div><dt>Time control</dt><dd>{{ tc_text }}</dd></div>{% endif %}
         {% if options_text %}<div><dt>UCI options</dt><dd>{{ options_text }}</dd></div>{% endif %}
         {% if settings.book %}<div><dt>Book</dt><dd>{{ settings.book }}</dd></div>{% endif %}
+        {% if settings.openbench.make_args %}<div><dt>Built with</dt><dd>{{ settings.openbench.make_args }}</dd></div>{% endif %}
         {% if sprt.elo0 is not None %}<div><dt>Elo bounds</dt><dd>[{{ sprt.elo0|floatformat:2 }}, {{ sprt.elo1|floatformat:2 }}]</dd></div>{% endif %}
         {% if sprt.alpha is not None %}<div><dt>α / β</dt><dd>{{ sprt.alpha|floatformat:2 }} / {{ sprt.beta|floatformat:2 }}</dd></div>{% endif %}
         {% if sprt.model %}<div><dt>Model</dt><dd>{{ sprt.model }}</dd></div>{% endif %}

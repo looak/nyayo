@@ -140,6 +140,7 @@
         {% if match.subject_info.options %}<span class="muted">{% for k, v in match.subject_info.options.items %}{{ k }}={{ v }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</dd>
       {% if settings.tc %}<dt>Time control</dt><dd>{{ settings.tc }}</dd>{% endif %}
       {% if settings.book %}<dt>Book</dt><dd>{{ settings.book }}</dd>{% endif %}
+      {% if settings.openbench.make_args %}<dt>Built with</dt><dd class="mono">{{ settings.openbench.make_args }}</dd>{% endif %}
       {% if settings.runner %}<dt>Runner</dt><dd>{{ settings.runner.name }} {{ settings.runner.version }}</dd>{% endif %}
     </dl>
     <dl class="facts">

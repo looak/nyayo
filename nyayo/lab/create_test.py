@@ -406,6 +406,9 @@ def create_test(values, user, anyway=False):
 
         test.test_mode         = values['test_mode']
 
+        # Only a tune is built with its engine's tune flags; its checks and its SPRT take them from it (tunes.queue_test)
+        test.make_args         = config.tune_make_args if test.test_mode == TUNE else ''
+
         if test.test_mode == 'SPRT':
             apply_sprt(test, values['bounds'], values['confidence'])
 
