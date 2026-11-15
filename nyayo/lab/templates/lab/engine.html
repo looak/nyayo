@@ -1,0 +1,60 @@
+{% extends "runs/base.html" %}
+{% load static %}
+{% block title %}{{ config.name }} · Engines · nyayo{% endblock %}
+{% block crumb %}Lab › <a href="{% url 'engines' %}">Engines</a> › {{ config.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'lab/create_tune.css' %}"><script defer src="{% static 'lab/engine.js' %}"></script>{% endblock %}
+{% block content %}
+<div class="pagehead"><h1>{{ config.name }}</h1>
+  <span class="muted"><code>{{ config.source }}</code>{% if config.tune_make_args %} · tune build <code>{{ config.tune_make_args }}</code>{% endif %}</span></div>
+
+<div class="card">
+  <h3 class="box-title">Tunables</h3>
+  <form method="post" action="{% url 'engine_refresh' config.name %}" class="fields" id="engine-form" data-engine="{{ config.name }}" data-repo="{{ config.source }}"
+        data-sha="{{ found.sha }}" data-waiting="{% if waiting %}1{% endif %}">{% csrf_token %}
+    <label class="field">Branch or commit
+      <input name="branch" id="f-branch" value="{{ branch }}" list="branch-list" autocomplete="off" spellcheck="false">
+      <datalist id="branch-list"></datalist></label>
+    <label class="field">&nbsp;<span><button class="act">Refresh</button>
+      <button type="submit" class="act" formmethod="get" formaction="{% url 'engine' config.name %}">Show</button></span></label>
+  </form>
+  {% if problem %}<p class="err">{{ problem }}</p>{% endif %}
+
+  {% if found %}<p>At <code>{{ found.short }}</code> <span class="muted">· {{ found.subject }}</span></p>{% endif %}
+
+  {% if row.state == 'done' %}
+  <p class="muted" id="read-note">Read {{ row.read|timesince }} ago{% if row.worker %} by {{ row.worker }}{% endif %}, from the engine's <code>{{ row.command }}</code> answer.
+    {% if row.command == 'uci' %}It answered no <code>spsa</code> command, so the options are its <code>uci</code> spin options and the step at the end is a guess.{% endif %}
+    This commit's list never changes, so it is not read again. Refresh looks for a newer commit of the branch.</p>
+  {% elif waiting %}
+  <p id="read-note">Reading the parameters from <code>{{ found.short }}</code>… <span class="muted">{{ row.get_state_display }}{% if row.worker %} on {{ row.worker }}{% endif %}{% if row.detail %}: {{ row.detail }}{% endif %}</span></p>
+  {% elif row.state == 'failed' %}
+  <p class="err" id="read-note">Reading <code>{{ found.short }}</code> failed{% if row.worker %} on {{ row.worker }}{% endif %}. Refresh reads it again.</p>
+  <pre class="log">{{ row.error }}</pre>
+  {% elif found and config.tune_make_args %}
+  <p class="muted" id="read-note">The parameters of <code>{{ found.short }}</code> have not been read. Refresh asks a worker to build it and read them.</p>
+  {% endif %}
+
+  {% if params %}
+  <div class="tune-scroll"><table class="tune-table params">
+    <thead><tr><th>Parameter</th><th>Type</th><th class="num">Default</th><th class="num">Min</th><th class="num">Max</th><th class="num">Step at the end</th><th class="num">Rate at the end</th></tr></thead>
+    <tbody>{% for p in params %}<tr><td class="name">{{ p.name }}</td><td>{{ p.type }}</td><td class="num">{{ p.value }}</td><td class="num">{{ p.min }}</td><td class="num">{{ p.max }}</td><td class="num">{{ p.c_end }}</td><td class="num">{{ p.r_end }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% elif older %}
+  <p class="muted">The newest list read, of <code>{{ older.sha|slice:":7" }}</code> ({{ older.read|timesince }} ago), meanwhile:</p>
+  <div class="tune-scroll"><table class="tune-table params">
+    <thead><tr><th>Parameter</th><th>Type</th><th class="num">Default</th><th class="num">Min</th><th class="num">Max</th><th class="num">Step at the end</th><th class="num">Rate at the end</th></tr></thead>
+    <tbody>{% for p in older_params %}<tr><td class="name">{{ p.name }}</td><td>{{ p.type }}</td><td class="num">{{ p.value }}</td><td class="num">{{ p.min }}</td><td class="num">{{ p.max }}</td><td class="num">{{ p.c_end }}</td><td class="num">{{ p.r_end }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% endif %}
+</div>
+
+{% if history %}
+<div class="card">
+  <h3 class="box-title">Commits read</h3>
+  <table class="tune-table">
+    <thead><tr><th>Commit</th><th>Branch as asked</th><th>Answered</th><th>Read</th><th>By</th></tr></thead>
+    <tbody>{% for h in history %}<tr><td><code>{{ h.sha|slice:":7" }}</code></td><td>{{ h.branch }}</td><td>{{ h.command }}</td><td>{{ h.read|date:"Y-m-d H:i" }}</td><td>{{ h.worker }}</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

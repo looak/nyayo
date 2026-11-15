@@ -17,7 +17,6 @@ STUBS = {
     "create_datagen": ("Create datagen", 7, "The form that starts a data generation run. It is handed out like a test, and its page is the match page.", True),
     "upload_net": ("Upload net", 4, "Elephant has no network, so there is no upload page in 2.0. The fields and the worker's request for a network stay.", True),
     "gauntlet": ("Run gauntlet", 4, "The gauntlet page: the file to copy and run on a machine that plays it, as uwanja takes it.", True),
-    "engines": ("Engines", 6, "What to build: a repository, a ref, build options, the reference NPS and the date it was set. A test copies its engine's values when it is created.", True),
     "books": ("Books", 6, "The opening books a test may use.", True),
 }
 

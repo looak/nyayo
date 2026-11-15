@@ -187,7 +187,7 @@ Check that the paths are those and not the `-2` ones, with `grep -E '^NYAYO_(DAT
 
 nyayo is OpenBench's server: it makes the tests, hands the workers their work, and takes their results.
 The worker that plays is OpenBench's own `Client/`, which nyayo carries (`nyayo/client/`, from looak/openbench_eg `6a072fa`) and hands out at `/client.zip`, with the registration of *Workers register themselves* below: no username and no password. OpenBench's own server is not run any more: nyayo
-is what the workers talk to (`/client.zip`, client 57).
+is what the workers talk to (`/client.zip`, client 58).
 
 **What is new in the environment**
 
@@ -208,7 +208,7 @@ address the worker uses. From the worker's machine:
 curl -s http://172.16.100.11:8001/clientVersionRef/
 ```
 
-answers `{"client_version": 57, "client_url": "http://172.16.100.11:8001/client.zip", "client_sha256": "..."}`
+answers `{"client_version": 58, "client_url": "http://172.16.100.11:8001/client.zip", "client_sha256": "..."}`
 (`clientVersionRef` needs nothing, so a client can always update itself, and from nyayo, not GitHub). There is no path prefix for a worker to get wrong:
 with `NYAYO_SCRIPT_NAME` set it would have to be part of `-S`.
 
@@ -538,6 +538,17 @@ python manage.py api_token create ob_sprt --user <username>    # in the conda en
 Put it in the environment of the machine that runs the script, where `ob_sprt.py` reads it (see its `--help` for the
 variable names; the URL is nyayo's, `http://172.16.100.11:8001`). `api_token list` shows them and when they were last
 used; `api_token revoke ob_sprt` (or *Revoke* in the admin, under Lab, Api tokens) makes it a `401` at once.
+
+## An engine that nyayo can read the parameters of
+
+`/create/tune` fills in a tune's parameters itself: a worker builds the commit with the engine's `tune_make_args` (Elephant:
+`TUNE=1`) and asks the binary over UCI. The engine should **answer `spsa`** in that build with one line a parameter,
+`name, int|float, value, min, max, c_end, r_end` (Elephant: its tune build prints `step` as `c_end` and `0.002` as `r_end`), and
+then be ready for the next command: the worker sends `isready` after it and takes what comes before `readyok`. An engine with no
+such command still works: the worker then sends `uci` and takes every `spin` option that is not a standard one (`Threads`, `Hash`,
+`Move Overhead`, `MultiPV`, `Ponder`, Syzygy and the options its presets set), with a step at the end of a twentieth of the range,
+which the page says was guessed. Nothing to set up on bobby: it takes a worker that is approved and has the toolchain, and the
+migration (`lab/0011`) that `deploy/update.sh` runs. Workers update to client 58 on their own.
 
 ## Behind a reverse proxy later
 

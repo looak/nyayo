@@ -1,0 +1,19 @@
+{% extends "runs/base.html" %}
+{% block title %}Engines · nyayo{% endblock %}
+{% block crumb %}Lab › Engines{% endblock %}
+{% block content %}
+<h1>Engines</h1>
+<div class="card">
+  <table class="tune-table">
+    <thead><tr><th>Engine</th><th>Source</th><th>Tune build</th><th class="num">Commits read</th><th></th></tr></thead>
+    <tbody>{% for row in rows %}<tr>
+      <td><a href="{% url 'engine' row.config.name %}">{{ row.config.name }}</a>{% if not row.config.enabled %} <span class="muted">(off)</span>{% endif %}</td>
+      <td><code>{{ row.config.source }}</code></td>
+      <td>{% if row.config.tune_make_args %}<code>{{ row.config.tune_make_args }}</code>{% else %}<span class="muted">none</span>{% endif %}</td>
+      <td class="num">{{ row.done }}</td>
+      <td><a href="{% url 'engine' row.config.name %}">Tunables</a></td>
+    </tr>{% empty %}<tr><td colspan="5" class="muted">No engine yet.</td></tr>{% endfor %}</tbody>
+  </table>
+  <p class="muted">An engine is added or changed in the admin. What each one exposes to tune at a commit is on its page.</p>
+</div>
+{% endblock %}

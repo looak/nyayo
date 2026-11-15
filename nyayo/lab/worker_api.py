@@ -38,7 +38,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from nyayo.lab import clientzip, config, fastchess, hours, registration, rtt, steps, toolchains, utils
+from nyayo.lab import clientzip, config, fastchess, hours, registration, rtt, steps, toolchains, tunables, utils
 from nyayo.lab.document import report_test
 from nyayo.lab.get_workload import get_workload, heard
 from nyayo.lab.models import EngineConfig, LogEvent, Machine, Network, Result, ServerState, Test
@@ -323,10 +323,29 @@ def client_get_workload(request, machine):
     if machine.state != 'approved' or not machine.enabled:
         heard(machine)
         return JsonResponse({ 'wait' : 'waiting for approval' if machine.state == 'pending' else 'disabled' })
+    # A read of an engine's parameters comes ahead of a workload: the worker asks only when it has finished the last
+    if job := tunables.next_job(machine):
+        heard(machine)
+        return JsonResponse({ 'tunables' : job })
     try:
         return JsonResponse(get_workload(request, machine))
     except IntegrityError as error:
         return JsonResponse({ 'error' : f'IntegrityError: {error}' })
+
+@csrf_exempt
+@verify_worker
+def client_report_tunables(request, machine):
+
+    # A read of an engine's parameters, as the worker is at it: state active (with a detail), done (with the lines and the
+    # command that answered) or failed (with the last lines of the build or the engine). Best effort on the worker's side.
+    try: row_id = int(request.POST['id'])
+    except (KeyError, ValueError): return HttpResponse('No read named', status=400, content_type='text/plain')
+    row, problem = tunables.report(machine, row_id, request.POST.get('state', ''), lines=request.POST.get('lines', ''),
+                                   command=request.POST.get('command', ''), error=request.POST.get('error', ''),
+                                   detail=request.POST.get('detail', ''))
+    if problem:
+        return HttpResponse(problem, status=409 if row else 404, content_type='text/plain')
+    return JsonResponse({})
 
 @csrf_exempt
 @verify_worker

@@ -16,6 +16,7 @@ urlpatterns = [
     path("clientWorkerInfo/", api.client_worker_info),
     path("clientGetWorkload/", api.client_get_workload),
     path("clientGetNetwork/<str:engine>/<str:name>/", api.client_get_network),
+    path("clientReportTunables/", api.client_report_tunables),
     path("clientBenchError/", api.client_bench_error),
     path("clientReportStep/", api.client_report_step),
     path("clientSubmitNPS/", api.client_submit_nps),
