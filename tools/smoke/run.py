@@ -793,17 +793,16 @@ def tune_to_its_best(r):
     r.prepare_client(5)
     worker = r.start_client(5, name='smoke-tune', extra=True, threads=2)
     r.approve('smoke-tune')
+    # The tune's worker alone plays this scenario, for the whole of it: it reads the list, so that the build it made is the one the
+    # tune then finds, and no other worker on this machine plays the same engine at the same time. The worker ends a match by
+    # killing the engine's processes by name (`pkill -f`), and two workers here share the names of the binaries (they come from
+    # the commit), so one that finishes a workload kills the other's bench or game: the tune or its SPRT then fails at random.
+    from nyayo.lab.models import Machine
+    others = list(Machine.objects.filter(state='approved', enabled=True).exclude(name='smoke-tune'))
     try:
-        # the tune's worker reads the list, so that the build it made is the one the tune then finds: the others sit this out
-        from nyayo.lab.models import Machine
-        others = list(Machine.objects.filter(state='approved', enabled=True).exclude(name='smoke-tune'))
         for machine in others:
             check(r.owner.post('/machine-action', id=machine.id, action='disable').status_code == 302, 'could not disable %s' % (machine.name))
-        try:
-            read = tunables_read(r, dev['branch'])
-        finally:
-            for machine in others:
-                r.owner.post('/machine-action', id=machine.id, action='enable')
+        read = tunables_read(r, dev['branch'])
         check(read['worker'] == 'smoke-tune', 'the list was read by %s, not the tune worker' % (read['worker']))
         # the page's list is what the tune takes (the toy engine has no Seed to read, so the frozen one is added as a person would)
         form['spsa_inputs'] = read['lines'] + '\nSeed, int, 0, 0, 100000, 1, 0.002'
@@ -814,6 +813,8 @@ def tune_to_its_best(r):
             [(s.side, s.cached) for s in compiles]))
         return '%s; %s' % (read['said'], said)
     finally:
+        for machine in others:
+            r.owner.post('/machine-action', id=machine.id, action='enable')
         stop(worker)
         r.extras.remove(worker)
 
