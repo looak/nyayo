@@ -78,10 +78,14 @@ def draw_arguments(draw):
     return flags + (["--quiet"] if draw["quiet"] else []) + (["--merge"] if draw.get("merge") else [])
 
 
-def request(requested_by="", note="", merge=False):
-    """A new dataset, waiting for the worker: V1's selection, every game that read with a good label, and the book
-    map in force now, kept with it."""
-    chosen = selection.Selection(endings=selection.endings_kept())
+def request(requested_by="", note="", merge=False, players=(), since=None):
+    """A new dataset, waiting for the worker: every game that read with a good label, of the players picked (either
+    side) and from the date, if asked, and the book map in force now, kept with it. selection.BadSelection for a
+    player nyayo has no game of."""
+    unknown = sorted(set(players) - selection.known_players())
+    if unknown:
+        raise selection.BadSelection(f"no game by {', '.join(map(repr, unknown))} in the catalogue")
+    chosen = selection.Selection(endings=selection.endings_kept(), players=list(dict.fromkeys(players)), since=since)
     return Dataset.objects.create(requested_by=requested_by[:100], note=note, selection=chosen.described(),
                                   draw={**DRAW, "merge": bool(merge), "seed": random.randrange(1, 2 ** 31),
                                         "min_ply": {"books": dict(settings.NYAYO_BOOK_MIN_PLY),
@@ -133,7 +137,8 @@ def selection_of(dataset):
     return selection.Selection(matches=given.get("matches") or (), openbench=given.get("openbench") or (),
                                kind=given.get("kind"), book=given.get("book"), tc=given.get("tc"),
                                endings=[cards.ENDINGS.index(e) for e in given["endings"]]
-                               if given.get("endings") is not None else None)
+                               if given.get("endings") is not None else None,
+                               players=given.get("players") or (), since=selection.parse_since(given.get("since")))
 
 
 def batch_games(entry):

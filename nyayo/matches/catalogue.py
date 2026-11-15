@@ -91,6 +91,13 @@ UPGRADES[3] = """
 ALTER TABLE card ADD COLUMN played_at INTEGER;
 CREATE INDEX IF NOT EXISTS card_played ON card (played_at);
 """
+UPGRADES[4] = """
+-- the names extractor: the PGN's White and Black, and when the game began, Unix time (cards.names_fields); a dataset
+-- takes the games of the players picked and from a date (selection.py)
+ALTER TABLE card ADD COLUMN white_name TEXT;
+ALTER TABLE card ADD COLUMN black_name TEXT;
+ALTER TABLE card ADD COLUMN begun_at INTEGER;
+"""
 SCHEMA_VERSION = max(UPGRADES)
 
 _local = threading.local()
@@ -222,6 +229,7 @@ EXTRACTOR_COLUMNS = {
     "ending": ("ending",),
     "eval": ("eval_20", "eval_40", "swing"),
     "played": ("played_at",),
+    "names": ("white_name", "black_name", "begun_at"),
 }
 EXTRACTOR_FLAGS = {"reader": "reader_flags", "ending": "ending_flags", "played": "played_flags"}
 BASE_COLUMNS = ("batch", "position", "game", "offset", "length", "colour", "opponent", "result", "termination",

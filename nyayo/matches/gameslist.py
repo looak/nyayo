@@ -5,7 +5,8 @@ rows only: the match a game belongs to and the engines that played it. Nothing i
 
 Filters (a query is its URL): `match` (a match's id), `result` (win, draw or loss for the engine under test), `ended`
 (how it ended: a rule, cards.ENDED, or another ending, cards.ENDINGS), `moves_from` and `moves_to` (whole moves), and
-`opening` (the 16 hex digits of a position, see below). Each is ANDed with the rest.
+`opening` (the 16 hex digits of a position, see below), `player` (a name as the engine reports it, repeatable: a game
+of either side), and `from` (a date: no games that began before it, selection.since_filter()). Each is ANDed with the rest.
 """
 
 from datetime import datetime, timezone
@@ -17,7 +18,8 @@ from nyayo.paging import paginate
 
 from . import cards, catalogue
 from .oldids import new_id_for
-from .selection import ENDINGS, RESULT_FILTERS, RULES, ending_choices, ending_filter
+from .selection import (BadSelection, ENDINGS, RESULT_FILTERS, RULES, ending_choices, ending_filter, parse_since,
+                        players, players_filter, since_filter)
 from .models import Batch, Match, MatchResult
 from .pages import OUTCOMES
 
@@ -172,10 +174,25 @@ def games_list(request):
         # a game from the standard position is found by the position after 16 plies, any other by where it started
         where.append("((start = ? AND start != ?) OR (start = ? AND opening = ?))")
         params += [key, signed(STARTPOS), signed(STARTPOS), key]
+    names = [name for name in request.GET.getlist("player") if name]
+    if names:
+        filters["player"] = names
+        found = players_filter(names)
+        where.append(found[0])
+        params += found[1]
+    try:
+        since = parse_since(request.GET.get("from", ""))
+    except BadSelection as error:
+        return HttpResponseBadRequest(str(error))
+    if since:
+        filters["from"] = since.isoformat()
+        found = since_filter(since)
+        where.append(found[0])
+        params += found[1]
     page = paginate(Cards("WHERE " + " AND ".join(where) if where else "", params), request)
     kept = Match.objects.filter(batches__isnull=False).distinct().order_by("-updated_at")
     return render(request, "matches/games_list.html", {
         "games_page": page, "total": page.paginator.count, "filters": filters,
-        "choices": {"matches": kept, "endings": ending_choices(), "results": ("win", "draw", "loss")},
+        "choices": {"matches": kept, "players": players(), "endings": ending_choices(), "results": ("win", "draw", "loss")},
         "asked": {name: request.GET.get(name, "") for name in ("match", "result", "ended", "moves_from", "moves_to",
-                                                               "opening")}})
+                                                               "opening", "from")}, "picked": names})
