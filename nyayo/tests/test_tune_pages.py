@@ -116,6 +116,28 @@ class Creating(Staff):
         self.post(spsa_frozen_text="Contempt = 5\n\nMargin=0.25")
         self.assertEqual(SPSARun.objects.get().frozen, [{"name": "Contempt", "value": 5}, {"name": "Margin", "value": 0.25}])
 
+    def test_default_ones_are_not_sent(self):
+        self.post(spsa_default=["Contempt"], spsa_frozen=["Margin"], spsa_frozen_value_Margin="0.25")
+        run = SPSARun.objects.get()
+        self.assertEqual([p.name for p in run.parameters.all()], ["Aspiration"])
+        self.assertEqual(run.frozen, [{"name": "Margin", "value": 0.25}])
+        self.assertEqual(Test.objects.get().dev_options, "Threads=1 Hash=8 Margin=0.25")
+
+    def test_the_pasted_fallback_lists_only_frozen_ones(self):
+        self.post(spsa_frozen_text="Contempt = 5", spsa_default=["Margin"])
+        run = SPSARun.objects.get()
+        self.assertEqual([p.name for p in run.parameters.order_by("index")], ["Aspiration"])
+        self.assertEqual(run.frozen, [{"name": "Contempt", "value": 5}])
+
+    def test_the_form_keeps_the_three_states_after_an_error(self):
+        response = self.post(spsa_frozen=["Contempt"], spsa_frozen_value_Contempt="5", spsa_default=["Margin"], spsa_iterations="0")
+        self.assertEqual(response.status_code, 400)
+        page = response.content.decode()
+        self.assertIn("data-default=\"[&quot;Margin&quot;]\"", page)
+        self.assertIn("&quot;Contempt&quot;: &quot;5&quot;", page)
+        for part in ('id="n-default"', 'id="default-all"'):
+            self.assertIn(part, page)
+
     def test_a_tune_that_can_be_tuned_is_not_made_all_frozen(self):
         response = self.post(spsa_frozen=["Aspiration", "Margin", "Contempt"], spsa_frozen_value_Aspiration="20",
                              spsa_frozen_value_Margin="0.5", spsa_frozen_value_Contempt="3")
@@ -175,9 +197,11 @@ class TunePage(Staff):
         self.assertEqual(page.count("<figure><figcaption><span class=\"mono\">"), 12)
         for part in ("LmrBase", "constexpr int LmrBase", "Outcome", "The checks (", "CSV", "JSON", "settled", "Step now", "Lately"):
             self.assertIn(part, page)
-        # frozen values are in the header, not the code
+        # frozen values are in the header and listed as frozen after the code, not in it
         self.assertIn("2 frozen: SingularDepth 6, IirDepth 4", page)
         self.assertNotIn("constexpr int SingularDepth", page)
+        self.assertIn("SingularDepth=6 IirDepth=4", response.context["code"]["frozen"])
+        self.assertIn('id="code-frozen"', page)
         self.assertEqual(response.context["settled"] + response.context["moving"], 12)
         self.assertTrue(response.context["refresh"])
 

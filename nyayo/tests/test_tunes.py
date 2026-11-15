@@ -247,6 +247,44 @@ class Creating(TestCase):
         self.assertEqual(test.dev_options, "Threads=1 Hash=8 Contempt=5 Margin=0.25")
         self.assertEqual(test.base_options, "Threads=1 Hash=8 Contempt=5 Margin=0.25")
 
+    def test_a_parameter_is_tuned_frozen_or_at_its_default(self):
+        # Contempt is frozen away from its default, Margin is left at it, Aspiration is tuned
+        test, errors, _ = create(self.owner, spsa_frozen=["Contempt"], spsa_frozen_value_Contempt="5", spsa_default=["Margin"])
+        self.assertEqual(errors, {})
+        run = test.spsa_run
+        self.assertEqual([p.name for p in run.parameters.all()], ["Aspiration"])
+        self.assertEqual(run.frozen, [{"name": "Contempt", "value": 5}])
+        self.assertEqual((test.dev_options, test.base_options), ("Threads=1 Hash=8 Contempt=5", "Threads=1 Hash=8 Contempt=5"))
+        self.assertNotIn("Margin", test.dev_options)
+        self.assertEqual(tunes.queue_sprt(test).dev_options, "Threads=1 Hash=8 Contempt=5 Aspiration=20")
+
+    def test_freezing_at_the_default_is_the_default(self):
+        test, errors, _ = create(self.owner, spsa_frozen=["Contempt", "Margin"], spsa_frozen_value_Contempt="3.0", spsa_frozen_value_Margin="0.25")
+        self.assertEqual(errors, {})
+        self.assertEqual(test.spsa_run.frozen, [{"name": "Margin", "value": 0.25}])
+        self.assertEqual([p.name for p in test.spsa_run.parameters.order_by("index")], ["Aspiration"])
+        self.assertEqual(test.dev_options, "Threads=1 Hash=8 Margin=0.25")
+
+    def test_a_default_name_not_in_the_list_is_an_error(self):
+        test, errors, _ = create(self.owner, spsa_default=["Nope"])
+        self.assertIsNone(test)
+        self.assertIn("not in the list", errors["spsa_default"])
+
+    def test_nothing_to_tune_when_the_rest_are_frozen_or_default(self):
+        test, errors, _ = create(self.owner, spsa_frozen=["Aspiration"], spsa_frozen_value_Aspiration="30", spsa_default=["Margin", "Contempt"])
+        self.assertIsNone(test)
+        self.assertIn("Nothing is left", errors["spsa_inputs"])
+
+    def test_options_have_no_length_limit(self):
+        names = ["LongParameterName%03d" % i for i in range(40)]
+        lines = chr(10).join(["Aspiration, int, 20, 5, 50, 4, 0.002"] + ["%s, int, 1, 0, 9, 1, 0.002" % n for n in names])
+        test, errors, _ = create(self.owner, spsa_inputs=lines, spsa_frozen=names, **{"spsa_frozen_value_" + n: "5" for n in names})
+        self.assertEqual(errors, {})
+        test = Test.objects.get(pk=test.pk)
+        self.assertGreater(len(test.dev_options), 700)
+        self.assertEqual(test.dev_options, test.base_options)
+        self.assertTrue(test.dev_options.endswith(names[-1] + "=5"))
+
     def test_errors_are_by_field(self):
         cases = [
             (dict(spsa_inputs="Aspiration, int, 20, 5, 50"), "spsa_inputs", "seven fields"),

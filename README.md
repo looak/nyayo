@@ -42,8 +42,8 @@ nyayo receives smoke runs pushed from developer machines and shows them:
 ## nyayo 2.1
 
 **Tunes.** nyayo 2.0 took over OpenBench's server; 2.1 adds what OpenBench's SPSA lacked. A tune (`/create/tune`) starts from
-OpenBench's SPSA input and learns with momentum by default (or plain SPSA, as OpenBench does it); any parameter can be frozen,
-and both sides then play it at the value given. The tune keeps a snapshot of every value every 1% of its iterations, plays the
+OpenBench's SPSA input and learns with momentum by default (or plain SPSA, as OpenBench does it); each parameter is tuned, frozen (both
+sides play the value given) or left at the engine's default (not sent). The tune keeps a snapshot of every value every 1% of its iterations, plays the
 values so far against the start every 5% (an outcome check: a games test of its own, with its Elo and 95% interval kept on the
 snapshot), and its page shows progress, how far each parameter moved lately, the outcome and each parameter as charts, and the
 result (the average of the last 20%) as C++ constants, UCI options and SPSA input. It can queue an SPRT of the result against
