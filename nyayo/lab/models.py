@@ -516,3 +516,38 @@ class SPSASnapshot(Model):
 
     class Meta:
         ordering = ['iteration', 'id']
+
+class TunableList(Model):
+
+    # The parameters an engine exposes at one commit, built with the engine's tune flags and read from the binary by a worker
+    # (lab/tunables.py). A commit's list never changes, so a `done` row is kept for good and never read again; a `failed` one can
+    # be queued again. `lines` are the SPSA input, `name, int|float, value, min, max, c_end, r_end` a line; `command` is
+    # what answered, `spsa` or `uci` (whose c_end and r_end were guessed).
+    class State(TextChoices):
+        QUEUED  = 'queued'
+        READING = 'reading'
+        DONE    = 'done'
+        FAILED  = 'failed'
+
+    engine    = CharField(max_length=64)
+    sha       = CharField(max_length=64)
+    make_args = CharField(max_length=128, blank=True, default='')
+    branch    = CharField(max_length=255, blank=True, default='') # as it was asked for, to name the commit
+    source    = CharField(max_length=1024, blank=True, default='') # the zip the worker builds from
+    state     = CharField(max_length=8, choices=State.choices, default=State.QUEUED)
+    lines     = TextField(blank=True, default='')
+    command   = CharField(max_length=8, blank=True, default='')
+    machine   = ForeignKey(Machine, on_delete=SET_NULL, null=True, blank=True, related_name='tunable_reads')
+    worker    = CharField(max_length=100, blank=True, default='') # its name when it read, kept if the worker goes
+    detail    = CharField(max_length=500, blank=True, default='') # what the worker is at while it reads
+    error     = TextField(blank=True, default='')
+    queued    = DateTimeField(default=timezone.now)
+    started   = DateTimeField(null=True, blank=True)
+    read      = DateTimeField(null=True, blank=True) # when it was read, or failed
+
+    class Meta:
+        constraints = [UniqueConstraint(fields=['engine', 'sha', 'make_args'], name='one_tunable_list_per_commit')]
+        ordering = ['-queued', '-id']
+
+    def __str__(self):
+        return '%s %s (%s)' % (self.engine, self.sha[:7], self.state)

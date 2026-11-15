@@ -54,6 +54,7 @@ import bench
 import genfens
 import isa_detector
 import pgn_util
+import tunables
 import utils
 
 ## Local imports from client are an exception
@@ -66,7 +67,7 @@ from client import save_token
 
 ## Basic configuration of the Client. These timeouts can be changed at will
 
-CLIENT_VERSION   = 57 # Client version to send to the Server
+CLIENT_VERSION   = 58 # Client version to send to the Server
 TIMEOUT_HTTP     = 30 # Timeout in seconds for HTTP requests
 TIMEOUT_ERROR    = 60 # Timeout in seconds when any errors are thrown
 TIMEOUT_WORKLOAD = 60 # Timeout in seconds between workload requests
@@ -1309,6 +1310,12 @@ def server_request_workload(config):
         config.workload = None
         return
 
+    # The server wants the tunable parameters of an engine at a commit: build it, ask it, say what it said. Then ask again at once
+    if 'tunables' in response:
+        read_tunables(config, response['tunables'])
+        config.workload = None
+        return
+
     # Nothing for this worker yet (pending approval, switched off): say why once, and keep asking
     if 'wait' in response:
         if response['wait'] != config.last_wait:
@@ -1332,6 +1339,58 @@ def server_request_workload(config):
 
     config.workload = response.get('workload', None)
 
+
+def report_tunables(config, job, state, **fields):
+
+    # What this worker is at in a read of an engine's parameters. Only the ending is sure to be said: it is tried three times
+    payload = { 'id' : job['id'], 'state' : state }
+    payload.update({ key : value for key, value in fields.items() if value is not None })
+    for attempt in range(1 if state == 'active' else 3):
+        try:
+            ServerReporter.report(config, 'clientReportTunables', payload)
+            return
+        except (BadVersionException, utils.OpenBenchFatalWorkerException):
+            raise
+        except Exception:
+            if state != 'active': time.sleep(2)
+
+def read_tunables(config, job):
+
+    # The tunables job: the commit is built with the engine's tune flags (the same binary, cache and name as the build of a tune
+    # that follows), started over UCI and asked `spsa`, else `uci`. Whatever happens is reported: the list, or why not.
+    engine, sha = job['engine'], job['sha']
+    print('\nReading the tunable parameters of %s at %s' % (engine, sha[:7]))
+
+    try:
+        make_args = utils.checked_make_args(job.get('make_args'))
+        out_path  = os.path.join('Engines', utils.engine_binary_name(engine, sha, '', make_args))
+        compiler  = config.compilers[engine][0] if engine in config.compilers else config.cxx_comp
+        report_tunables(config, job, 'active', detail='building %s%s' % (sha[:7], (' with ' + ' '.join(make_args)) if make_args else ''))
+        name = utils.prepare_engine(engine, '', job.get('name') or sha[:7], job['source'], job['build']['path'], out_path,
+                                    job.get('private'), compiler, make_args)
+        report_tunables(config, job, 'active', detail='asking the engine')
+        command, lines = tunables.read(os.path.join('Engines', name), job.get('ordinary') or ())
+
+    except utils.OpenBenchBuildFailedException as error:
+        print('Failed to build %s %s' % (engine, sha[:7]))
+        report_tunables(config, job, 'failed', error='The build failed:\n' + '\n'.join((error.logs or error.message or '').split('\n')[-40:]))
+        return
+
+    except tunables.TunablesError as error:
+        print('[Note] %s' % (error))
+        report_tunables(config, job, 'failed', error=str(error))
+        return
+
+    except (BadVersionException, utils.OpenBenchFatalWorkerException):
+        raise
+
+    except Exception as error:
+        traceback.print_exc()
+        report_tunables(config, job, 'failed', error='The worker could not read it: %s' % (str(error)[-500:]))
+        return
+
+    print('%s answered with %d parameters' % (command, len(lines)))
+    report_tunables(config, job, 'done', lines='\n'.join(lines), command=command)
 
 def complete_workload(config):
 
@@ -1688,12 +1747,14 @@ def reload_local_imports():
     import genfens
     import isa_detector
     import pgn_util
+    import tunables
     import utils
 
     importlib.reload(bench)
     importlib.reload(genfens)
     importlib.reload(isa_detector)
     importlib.reload(pgn_util)
+    importlib.reload(tunables)
     importlib.reload(utils)
 
 def parse_arguments(client_args):

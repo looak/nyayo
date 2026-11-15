@@ -793,17 +793,57 @@ def tune_to_its_best(r):
     r.prepare_client(5)
     worker = r.start_client(5, name='smoke-tune', extra=True, threads=2)
     r.approve('smoke-tune')
+    # The tune's worker alone plays this scenario, for the whole of it: it reads the list, so that the build it made is the one the
+    # tune then finds, and no other worker on this machine plays the same engine at the same time. The worker ends a match by
+    # killing the engine's processes by name (`pkill -f`), and two workers here share the names of the binaries (they come from
+    # the commit), so one that finishes a workload kills the other's bench or game: the tune or its SPRT then fails at random.
+    from nyayo.lab.models import Machine
+    others = list(Machine.objects.filter(state='approved', enabled=True).exclude(name='smoke-tune'))
     try:
-        return tune_played(r, form, began)
+        for machine in others:
+            check(r.owner.post('/machine-action', id=machine.id, action='disable').status_code == 302, 'could not disable %s' % (machine.name))
+        read = tunables_read(r, dev['branch'])
+        check(read['worker'] == 'smoke-tune', 'the list was read by %s, not the tune worker' % (read['worker']))
+        # the page's list is what the tune takes (the toy engine has no Seed to read, so the frozen one is added as a person would)
+        form['spsa_inputs'] = read['lines'] + '\nSeed, int, 0, 0, 100000, 1, 0.002'
+        said = tune_played(r, form, began)
+        from nyayo.lab.models import Step
+        compiles = Step.objects.filter(result__test_id=r.last_tune_id, step='compile', result__machine__name=read['worker'])
+        check(compiles.exists() and all(s.cached for s in compiles), 'the tune did not find the binary the read had built: %s' % (
+            [(s.side, s.cached) for s in compiles]))
+        return '%s; %s' % (read['said'], said)
     finally:
+        for machine in others:
+            r.owner.post('/machine-action', id=machine.id, action='enable')
         stop(worker)
         r.extras.remove(worker)
+
+
+def tunables_read(r, branch):
+    # What the create page does when a branch is typed: ask for the list, find none, queue the read (once), poll until the worker
+    # has built the commit with the tune flags and asked the toy engine, and a second ask is answered from the cache at once
+    from nyayo.lab.models import TunableList
+    asked = r.owner.session.get(r.url + '/tunables', params={ 'engine' : ENGINE_NAME, 'ref' : branch }, timeout=30).json()
+    check(asked.get('state') == 'none' and asked.get('sha'), 'the page was told %s of a commit nobody had read' % (asked))
+    for _ in range(2):
+        queued = r.owner.post('/tunables/read', engine=ENGINE_NAME, sha=asked['sha'], ref=branch).json()
+        check(queued['state'] in ('queued', 'reading'), 'the read was not queued: %s' % (queued))
+    check(TunableList.objects.filter(sha=asked['sha']).count() == 1, 'the commit was queued more than once')
+    r.wait_for(lambda: TunableList.objects.get(sha=asked['sha']).state in ('done', 'failed'), 240, 'the worker to read the parameters')
+    row = TunableList.objects.get(sha=asked['sha'])
+    check(row.state == 'done', 'the read failed: %s' % (row.error))
+    check(row.command == 'spsa' and row.lines == 'Skill, int, 30, 0, 100, 10, 0.3' and row.make_args == 'TUNE=1',
+          'the read gave %r by %s, built with %r' % (row.lines, row.command, row.make_args))
+    again = r.owner.session.get(r.url + '/tunables', params={ 'engine' : ENGINE_NAME, 'ref' : branch }, timeout=30).json()
+    check(again['state'] == 'done' and again['lines'] == row.lines and not again['guessed'], 'the second ask was %s' % (again))
+    return { 'lines' : row.lines, 'worker' : row.worker, 'said' : 'read %s by %s from %s' % (row.lines.split(',')[0], row.command, row.worker) }
 
 
 def tune_played(r, form, began):
     from nyayo.lab.models import SPSARun, SPSASnapshot
     test_id, said = r.owner.create_tune(**form)
     check(test_id, 'the create page refused: %s' % (said))
+    r.last_tune_id = test_id
     run = SPSARun.objects.get(tune_id=test_id)
     check([p.name for p in run.parameters.all()] == ['Skill'] and run.frozen == [{ 'name' : 'Seed', 'value' : 7 }], 'the tune is %s, frozen %s' % (
         [p.name for p in run.parameters.all()], run.frozen))

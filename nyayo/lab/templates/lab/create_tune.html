@@ -12,7 +12,7 @@
 {% if errors %}<div class="errors"><b>This tune can't be created yet.</b>
   <ul>{% for field, problem in errors.items %}<li>{{ problem }}</li>{% endfor %}</ul></div>{% endif %}
 
-<form method="post" id="tune" action="{% url 'create_tune' %}" data-frozen="{{ frozen_json }}">{% csrf_token %}
+<form method="post" id="tune" action="{% url 'create_tune' %}" data-frozen="{{ frozen_json }}" data-state-url="{% url 'tunables_state' %}" data-read-url="{% url 'tunables_read' %}">{% csrf_token %}
 <div class="card">
   <h3 class="box-title">Tune</h3>
   <div class="fields">
@@ -32,8 +32,9 @@
 
 <div class="card">
   <div class="card-head"><h3>Parameters</h3>
-    <span class="muted">Paste OpenBench's SPSA input, one <code>name, int|float, value, min, max, c_end, r_end</code> a line. Untick a parameter to freeze it: it isn't nudged, and both sides play it at the value in “Start / frozen at”.</span>
+    <span class="muted">Filled in from the engine at the branch above. Or paste OpenBench's SPSA input, one <code>name, int|float, value, min, max, c_end, r_end</code> a line. Untick a parameter to freeze it: it isn't nudged, and both sides play it at the value in “Start / frozen at”.</span>
     <span class="card-end counts" id="counts" hidden><b id="n-tuned">0</b> tuned · <b id="n-frozen">0</b> frozen · <a href="#" id="tune-all">tune all</a> · <a href="#" id="freeze-all">freeze all</a></span></div>
+  <p id="read-status" class="read-status" role="status" hidden></p>
   {% include "lab/_field.html" with name="spsa_inputs" label="SPSA input" textarea=True wide=True %}
   <div class="tune-scroll" id="param-table" hidden><table class="tune-table params">
     <thead><tr><th>Tune</th><th>Parameter</th><th class="num">Default</th><th class="num">Start / frozen at</th><th class="num">Min</th><th class="num">Max</th><th class="num">Step at the end</th><th class="num">Rate at the end</th></tr></thead>

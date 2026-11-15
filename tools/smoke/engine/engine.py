@@ -8,7 +8,9 @@
 # style (Strength 1) with a probability that is 1 at Skill 70, the hidden best value, and falls to 0 forty away from it, and
 # plays at random otherwise. So the closer the value is to 70, the more a game is won. An engine that is never told a Skill
 # plays as before, whatever its default says, so the other scenarios are unchanged. Skill exists only in the build made with
-# `make TUNE=1` (the makefile sets TUNE_BUILD), as Elephant's tunable constants do; a normal build exits when told one.
+# `make TUNE=1` (the makefile sets TUNE_BUILD), as Elephant's tunable constants do; a normal build exits when told one. The tune
+# build also answers `spsa` with the parameter's line, as Elephant's will, `name, int, value, min, max, c_end, r_end`; the normal
+# build, like an engine without the command, says nothing to it, so a worker asking it falls back to `uci`.
 #
 # The makefile turns this file into the executable the worker builds.
 
@@ -102,6 +104,9 @@ def uci_loop():
             if TUNE_BUILD:
                 print('option name Skill type spin default 30 min 0 max 100')
             print('uciok', flush=True)
+
+        elif tokens[0] == 'spsa' and TUNE_BUILD:
+            print('Skill, int, 30, 0, 100, 10, 0.3', flush=True)
 
         elif tokens[0] == 'isready':
             print('readyok', flush=True)

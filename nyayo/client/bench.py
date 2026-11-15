@@ -74,9 +74,12 @@ def single_core_bench(binary, outqueue):
         stdout, stderr = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
         ).communicate()
-        outqueue.put(parse_stream_output(stdout))
+        result = parse_stream_output(stdout)
+        if None in result: print('[Note] The bench of %s printed no count: %r' % (cmd[0], stdout[-300:]), flush=True)
+        outqueue.put(result)
 
-    except: # Signal an error with (None, None)
+    except Exception as error: # Signal an error with (None, None), and say why
+        print('[Note] The bench of %s could not run: %r' % (cmd[0], error), flush=True)
         outqueue.put((None, None))
 
 def multi_core_bench(binary, threads):

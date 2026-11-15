@@ -127,6 +127,97 @@
     area.value = lines.join("\n");
   });
 
+  // The engine's parameters, read from the engine at the commit the branch names: a worker builds it with the engine's tune flags
+  // and asks it. The list is cached for good per commit, so a commit read before fills the table at once; otherwise the job is
+  // queued (once per commit) and this asks until it is done or failed. What is pasted still overrides.
+  var statusBox = document.getElementById("read-status");
+  var engineBox = document.getElementById("f-engine");
+  var branchBox = document.getElementById("f-dev_branch");
+  var filled = null;       // the text this put in the box, so that a list the person pasted or edited is never replaced
+  var wanted = 0;          // which question is current: an answer to an older one is dropped
+  var timer = null, typing = null;
+
+  function say(nodes, bad) {
+    statusBox.textContent = "";
+    [].concat(nodes).forEach(function (n) { statusBox.appendChild(typeof n === "string" ? document.createTextNode(n) : n); });
+    statusBox.className = "read-status" + (bad ? " bad" : "");
+    statusBox.hidden = false;
+  }
+
+  function code(text) { var c = document.createElement("code"); c.textContent = text; return c; }
+
+  function post(url, data) {
+    var body = new URLSearchParams(data);
+    body.append("csrfmiddlewaretoken", form.querySelector("[name=csrfmiddlewaretoken]").value);
+    return fetch(url, { method: "POST", body: body, credentials: "same-origin" }).then(function (r) { return r.json(); });
+  }
+
+  function get(params) {
+    return fetch(form.dataset.stateUrl + "?" + new URLSearchParams(params), { credentials: "same-origin" }).then(function (r) { return r.json(); });
+  }
+
+  function fill(answer) {
+    var mine = area.value.trim() === "" || (filled !== null && area.value === filled);
+    if (!mine) {
+      say(["The parameters of ", code(answer.short), " are read, but the box holds a list of your own, which is kept. Clear it to use the engine's."]);
+      return;
+    }
+    filled = answer.lines;
+    area.value = answer.lines;
+    parse(); render();
+    var nodes = ["Read from ", code(answer.short), " by the engine's ", code(answer.command), " answer."];
+    if (answer.command === "uci") nodes.push(" It has no spsa command, so the step at the end (c_end) is a guess: a twentieth of each range.");
+    say(nodes);
+  }
+
+  function failed(answer) {
+    var retry = document.createElement("a");
+    retry.href = "#"; retry.textContent = "read again";
+    retry.addEventListener("click", function (e) { e.preventDefault(); ask(true); });
+    var log = document.createElement("pre");
+    log.className = "log"; log.textContent = answer.error || "";
+    say(["Reading the parameters from ", code(answer.short), " failed. Paste them below instead, or ", retry, ".", log], true);
+  }
+
+  function follow(answer, token) {
+    if (token !== wanted) return;
+    if (answer.error) { say([answer.error], true); return; }
+    if (answer.state === "done") { fill(answer); return; }
+    if (answer.state === "failed") { failed(answer); return; }
+    var where = answer.state === "reading" && answer.worker ? " on " + answer.worker : "";
+    say(["Reading the parameters from ", code(answer.short), "\u2026" + where + (answer.detail ? " (" + answer.detail + ")" : "")]);
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      get({ engine: answer.engine, sha: answer.sha }).then(function (next) {
+        next.short = next.short || answer.short; next.engine = answer.engine; next.sha = answer.sha;
+        follow(next, token);
+      }).catch(function () { follow(answer, token); });
+    }, 3000);
+  }
+
+  function ask(retry) {
+    var ref = branchBox ? branchBox.value.trim() : "";
+    clearTimeout(timer);
+    if (!engineBox || !ref) { statusBox.hidden = true; return; }
+    var token = ++wanted;
+    say(["Looking up ", code(ref), "\u2026"]);
+    get({ engine: engineBox.value, ref: ref }).then(function (answer) {
+      if (token !== wanted) return;
+      // read already, or going on, or a failure nobody asked to read again: the cache's word
+      if (answer.error || (answer.state !== "none" && !(answer.state === "failed" && retry))) return follow(answer, token);
+      post(form.dataset.readUrl, { engine: engineBox.value, sha: answer.sha, ref: ref, retry: retry ? "1" : "" }).then(function (queued) {
+        follow(queued, token);
+      });
+    }).catch(function () { say(["The parameters could not be asked for just now."], true); });
+  }
+
+  if (branchBox && engineBox) {
+    branchBox.addEventListener("input", function () { clearTimeout(typing); typing = setTimeout(function () { ask(false); }, 700); });
+    branchBox.addEventListener("change", function () { clearTimeout(typing); ask(false); });
+    engineBox.addEventListener("change", function () { ask(false); });
+    if (branchBox.value.trim() && area.value.trim() === "") ask(false);
+  }
+
   parse();
   render();
 })();

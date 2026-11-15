@@ -2,6 +2,7 @@ from django.urls import path
 
 from nyayo.lab import machines_views
 from nyayo.matches import removal_views
+from nyayo.lab import tunables_views
 from nyayo.lab import views as lab
 
 from . import views
@@ -21,7 +22,11 @@ urlpatterns = [
     path("create/datagen", views.stub("create_datagen"), name="create_datagen"),
     path("upload-net", views.stub("upload_net"), name="upload_net"),
     path("gauntlet", views.stub("gauntlet"), name="gauntlet"),
-    path("engines", views.stub("engines"), name="engines"),
+    path("engines", tunables_views.engines_page, name="engines"),
+    path("engines/<str:name>", tunables_views.engine_page, name="engine"),
+    path("engines/<str:name>/refresh", tunables_views.engine_refresh, name="engine_refresh"),
+    path("tunables", tunables_views.state, name="tunables_state"),
+    path("tunables/read", tunables_views.read, name="tunables_read"),
     path("books", views.stub("books"), name="books"),
     path("machines", machines_views.machines_page, name="machines"),
     path("machine-place", machines_views.machine_place, name="machine_place"),

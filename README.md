@@ -49,7 +49,7 @@ snapshot), and its page shows progress, how far each parameter moved lately, the
 result (the average of the last 20%) as C++ constants, UCI options and SPSA input. It can queue an SPRT of the result against
 the start when it ends, or at any time. An engine that only exposes its tunable options in a special build is tuned with that
 build: the engine's *Tune make args* (Elephant: `TUNE=1`) go to `make` for the tune, its checks and its SPRT, and for nothing else
-(client 57). Its history is served as CSV and JSON. The design is in
+(client 57). The parameters are read from the engine itself: typing a branch on `/create/tune` has a worker build that commit with the tune flags and ask the binary (`spsa`, else `uci`), cached per commit, and an engine's page (`/engines/<name>`) shows them with Refresh (client 58). Its history is served as CSV and JSON. The design is in
 [looak/ramani](https://github.com/looak/ramani) `plans/nyayo-2.md`, *Tunes*; what the code does is in
 [docs/spec.md](docs/spec.md), *Lab: tunes* and *Lab: tune pages*. Updating from 2.0 is `deploy/update.sh` (one migration, `lab`
 0007); nothing else changes. The smoke test (`tools/smoke`) runs a small tune.

@@ -126,5 +126,5 @@ class Workload(Api):
         make_test(make_args="TUNE=1")
         self.sign_in()
         from nyayo.lab import config
-        with mock.patch.object(config, "client_version", return_value=58):
+        with mock.patch.object(config, "client_version", return_value=59):
             self.assertIn("Bad Client Version", self.worker("clientGetWorkload").json()["error"])
