@@ -66,9 +66,14 @@ def engine_table():
 
 DEFAULT_BASE = 'main'
 
-def default_values(config, preset=None):
+# A tune's workload is one SPSA step, reported whole at its end: 2 * workload_size * concurrency pairs, so 4 * workload_size *
+# concurrency games. At 4 that is 96 games on a 6-game worker, about 6 minutes at 8+0.08; the page's 32 made it 768, nearly an hour.
+TUNE_WORKLOAD_SIZE = '4'
 
-    # What the form starts with: the engine, its defaults, its first preset (or the one named)
+def default_values(config, preset=None, tune=False):
+
+    # What the form starts with: the engine, its defaults, its first preset (or the one named). A tune's workload size is
+    # its own: a preset's belongs to the SPRTs it was made for.
     names  = preset_names(config)
     first  = preset or (names[0] if names else 'default')
     values = {
@@ -87,6 +92,8 @@ def default_values(config, preset=None):
         'spsa_check_games' : '500', 'spsa_then_sprt' : '',
     }
     values.update(preset_values(config, first))
+    if tune:
+        values['workload_size'] = TUNE_WORKLOAD_SIZE
     if not values['book']:
         book = Book.objects.filter(enabled=True).order_by('name').first()
         values['book'] = book.name if book else ''

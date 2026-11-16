@@ -533,8 +533,12 @@ games: `games // (2 * pairs_per)`, so the start is iteration 0 and the end `SPSA
 templates `lab/create_tune.html` and `lab/tune_detail.html`.
 
 - **`/create/tune`** (staff) is the create page of a tune: engine, a branch or commit (played against itself: base is dev), book, name,
-  priority, iterations and pairs per iteration, and the preset pills, whose time control, options and workload size the server
-  applies. **Parameters** is OpenBench's SPSA input in a textarea, filled from the engine at the typed commit when it has been
+  priority, iterations, pairs per iteration and **workload size**, and the preset pills, whose time control and options the server
+  applies (not their workload size, which belongs to SPRTs). A tune's workload is one SPSA step, reported whole at its end:
+  `2 * workload_size * concurrency` rounds of two games a runner (`get_workload.game_distribution`), so
+  `4 * workload_size * concurrency` games. The tune page therefore starts at **4**, not the 32 of `/create/test`: on a 6-game
+  worker that is 96 games, about 6 minutes at 8+0.08, where 32 was 768 games and nearly an hour with nothing to show. The hint
+  beside the field says so. Snapshots and checks fall on iteration boundaries crossed by a report, so any size works. **Parameters** is OpenBench's SPSA input in a textarea, filled from the engine at the typed commit when it has been
   read (*Lab: reading a tune's parameters*) or pasted; with script it fills a table, a row each with a **Tune** tickbox
   (unticked is frozen), the default as pasted, an editable **Start / frozen at** (amber, tagged *frozen, not at its default*, for a
   frozen value off its default), min, max and the step and rate at the end, with *tune all* / *freeze all* and the counts. The table

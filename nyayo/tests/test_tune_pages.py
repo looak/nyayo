@@ -106,6 +106,19 @@ class Creating(Staff):
         self.assertEqual((test.base.sha, test.base.name), (test.dev.sha, test.dev.name))
         self.assertEqual(test.spsa_run.parameters.count(), 3)
 
+    def test_the_page_offers_a_small_workload_size_with_its_hint(self):
+        page = self.client.get(reverse("create_tune")).content.decode()
+        self.assertRegex(page, r'name="workload_size" id="f-workload_size" value="4"')
+        self.assertIn("one step is workload size × the worker&#x27;s concurrency × 2 pairs", page.replace("'", "&#x27;"))
+
+    def test_a_tune_takes_the_small_default_not_the_preset_s_32_and_keeps_one_typed(self):
+        self.assertEqual(self.client.get(reverse("create_test")).context["values"]["workload_size"], "32")
+        self.post()
+        self.assertEqual(Test.objects.get().workload_size, 4)
+        Test.objects.all().delete()
+        self.post(workload_size="1")
+        self.assertEqual(Test.objects.get().workload_size, 1)
+
     def test_frozen_ones_sent_as_the_script_sends_them(self):
         self.post(spsa_frozen=["Contempt", "Margin"], spsa_frozen_value_Contempt="5", spsa_frozen_value_Margin="0.25")
         run = SPSARun.objects.get()
