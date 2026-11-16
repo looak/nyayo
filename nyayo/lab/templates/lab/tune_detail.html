@@ -95,7 +95,9 @@
   <section class="card">
     <div class="card-head"><h3>Values for the code</h3></div>
     <pre class="code" id="code-cpp">{{ code.cpp }}</pre>
-    <p class="muted">The average of the last {{ average_tail }} of the iterations so far, as snapshots, with the current value; integers rounded the way they are played. Frozen ones aren't listed.</p>
+    <p class="muted">The average of the last {{ average_tail }} of the iterations so far, as snapshots, with the current value; integers rounded the way they are played. Frozen ones aren't in the code or the options.</p>
+    {% if code.frozen %}<p class="muted">Frozen, played on both sides while it ran, so the values above assume them:</p>
+    <pre class="code" id="code-frozen">{{ code.frozen }}</pre>{% endif %}
     <details><summary>UCI options</summary><pre class="code">{{ code.options }}</pre></details>
     <details><summary>SPSA input, to start again from these</summary><pre class="code">{{ code.spsa }}</pre></details>
     <button type="button" class="act copy" data-copy="code-cpp" hidden>Copy the C++</button>

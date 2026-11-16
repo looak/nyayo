@@ -498,8 +498,12 @@ games: `games // (2 * pairs_per)`, so the start is iteration 0 and the end `SPSA
   it has no name), of the same engine commits, time control, book and adjudication. Its dev side plays the tune's options
   plus the snapshot's values, its base side the tune's options plus the start values; integer parameters are rounded. When
   the check finishes, `check_elo` (dev's, from `stats.Elo`) and `check_error` go on the snapshot (`utils.update_test`); a check whose games all had one result has no variance, so its `check_error` is null (no interval), not zero. A check ends at `check_games` or just over it: a workload reports whole pairs.
-- **Frozen parameters** are not SPSA parameters. At creation `Name=value` is appended to both sides' options of the tune
-  (so also of every check and SPRT made from it) and kept in `SPSARun.frozen`.
+- **Three states per parameter.** *Tuned*: an SPSA parameter. *Frozen*: held at a value that differs from the engine's
+  default; at creation `Name=value` is appended to both sides' options of the tune (so also of every check and SPRT made
+  from it) and kept in `SPSARun.frozen`, which lists only these. *Default*: not sent at all, the engine plays its own, and
+  the run never manages it (nothing is stored of it). A frozen value equal to the default (the value in the parameter's
+  line) is Default, so nothing redundant is sent. `Test.dev_options` and `base_options` are text with no length limit
+  (they were OpenBench's 256 characters); the worker passes them on whole, so no client change was needed.
 - **The result.** `tunes.averaged_values(run)`: per parameter, the mean of the snapshots in the last `average_tail` of the
   iterations so far (not the start's) and the current value. `tunes.lately(run)`: the share of each parameter's range it
   moved over the last 10% of the snapshots. `tunes.history(run)`: the snapshot rows. `tunes.queue_sprt(tune, user=None,
@@ -509,8 +513,9 @@ games: `games // (2 * pairs_per)`, so the start is iteration 0 and the end `SPSA
 - **Creating** (`create_test.create_tune`, also what the create page's POST does when `test_mode` is `SPSA`): the fields
   are OpenBench's (`spsa_inputs` lines `name, int|float, value, min, max, c_end, r_end`; `spsa_alpha`, `spsa_gamma`,
   `spsa_A_ratio`, `spsa_iterations`, `spsa_pairs_per`) and `spsa_update_rule`, `spsa_check_every` (blank is the default),
-  `spsa_check_games`, `spsa_then_sprt`, a list `spsa_frozen` of names each with `spsa_frozen_value_<name>`. Errors are by
-  field: a bad line, a value out of its range, a frozen name not in the list or without a number, nothing left to tune.
+  `spsa_check_games`, `spsa_then_sprt`, a list `spsa_frozen` of names each with `spsa_frozen_value_<name>`, and a list
+  `spsa_default` of names left at the default. Errors are by field: a bad line, a value out of its range, a frozen or
+  default name not in the list, a frozen value without a number, nothing left to tune.
   Reporting and distribution are `BULK` and `SINGLE`. The page is below.
 - **The tune's build.** An engine that only exposes its tunable options in a special build (Elephant: `make TUNE=1`, which adds
   `-DELEPHANT_TUNE`; a normal build keeps the constants `constexpr` and answers *Unknown option*) says how in
@@ -535,12 +540,13 @@ templates `lab/create_tune.html` and `lab/tune_detail.html`.
 - **`/create/tune`** (staff) is the create page of a tune: engine, a branch or commit (played against itself: base is dev), book, name,
   priority, iterations and pairs per iteration, and the preset pills, whose time control, options and workload size the server
   applies. **Parameters** is OpenBench's SPSA input in a textarea, filled from the engine at the typed commit when it has been
-  read (*Lab: reading a tune's parameters*) or pasted; with script it fills a table, a row each with a **Tune** tickbox
-  (unticked is frozen), the default as pasted, an editable **Start / frozen at** (amber, tagged *frozen, not at its default*, for a
-  frozen value off its default), min, max and the step and rate at the end, with *tune all* / *freeze all* and the counts. The table
-  sends each frozen one as `spsa_frozen` and `spsa_frozen_value_<name>` and writes an edited start back into its line on submit.
-  Without script the textarea alone is sent, tuning everything, and a plain `spsa_frozen_text` (`Name = value` lines) takes the
-  frozen. **How it learns** is folded (update rule, checks every N and games each, α, γ, A); **Then** is the SPRT-after tickbox;
+  read (*Lab: reading a tune's parameters*) or pasted; with script it fills a table, a row each with a
+  three-way **State** control (Tune, Freeze or Default; Tune to start), the default as pasted, an editable **Start / frozen at**
+  (disabled for Default; a frozen value equal to the default counts, and is tagged, as Default), min, max and the step and
+  rate at the end, with *tune all* / *default all* and the counts (tuned · frozen · default). The table sends each frozen one
+  as `spsa_frozen` and `spsa_frozen_value_<name>`, each default one as `spsa_default`, and writes an edited start back into
+  its line on submit. Without script the textarea alone is sent, tuning everything, and a plain `spsa_frozen_text`
+  (`Name = value` lines, frozen ones only) takes the frozen. **How it learns** is folded (update rule, checks every N and games each, α, γ, A); **Then** is the SPRT-after tickbox;
   a summary line counts the games including the checks. `create_tune`'s errors are shown like the Create test page's, with the form
   as typed (`400`). It always creates anyway: a tune plays one commit.
 - **The tune's page** is the match page of a `tune-N` match that has a lab `Test` (`matches.pages.match_detail` asks
@@ -556,7 +562,8 @@ templates `lab/create_tune.html` and `lab/tune_detail.html`.
   each linked; a check with no interval shows *none* and is drawn without a whisker), and a small chart per parameter: its value line on its own scale, the start dashed, and the outcome shaded behind it
   on the one shared Elo scale (`EloScale`). All server-drawn SVG, the x axis the iterations so far; CSV and JSON links. **Values for
   the code:** C++ `constexpr` lines (int or double) of `averaged_values` (the last 20% of the iterations so far, with the current
-  value), the UCI options and the SPSA input to start again from them; frozen ones aren't listed. **Then:** the SPRT after, linked
+  value), the UCI options and the SPSA input to start again from them; frozen ones aren't in those but follow, labelled as
+  frozen (the tuned values assumed them), as `Name=value`; default ones aren't mentioned. **Then:** the SPRT after, linked
   with its state, or what will happen at the end. It refreshes every 15 seconds while the match is running or waiting.
 - **The lists.** A tune's outcome checks are tied to it: the Tests list, its running and unstarted cards and the dashboard's leave
   them out, and the tune's page lists them; `/tests?checks=1` (the *tune checks* tick of the filter) lists them too. A tune's row says

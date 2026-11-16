@@ -235,8 +235,10 @@ def number(text):
 def parse_tune(values, errors):
 
     # A tune's fields: OpenBench's SPSA ones and nyayo's. Returns the form for spsa_utils.create_spsa_run (the lines
-    # that are tuned only) or None, with the errors by field. `spsa_frozen` is a list of names, each with its value in
-    # `spsa_frozen_value_<name>`; a frozen parameter is not tuned, and both sides play it at that value.
+    # that are tuned only) or None, with the errors by field. A parameter is tuned, frozen or default. `spsa_frozen` is a
+    # list of names, each with its value in `spsa_frozen_value_<name>`: not tuned, both sides play it at that value. A
+    # frozen one whose value is the one in its line (the engine's default) is a default one, as is each name in
+    # `spsa_default`: not tuned, and never sent, the engine plays its own.
     def bad(field, message):
         errors.setdefault(field, message)
 
@@ -268,7 +270,7 @@ def parse_tune(values, errors):
     games = read('spsa_check_games', 'Check games', int, 1)
 
     # The parameters, line by line
-    lines, seen = [], set()
+    lines, seen, defaults = [], set(), {}
     for position, line in enumerate((values.get('spsa_inputs') or '').splitlines(), 1):
         if not line.strip():
             continue
@@ -290,12 +292,18 @@ def parse_tune(values, errors):
             bad('spsa_inputs', 'Line %d (%s): a number is not a number' % (position, line.strip()))
             continue
         seen.add(name)
+        defaults[name] = value
         lines.append((name, line))
 
-    frozen_names = values.get('spsa_frozen') or []
-    if isinstance(frozen_names, str):
-        frozen_names = [frozen_names]
+    def names_of(field):
+        names = values.get(field) or []
+        return [names] if isinstance(names, str) else list(names)
+
+    frozen_names, default_names = names_of('spsa_frozen'), names_of('spsa_default')
     frozen = []
+    for name in default_names:
+        if name not in seen:
+            bad('spsa_default', '%s is left at its default but not in the list of parameters' % name)
     for name in frozen_names:
         if name not in seen:
             bad('spsa_frozen', '%s is frozen but not in the list of parameters' % name)
@@ -305,12 +313,14 @@ def parse_tune(values, errors):
         except ValueError:
             bad('spsa_frozen', 'The frozen value of %s is not a number' % name)
             continue
-        if name not in [f['name'] for f in frozen]:
+        if value == defaults[name]:
+            default_names.append(name)  # frozen at the default is the default: nothing to send
+        elif name not in [f['name'] for f in frozen]:
             frozen.append({ 'name' : name, 'value' : int(value) if value.is_integer() else value })
 
-    tuned = [line for name, line in lines if name not in frozen_names]
-    if not tuned and not errors.get('spsa_inputs') and not errors.get('spsa_frozen'):
-        bad('spsa_inputs', 'Nothing is left to tune: the list is empty, or every parameter is frozen')
+    tuned = [line for name, line in lines if name not in frozen_names and name not in default_names]
+    if not tuned and not errors.get('spsa_inputs') and not errors.get('spsa_frozen') and not errors.get('spsa_default'):
+        bad('spsa_inputs', 'Nothing is left to tune: the list is empty, or every parameter is frozen or at its default')
 
     if errors:
         return None
@@ -348,13 +358,11 @@ def create_test(values, user, anyway=False):
     dev = base = None
     spec = parse_tune(values, errors) if values['test_mode'] == TUNE else None
 
-    # Frozen values go on both sides, the way a preset's options do, and each side must still fit its field
+    # Frozen values go on both sides, the way a preset's options do. Default parameters are not sent, and the options
+    # have no length limit
     if spec:
         frozen = [(f['name'], tunes.number(float(f['value']))) for f in spec['spsa_frozen_list']]
         options = { side : tunes.append_options(values[side + '_options'], frozen) for side in ('dev', 'base') }
-        for side, text in options.items():
-            if len(text) > 256:
-                errors.setdefault(side + '_options', '%s Options are too long with the frozen values on' % side.capitalize())
 
     if config and not errors.get('engine'):
         dev  = collect_github_info(values, 'dev', config, errors)

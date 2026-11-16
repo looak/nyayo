@@ -84,3 +84,24 @@ class Migrated(TransactionTestCase):
         executor.migrate(executor.loader.graph.leaf_nodes("lab"))
         self.assertEqual(make_test().id, 2000)
         self.assertEqual(Match.objects.count(), 2)
+
+
+class OptionsMigrated(TransactionTestCase):
+    """The options of a test have no length limit once migrated, from OpenBench's 256."""
+
+    def test_options_are_text_after_the_migration(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate([("lab", "0011_tunable_list")])
+        old = executor.loader.project_state([("lab", "0011_tunable_list")]).apps.get_model("lab", "Test")
+        self.assertEqual(old._meta.get_field("dev_options").max_length, 256)
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes("lab"))
+        from nyayo.lab.models import Test
+        for side in ("dev", "base"):
+            field = Test._meta.get_field(side + "_options")
+            self.assertEqual((field.get_internal_type(), field.max_length), ("TextField", None))
+        long = " ".join("Parameter%d=%d" % (i, i) for i in range(400))
+        test = make_test()
+        Test.objects.filter(pk=test.pk).update(dev_options=long, base_options=long)
+        test.refresh_from_db()
+        self.assertEqual((test.dev_options, test.base_options), (long, long))
