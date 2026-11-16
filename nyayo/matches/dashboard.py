@@ -19,7 +19,8 @@ from nyayo.runs.models import Run
 from . import cards, catalogue, sprtview, stats
 from .gameslist import STARTPOS, hex_key, signed
 from .models import Batch, Game, Match, Upload
-from .pages import is_silent, match_queryset, running_cards, silent_cutoff, unstarted_cards
+from .pages import (hidden_checks, is_silent, job_kind, match_queryset, running_cards, silent_cutoff, tune_figures,
+                    unstarted_cards)
 from .selection import ENDINGS, LOST, RULES, WON
 
 WEEKS = 53
@@ -131,8 +132,12 @@ def openings():
 
 
 def recent_matches(cutoff):
-    matches = list(match_queryset().order_by("-updated_at")[:RECENT])
+    # a tune's outcome checks are the tune's, as in the lists: its row shows the newest one's Elo, not a match of its own
+    matches = list(match_queryset().exclude(pk__in=hidden_checks()).order_by("-updated_at")[:RECENT])
+    tunes_here = tune_figures([m.pk for m in matches if m.pk.startswith("tune-")])
     for match in matches:
+        match.job_kind = job_kind(match)
+        match.tune = tunes_here.get(match.pk)
         match.summary = stats.summarize(match.results.all())
         match.silent = is_silent(match, cutoff)
         produced = match.stats if isinstance(match.stats, dict) else None
@@ -169,7 +174,11 @@ def database():
 def playing():
     """The second tile: the matches being played, or with none, the one played last."""
     running = Match.objects.filter(state="running", hidden=False)
-    kinds = dict(running.values_list("kind").annotate(n=Count("pk")).order_by())
+    # by what they are for the reader: a tune is a tune, not the games match it is stored as; its checks are the tune's
+    kinds = {}
+    for pk, kind in running.exclude(pk__in=hidden_checks()).values_list("pk", "kind"):
+        label = job_kind(Match(pk=pk, kind=kind))
+        kinds[label] = kinds.get(label, 0) + 1
     last = None
     if not kinds:
         last = Match.objects.exclude(state="running").exclude(hidden=True).order_by(

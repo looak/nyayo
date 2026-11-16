@@ -58,3 +58,9 @@ pre.code { margin: 0 0 .5rem; padding: .6rem .8rem; background: var(--code-bg); 
 details.checks { margin: .6rem 0; }
 @media (max-width: 1000px) { .tune-small { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tune-two { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .tune-small { grid-template-columns: minmax(0, 1fr); } .tune-settled { margin-left: 0; } }
+/* a tune's card on the dashboard and the lists: the parameters that moved most, a compact row each */
+table.tune-card-params { width: 100%; font-variant-numeric: tabular-nums; font-size: .86rem; }
+table.tune-card-params td { padding: .2rem .5rem; border-top: 1px solid var(--line); }
+table.tune-card-params .num { text-align: right; white-space: nowrap; }
+table.tune-card-params .now { color: var(--bright); font-weight: 600; }
+table.tune-card-params .range { width: 45%; }

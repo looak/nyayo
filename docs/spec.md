@@ -342,7 +342,15 @@ with workers at every stage).
 `/tests` and `/gauntlets` each show a card for each of theirs being played right now, above the list (games, Elo, how it is going and when
 it will be done, and the boards of up to six games in play; a silent match is left out), and colours the list's score
 and Elo; its filters, like the games list's, are in a bar that opens, open while one is set. A lone running card
-spans the list's width. Every list pages 64 to a page. `manage.py seed_demo` (debug mode only) also makes two workers for the worker page, `pc-wsl` with the numbers of the design board (its 48 hours, hardware, flags, toolchains, software, 31 tests and 14,208 games) and `new-box` with two hours of history (`nyayo/lab/demo.py`), and makes seventeen simulated tests: eleven SPRTs (five of them
+spans the list's width. A running `tune-N` match of the lab gets a **tune card** instead (`nyayo.lab.tuneview.card`, template
+`lab/_tune_card.html`, which `matches.pages.running_cards` asks first): the tune's number and name linked to its page, engine,
+branch and commit, iterations done of total with a bar, the pace (iterations and games an hour) and when it is done around,
+the six parameters that moved most as a compact row each (start, now, a range bar, the share of the range moved) with how many
+more the tune's page has, the newest finished outcome check's Elo against the start (and whether an SPRT follows), the workers
+and the last report. It never shows an Elo, score or LLR of dev against base: a tune's pairs play nudged values against each
+other. The dashboard's *Playing now* tile counts a tune as a `tune` (not `games`) and leaves its checks out, and *Recent matches*
+tiers it `tune`, shows its iteration and newest check's Elo in place of games, score and Elo, and lists no outcome check (they
+are on the tune's page, as in `/tests`). Every list pages 64 to a page. `manage.py seed_demo` (debug mode only) also makes two workers for the worker page, `pc-wsl` with the numbers of the design board (its 48 hours, hardware, flags, toolchains, software, 31 tests and 14,208 games) and `new-box` with two hours of history (`nyayo/lab/demo.py`), and makes seventeen simulated tests: eleven SPRTs (five of them
 without games: two waiting, held, two failed starts; one running with workers at every stage) and five
 simulated gauntlets (running, finished, stopped with games cut off, silent, just started), with their games, to polish
 the pages on.

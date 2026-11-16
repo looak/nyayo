@@ -1,7 +1,7 @@
 {% extends "runs/base.html" %}
-{% load runs_extras matches_extras %}
+{% load static runs_extras matches_extras %}
 {% block title %}Dashboard · nyayo{% endblock %}
-{% block head %}{% if running or unstarted.refresh %}<meta http-equiv="refresh" content="30">{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}
+{% block head %}<link rel="stylesheet" href="{% static 'lab/tune.css' %}">{% if running or unstarted.refresh %}<meta http-equiv="refresh" content="30">{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}
 <style>
   .calendar { display: block; width: 100%; height: auto; }
   .calendar text { fill: var(--muted); font-size: 9px; }
@@ -83,11 +83,15 @@
       <tbody>
       {% for m in recent %}
         <tr>
-          <td class="nowrap" title="{{ m.name|default:m.pk }}"><a href="{% url 'match' m.pk %}">{{ m.name|default:m.pk|truncatechars:36 }}</a> <span class="tier">{{ m.kind }}</span></td>
+          <td class="nowrap" title="{{ m.name|default:m.pk }}"><a href="{% url 'match' m.pk %}">{{ m.name|default:m.pk|truncatechars:36 }}</a> <span class="tier">{{ m.job_kind }}</span></td>
           <td>{% if m.silent %}<span class="badge silent">silent</span>{% else %}<span class="badge {{ m.state }}">{{ m.state|statename }}</span>{% endif %}</td>
+          {% if m.tune %}
+          <td class="num muted" colspan="3" title="Its pairs play nudged values against each other, so a score or an Elo from them would hover round zero. This is the newest outcome check's: the values so far against the start.">iteration {{ m.tune.iteration|thousands }}/{{ m.tune.iterations|thousands }}{% if m.tune.elo is not None %} · check <span class="{% if m.tune.elo > 0 %}better{% elif m.tune.elo < 0 %}worse{% endif %}">{{ m.tune.elo|elo }}</span>{% if m.tune.error is not None %} {{ m.tune.error|error }}{% endif %}{% endif %}</td>
+          {% else %}
           <td class="num">{{ m.summary.overall.games }}{% if m.progress.total %}<span class="muted">/{{ m.progress.total }}</span>{% endif %}</td>
           <td class="num {% if m.summary.overall.score > 0.5 %}better{% elif m.summary.overall.score < 0.5 %}worse{% endif %}">{{ m.summary.overall.score|percent }}</td>
           <td class="num {% if m.elo > 0 %}better{% elif m.elo < 0 %}worse{% endif %}">{{ m.elo|elo }}</td>
+          {% endif %}
         </tr>
       {% endfor %}
       </tbody>
