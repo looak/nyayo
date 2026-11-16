@@ -91,7 +91,8 @@ def parameter_rows(run, snapshots, so_far, scale, finished_checks):
 
 
 def code_blocks(run, values):
-    """The averaged values as C++ constants, as UCI options and as SPSA input (the values as the new start)."""
+    """The averaged values as C++ constants, as UCI options and as SPSA input (the values as the new start). The frozen
+    values are listed apart, as frozen: the tuned values assumed them, so they are shown after the code, labelled, and not in it."""
     params = list(run.parameters.order_by("index"))
     width = max((len(p.name) for p in params), default=0)
     cpp, options, spsa = [], [], []
@@ -102,7 +103,8 @@ def code_blocks(run, values):
         options.append(f"{p.name}={text}")
         spsa.append(", ".join([p.name, "float" if p.is_float else "int", text, tunes.number(p.min_value, p.is_float),
                                tunes.number(p.max_value, p.is_float), f"{p.c_end:g}", f"{p.r_end:g}"]))
-    return {"cpp": "\n".join(cpp), "options": " ".join(options), "spsa": "\n".join(spsa)}
+    frozen = " ".join(f"{name}={text}" for name, text in tunes.frozen_options(run))
+    return {"cpp": "\n".join(cpp), "options": " ".join(options), "spsa": "\n".join(spsa), "frozen": frozen}
 
 
 def then_block(run):

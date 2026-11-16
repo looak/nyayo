@@ -32,6 +32,7 @@ def create_test_page(request):
         values.update({key: request.POST[key].strip() for key in values if key in request.POST})
         if values['test_mode'] == creating.TUNE:
             values['spsa_frozen'] = request.POST.getlist('spsa_frozen')
+            values['spsa_default'] = request.POST.getlist('spsa_default')
             values.update({key: request.POST[key].strip() for key in request.POST if key.startswith('spsa_frozen_value_')})
         test, errors, behind = creating.create_test(values, request.user, anyway='anyway' in request.POST)
         if test:
@@ -59,7 +60,7 @@ TUNE_SHARED = ('branch', 'bench', 'network', 'repo', 'tc', 'options')  # a tune 
 def tune_values(config, post):
     """The create-tune form's values from what was posted: the engine's defaults, the chosen preset's fields, and base the same
     as dev. Frozen parameters come as `spsa_frozen` names with `spsa_frozen_value_<name>`, or, without script, as the lines
-    `Name = value` of `spsa_frozen_text`."""
+    `Name = value` of `spsa_frozen_text`; parameters left at the engine's default as `spsa_default` names."""
     values = creating.default_values(config, tune=True)
     values.update({key: post[key].strip() for key in values if key in post})
     preset = values.get('preset')
@@ -71,10 +72,11 @@ def tune_values(config, post):
         values['base_' + name] = values['dev_' + name]
     values['test_mode'] = creating.TUNE
     values['spsa_frozen'] = [name for name in post.getlist('spsa_frozen') if name]
+    values['spsa_default'] = [name for name in post.getlist('spsa_default') if name]
     values.update({key: post[key].strip() for key in post if key.startswith('spsa_frozen_value_')})
     for line in post.get('spsa_frozen_text', '').splitlines():
         name, _, value = (part.strip() for part in line.partition('='))
-        if name and name not in values['spsa_frozen']:
+        if name and name not in values['spsa_frozen'] and name not in values['spsa_default']:
             values['spsa_frozen'].append(name)
             values['spsa_frozen_value_' + name] = value
     values['spsa_then_sprt'] = '1' if post.get('spsa_then_sprt') else ''
@@ -98,7 +100,7 @@ def create_tune_page(request):
             return redirect('match', match_id=test.match_id())
     else:
         values = creating.default_values(config, tune=True)
-        values.update(spsa_frozen=[], spsa_inputs=request.GET.get('inputs', ''))
+        values.update(spsa_frozen=[], spsa_default=[], spsa_inputs=request.GET.get('inputs', ''))
 
     table = creating.engine_table()
     context = {
@@ -106,6 +108,7 @@ def create_tune_page(request):
         'presets': table[config.name]['presets'], 'books': [(b.name, b.name) for b in Book.objects.filter(enabled=True).order_by('name')],
         'rules': [(x, x) for x in SPSARun.UpdateRule.values], 'engines': table,
         'frozen_json': json.dumps({name: values.get('spsa_frozen_value_' + name, '') for name in values.get('spsa_frozen', [])}),
+        'default_json': json.dumps(list(values.get('spsa_default', []))),
         'frozen_text': chr(10).join('%s = %s' % (name, values.get('spsa_frozen_value_' + name, '')) for name in values.get('spsa_frozen', [])),
         'here': 'create_tune', 'make_args': config.tune_make_args,
     }
