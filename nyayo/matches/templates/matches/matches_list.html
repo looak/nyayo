@@ -1,7 +1,7 @@
 {% extends "runs/base.html" %}
 {% load static runs_extras matches_extras %}
 {% block title %}{{ title }} · nyayo{% endblock %}
-{% block head %}<link rel="stylesheet" href="{% static 'matches/gauges.css' %}"><script defer src="{% static 'matches/gauges.js' %}"></script>{% if running or unstarted.refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{% static 'lab/tune.css' %}"><link rel="stylesheet" href="{% static 'matches/gauges.css' %}"><script defer src="{% static 'matches/gauges.js' %}"></script>{% if running or unstarted.refresh %}<meta http-equiv="refresh" content="10">{% endif %}{% if running %}{% include "matches/_chessground.html" %}{% endif %}{% endblock %}
 {% block content %}
 <h1>{{ title }}</h1>
 {% if running %}<div class="columns">{% endif %}

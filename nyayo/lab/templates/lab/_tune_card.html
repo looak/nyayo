@@ -1,0 +1,52 @@
+{% load runs_extras matches_extras %}
+{# a tune being run: how far it is, how fast, where its parameters went and what the last check found; no Elo or score of the pairs, which play nudged values against each other (the dashboard, the lists) #}
+{% with t=c.tune %}
+<div class="card running-card top-running tune-card">
+  <div class="card-head">
+    <h3 title="{{ t.label }}"><a href="{% url 'match' c.match.pk %}">{{ t.label }}</a>{% if t.test.name %} <span class="muted">{{ t.test.name }}</span>{% endif %}</h3>
+    <span class="tier tune">tune</span>
+    <span class="muted">{{ t.test.dev_engine }} · {{ t.branch }} @ {{ t.commit }}</span>
+    <span class="outcome running card-state">running</span>
+  </div>
+  <div class="score-row">
+    <div class="score-figure">
+      <span class="score-value">{{ t.iteration|thousands }}<span class="score-total">/{{ t.iterations|thousands }}</span></span>
+      <span class="score-label muted">iterations · {{ t.pct }}%</span>
+    </div>
+    {% if t.check %}
+    <div class="score-figure" title="The newest finished outcome check: the values at iteration {{ t.check.iteration }} against the start">
+      <span class="score-value {% if t.check.elo > 0 %}better{% elif t.check.elo < 0 %}worse{% endif %}">{{ t.check.elo|elo }}</span>
+      <span class="score-label muted">{% if t.check.error is not None %}{{ t.check.error|error }} Elo{% else %}Elo{% endif %} against the start, at {{ t.check.iteration|thousands }}</span>
+    </div>
+    {% endif %}
+  </div>
+  <div class="bar-wrap sprt-bar">
+    <div class="bar" role="img" aria-label="{{ t.iteration }} of {{ t.iterations }} iterations done">
+      <span class="seg pass" style="width: {{ t.pct }}%"></span>
+    </div>
+  </div>
+  <dl class="chips">
+    {% if t.iterations_per_hour %}<div><dt>Pace</dt><dd>{{ t.iterations_per_hour|floatformat:0 }} iterations/h <span class="muted">{{ t.games_per_hour|floatformat:0 }} games/h</span></dd></div>{% endif %}
+    {% if t.done_at %}<div><dt>Done around</dt><dd>{{ t.done_at|date:"D j M H:i" }} <span class="muted">~{{ t.left|seconds }}</span></dd></div>{% endif %}
+    <div><dt>Checks</dt><dd>{% if t.check %}{{ t.check.elo|elo }} at {{ t.check.iteration|thousands }}{% elif t.checks %}none finished yet{% else %}none planned{% endif %}{% if t.then_sprt %} <span class="muted">then an SPRT</span>{% endif %}</dd></div>
+    <div><dt>Workers</dt><dd>{% if t.workers %}{{ t.workers|join:", " }}{% else %}<span class="muted">none lately</span>{% endif %}</dd></div>
+    <div><dt>Last report</dt><dd>{{ c.match.updated_at|date:"H:i:s" }}</dd></div>
+  </dl>
+  {% if t.parameters %}
+  <h4 class="minis-title">Parameters{% if t.more %} <span class="muted">the {{ t.parameters|length }} that moved most, {{ t.more }} more on the tune's page</span>{% endif %}</h4>
+  <table class="tune-card-params">
+    <tbody>
+    {% for p in t.parameters %}
+      <tr title="{{ p.name }}: {{ p.start }} at the start, {{ p.now }} now, within {{ p.min }} to {{ p.max }}; moved {{ p.share }} of its range">
+        <td class="nowrap">{{ p.name }}</td>
+        <td class="num muted">{{ p.start }}</td>
+        <td class="num now">{{ p.now }}</td>
+        <td class="range"><div class="rangebar"><div class="track"><i class="rail"></i><i class="span {{ p.tone }}" style="left:{{ p.bar.left }}%;width:{{ p.bar.width }}%"></i><i class="start" style="left:{{ p.bar.start }}%"></i><i class="dot" style="left:{{ p.bar.now }}%"></i></div></div></td>
+        <td class="num change {{ p.tone }}">{{ p.share }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endwith %}

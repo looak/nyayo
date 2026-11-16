@@ -117,6 +117,53 @@ def then_block(run):
     return {"test": follow, "match": follow.match_id(), "state": state, "waits": False}
 
 
+CARD_PARAMETERS = 6  # the parameters a card shows: the few that moved most
+
+
+def workers_of(test, now):
+    """The names of the workers that reported lately, sorted."""
+    recent = [r for r in Result.objects.filter(test=test).select_related("machine") if r.machine.updated >= now - RECENT]
+    return sorted({r.machine.name or f"machine {r.machine_id}" for r in recent})
+
+
+def card(match, now):
+    """What a running tune's card on the dashboard and the lists says, or None when the match is not a tune of the lab's:
+    iterations, pace, the parameters that moved most, the newest finished check and who plays. Never an Elo or a score of the
+    pairs (dev against base), which are nudged values against each other and mean nothing."""
+    test = modify_test.test_of(match)
+    if test is None or test.test_mode != "SPSA" or not hasattr(test, "spsa_run"):
+        return None
+    run = test.spsa_run
+    so_far = tunes.iteration_of(run, test.games)
+    per_hour, left = pace(run, test, now)
+    running = not test.finished and test.approved
+    rows = []
+    for p in run.parameters.order_by("index"):
+        span = p.max_value - p.min_value
+        change = p.value - p.start
+        moved = abs(change) / span if span else 0.0
+        small = not p.is_float and span < SMALL_RANGE
+        rows.append({
+            "name": p.name, "moved": moved, "start": tunecharts.figure(p.start, p.is_float), "now": tunecharts.figure(p.value, p.is_float, small),
+            "min": tunecharts.figure(p.min_value, p.is_float), "max": tunecharts.figure(p.max_value, p.is_float),
+            "tone": "flat" if moved < 0.01 else "up" if change > 0 else "down", "share": f"{moved * 100:.0f}%",
+            "bar": tunecharts.range_bar(p.min_value, p.max_value, p.start, p.value),
+        })
+    shown = sorted(rows, key=lambda r: -r["moved"])[:CARD_PARAMETERS]
+    last = run.snapshots.exclude(check_elo=None).order_by("-iteration").first()
+    return {
+        "test": test, "run": run, "label": f"Tune {test.id}", "commit": test.dev.sha[:7], "branch": test.dev.name,
+        "iteration": so_far, "iterations": run.iterations,
+        "pct": f"{min(100.0, so_far / run.iterations * 100):.1f}" if run.iterations else "0.0",
+        "games": test.games, "planned_games": 2 * run.pairs_per * run.iterations,
+        "games_per_hour": per_hour, "iterations_per_hour": per_hour / (2 * run.pairs_per) if per_hour else None,
+        "left": left, "done_at": now + datetime.timedelta(seconds=left) if left is not None and running else None,
+        "parameters": shown, "parameter_count": len(rows), "more": len(rows) - len(shown),
+        "check": {"elo": last.check_elo, "error": last.check_error, "iteration": last.iteration} if last else None,
+        "checks": run.check_every > 0, "then_sprt": run.then_sprt, "workers": workers_of(test, now) if running else [],
+    }
+
+
 def context(request, match, test):
     run = test.spsa_run
     now = timezone.now()
@@ -131,7 +178,6 @@ def context(request, match, test):
     per_hour, left = pace(run, test, now)
     total_games = 2 * run.pairs_per * run.iterations
     check_count = run.iterations // run.check_every if run.check_every else 0
-    recent = [r for r in Result.objects.filter(test=test).select_related("machine") if r.machine.updated >= now - RECENT]
     running = not test.finished and test.approved
     values = tunes.averaged_values(run)
 
@@ -139,7 +185,7 @@ def context(request, match, test):
     facts = [("Games", f"{test.games:,}"),
              ("Pairs per hour", f"{per_hour / 2:,.0f}" if per_hour and running else None),
              ("Ends", ("in about " + seconds_text(left) + ", " + (now + datetime.timedelta(seconds=left)).strftime("%a %H:%M")) if left is not None and running else None),
-             ("Workers", ", ".join(sorted({r.machine.name or f"machine {r.machine_id}" for r in recent})) if running else None),
+             ("Workers", ", ".join(workers_of(test, now)) if running else None),
              ("Started", timezone.localtime(test.creation).strftime("%a %H:%M")),
              ("Snapshots", f"{len(snapshots):,}")]
     return {

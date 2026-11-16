@@ -324,6 +324,15 @@ def tune_figures(match_ids):
     return tunes.list_figures(match_ids) if match_ids else {}
 
 
+def tune_card(match, now):
+    """A running tune's card, from the lab's rows (nyayo.lab.tuneview.card), or None when the match is no tune of the lab's."""
+    if not match.pk.startswith("tune-"):
+        return None
+    from nyayo.lab import tuneview
+    figures = tuneview.card(match, now)
+    return {"match": match, "tune": figures} if figures else None
+
+
 def running_cards(cutoff, now, gauntlets=None):
     """The matches being played right now, newest first, for the top of the list: running, and reported lately (a
     silent match is likely dead). Each as what a glance needs: games, Elo, how it is going and when it will be done.
@@ -333,6 +342,9 @@ def running_cards(cutoff, now, gauntlets=None):
     if gauntlets is not None:
         running = running.filter(kind="gauntlet") if gauntlets else running.exclude(kind="gauntlet")
     for match in running.order_by("-updated_at")[:RUNNING_CARDS]:
+        if (tune := tune_card(match, now)) is not None:
+            cards.append(tune)
+            continue
         summary = stats.summarize(match.results.all())
         progress_info = match.progress or {}
         total = progress_info.get("total") or len(match.schedule) or None

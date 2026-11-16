@@ -1,4 +1,5 @@
 {% load runs_extras matches_extras %}
+{% if c.tune %}{% include "lab/_tune_card.html" %}{% else %}
 {# a match being played: its figures, how far along it is and the boards in play (the match list, the dashboard) #}
 <div class="card running-card top-running">
   <div class="card-head">
@@ -62,3 +63,4 @@
   {% include "matches/_minis.html" with boards=c.boards match=c.match %}
   {% endif %}
 </div>
+{% endif %}
