@@ -22,6 +22,7 @@
     {% include "lab/_field.html" with name="name" label="Name (optional)" placeholder="worked out from the branch" hint="the match is tune-<id>" %}
     {% include "lab/_field.html" with name="spsa_iterations" label="Iterations" id="iterations" %}
     {% include "lab/_field.html" with name="spsa_pairs_per" label="Pairs per iteration" hint="more is smoother, slower" %}
+    {% include "lab/_field.html" with name="workload_size" label="Workload size" hint="one step is workload size × the worker's concurrency × 2 pairs: smaller means more, shorter steps, and sooner feedback" %}
     {% include "lab/_field.html" with name="priority" label="Priority" %}
   </div>
   <h3>Time control and options</h3>

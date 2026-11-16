@@ -61,12 +61,13 @@ def tune_values(config, post):
     """The create-tune form's values from what was posted: the engine's defaults, the chosen preset's fields, and base the same
     as dev. Frozen parameters come as `spsa_frozen` names with `spsa_frozen_value_<name>`, or, without script, as the lines
     `Name = value` of `spsa_frozen_text`; parameters left at the engine's default as `spsa_default` names."""
-    values = creating.default_values(config)
+    values = creating.default_values(config, tune=True)
     values.update({key: post[key].strip() for key in values if key in post})
     preset = values.get('preset')
     if preset in creating.preset_names(config):
         values.update(creating.preset_values(config, preset))
         values.update({key: post[key].strip() for key in ('name', 'priority', 'book', 'dev_branch') if key in post})
+        values['workload_size'] = post.get('workload_size', creating.TUNE_WORKLOAD_SIZE).strip()
     for name in TUNE_SHARED:
         values['base_' + name] = values['dev_' + name]
     values['test_mode'] = creating.TUNE
@@ -98,7 +99,7 @@ def create_tune_page(request):
             modify_test.report(test)
             return redirect('match', match_id=test.match_id())
     else:
-        values = creating.default_values(config)
+        values = creating.default_values(config, tune=True)
         values.update(spsa_frozen=[], spsa_default=[], spsa_inputs=request.GET.get('inputs', ''))
 
     table = creating.engine_table()
