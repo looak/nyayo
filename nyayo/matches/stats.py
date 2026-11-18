@@ -95,3 +95,18 @@ def summarize(results, excluded=()):
         average = sum(r.rating["value"] * r.games for r in counted) / games
         performance = average + overall.elo
     return Summary(rows, overall, wins, draws, losses, penta, performance, wins + draws + losses)
+
+
+def performance_against_ours(results, overall_elo, excluded=()):
+    """The gauntlet's performance rating against the opponents' ratings of ours (`Engine.ours`, on the list's scale under
+    our conditions) in place of the ratings the match was played against: the games-weighted average of ours plus the Elo
+    of the overall score. None unless every opponent counted has one. `results` should come with `select_related("engine")`.
+    """
+    counted = [r for r in results if r.opponent not in excluded and r.games]
+    if not counted or overall_elo is None:
+        return None
+    values = [(r.engine.ours or {}).get("value") if r.engine_id else None for r in counted]
+    if any(not isinstance(v, (int, float)) for v in values):
+        return None
+    games = sum(r.games for r in counted)
+    return sum(v * r.games for v, r in zip(values, counted)) / games + overall_elo

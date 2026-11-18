@@ -1,7 +1,7 @@
 from django.urls import path
 
 from nyayo.lab import machines_views
-from nyayo.matches import removal_views
+from nyayo.matches import gauntlet_views, removal_views
 from nyayo.lab import tunables_views
 from nyayo.lab import views as lab
 
@@ -21,7 +21,7 @@ urlpatterns = [
     path("create/tune", lab.create_tune_page, name="create_tune"),
     path("create/datagen", views.stub("create_datagen"), name="create_datagen"),
     path("upload-net", views.stub("upload_net"), name="upload_net"),
-    path("gauntlet", views.stub("gauntlet"), name="gauntlet"),
+    path("gauntlet", gauntlet_views.page, name="gauntlet"),
     path("engines", tunables_views.engines_page, name="engines"),
     path("engines/<str:name>", tunables_views.engine_page, name="engine"),
     path("engines/<str:name>/refresh", tunables_views.engine_refresh, name="engine_refresh"),
