@@ -171,6 +171,9 @@ def parse_aliases(text):
 
 # --- backfill ---
 
+# what a gauntlet file says about an engine that the catalogue keeps; a `cmd` engine (a local build) has no url
+FILE_KEYS = ("url", "ref", "asset", "binary", "options", "rating")
+
 def slug(text):
     """uwanja's engine id from a name or a URL (uwanja/config.py `_slug`), so a gauntlet file's opponents can be
     matched to the ids of the match they made."""
@@ -214,7 +217,7 @@ def backfill_matches():
 
 
 def backfill_file(data, notes):
-    """Fills opponents' rows from a gauntlet file (uwanja's TOML, already parsed): its `name` is the match's name, each
+    """Fills the subject's and the opponents' rows from a gauntlet file (uwanja's TOML, already parsed): its `name` is the match's name, each
     `[[opponent]]` is found through that match by its id. Returns the number of rows changed; what could not be
     matched is appended to `notes`."""
     match = Match.objects.filter(name=data.get("name"), kind="gauntlet").first()
@@ -223,13 +226,16 @@ def backfill_file(data, notes):
         notes.append(f"no stored gauntlet is named {data.get('name')!r}")
         return 0
     changed = 0
+    subject = data.get("subject")
+    if isinstance(subject, dict) and fill(match.subject, {name: subject.get(name) for name in FILE_KEYS}):
+        changed += 1
     results = {r.opponent: r for r in match.results.select_related("engine")}
     for ident, table in zip(file_ids(tables), tables):
         result = results.get(ident)
         if result is None:
             notes.append(f"{match.name}: no opponent {ident!r} in the stored match")
             continue
-        extra = {name: table.get(name) for name in ("ref", "asset", "binary", "options", "rating", "url")}
+        extra = {name: table.get(name) for name in FILE_KEYS}
         if fill(result.engine, extra):
             changed += 1
     return changed

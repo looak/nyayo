@@ -126,7 +126,8 @@ bounds and result, and `stats` its Elo and error. The shape it sent before v1 is
   `/opponents/<id>/merge` merges another row into it after a confirm page: every match (subject and opponent) is
   repointed, the other's name and aliases become aliases, what the kept row lacks is taken from the other, and the
   other is deleted. A merge is final. `manage.py backfill_engines [gauntlet.toml ...]` fills blanks from the stored
-  gauntlets and from uwanja gauntlet files (matched to their match by `name`, their opponents by uwanja's ids); run
+  gauntlets and from uwanja gauntlet files (matched to their match by `name`, their opponents by uwanja's ids, and the
+  `[subject]` to the match's subject; a subject that is a local `cmd` has no repository to fill); run
   again it changes nothing. The lab's Engines page (`/engines`) is OpenBench's builds and unrelated.
 - **Snapshots**: an accepted report appends one when the counts differ from the last snapshot's (time, counts per
   opponent, the producer's LLR and `stats`); a re-send with the same counts adds none. They're what the SPRT card's

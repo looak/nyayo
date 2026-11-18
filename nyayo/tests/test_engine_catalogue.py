@@ -107,6 +107,20 @@ class Backfill(MatchTestCase):
         call_command("backfill_engines", str(path), stdout=out)  # again: nothing changes
         self.assertIn("0 engine rows filled", out.getvalue().splitlines()[-1])
 
+    def test_a_files_subject_is_filled_too_and_again_changes_nothing(self):
+        self.put_match(gauntlet(**{"subject__repo": "https://github.com/looak/elephant"}))
+        path = Path(self.data) / "s.toml"
+        path.write_text(chr(10).join(['name = "elephant-1.0.0-ccrl-blitz"', "[subject]",
+                                    'url = "https://github.com/looak/elephant"', 'ref = "1.0.0"',
+                                    "options = { Threads = 1 }"]), encoding="utf-8")
+        call_command("backfill_engines", str(path), stdout=io.StringIO())
+        row = Engine.objects.get(name="Elephant")
+        self.assertEqual((row.url, row.ref, row.options),
+                         ("https://github.com/looak/elephant", "1.0.0", {"Threads": 1}))
+        out = io.StringIO()
+        call_command("backfill_engines", str(path), stdout=out)
+        self.assertIn("0 engine rows filled", out.getvalue().splitlines()[-1])
+
     def test_a_file_for_no_stored_match_is_said(self):
         notes = []
         engines.backfill_file({"name": "nope", "opponent": []}, notes)
