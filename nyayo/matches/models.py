@@ -35,7 +35,7 @@ class Engine(models.Model):
     rating = models.JSONField(null=True, blank=True)
     # other names the same engine was reported under, so that a report by one of them finds this row
     aliases = models.JSONField(default=list, blank=True)
-    # its rating from our own gauntlet games, { value, error, games }, fitted by nyayo; room for it, nothing writes it yet
+    # its rating from our own gauntlet games, { value, error, games, as_of, flagged, z }, fitted by nyayo (ratings.py)
     ours = models.JSONField(null=True, blank=True)
 
     class Meta:

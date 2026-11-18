@@ -127,10 +127,10 @@ def fill_from_document(match, document):
 # --- the list ---
 
 def catalogue():
-    """The rows the engines page lists: those with a `url` and a `ref`, and those played as a gauntlet's opponent;
-    not every commit an SPRT reported."""
+    """The rows the engines page lists: those with a `url` and a `ref`, those played as a gauntlet's opponent, and
+    those with a rating of ours (the Elephant versions); not every commit an SPRT reported."""
     played = MatchResult.objects.filter(match__kind="gauntlet").values("engine")
-    return Engine.objects.filter((~Q(url="") & ~Q(ref="")) | Q(pk__in=played)).order_by("name", "version")
+    return Engine.objects.filter((~Q(url="") & ~Q(ref="")) | Q(pk__in=played) | Q(ours__isnull=False)).order_by("name", "version")
 
 
 # --- merging ---

@@ -127,6 +127,9 @@ after it ended, and `nyayo-worker.service` deletes it then, with its archive: it
 A running match with no report for `NYAYO_SILENT_AFTER` minutes (30 by default, in `.env`) is shown as *silent* on
 the Tests list and its page; nothing is stored, and its next report clears it.
 
+`NYAYO_RATING_PRIOR` (20) is the width in Elo of the prior a list rating gives an opponent in the fit of our own ratings;
+after a deploy, `manage.py fit_ratings` fits the gauntlets already stored (a finished gauntlet refits by itself).
+
 A match whose producer reports by changes (uwanja, once it sends `report.seq`) is archived whole at most every
 `NYAYO_ARCHIVE_EVERY` seconds while it runs (60 by default) and when it ends, instead of on every report; the archive
 is still the whole truth the database can be rebuilt from.

@@ -118,7 +118,7 @@ bounds and result, and `stats` its Elo and error. The shape it sent before v1 is
   file), and for games kept as data `Upload` and `Batch` (below).
 - **The catalogue of opponents** (`Engine`, `matches/engines.py`; the fields are in match-schema.md, The catalogue):
   a row gains `url`, `ref`, `asset`, `binary`, default `options`, the list's `rating` (one JSON, `{ value, list, as_of,
-  source }`, as a match carries it), `aliases`, and `ours` (null; the fit that fills it isn't built). Ingest finds the
+  source }`, as a match carries it), `aliases`, and `ours` (our own rating, below). Ingest finds the
   row for a reported engine by identity or alias and fills `url`, `ref`, `asset`, `binary` and the rating where the
   row has none, from the participant or its `config` entry, never overwriting. **Opponents** (`/opponents`, in the
   Catalogue group) lists the rows that have a `url` and `ref` or played a gauntlet as an opponent; reading is open.
@@ -129,6 +129,23 @@ bounds and result, and `stats` its Elo and error. The shape it sent before v1 is
   gauntlets and from uwanja gauntlet files (matched to their match by `name`, their opponents by uwanja's ids, and the
   `[subject]` to the match's subject; a subject that is a local `cmd` has no repository to fill); run
   again it changes nothing. The lab's Engines page (`/engines`) is OpenBench's builds and unrelated.
+- **Our own ratings** (`Engine.ours`, `matches/ratings.py`): `{ value, error, games, as_of, flagged, z }`, fitted from the
+  counts of every gauntlet match that isn't hidden (`MatchResult`, from the subject's side, summed over matches; a
+  running match counts the games it has), never from a producer's Elo. One logistic model with draws (BayesElo's shape,
+  Rao and Kupper: a win for A has probability `L(a - b - d)`, a loss `L(b - a - d)`, a draw the rest, `d` one draw
+  width fitted with the ratings; draws are modelled, not half points, because half points count every draw as a full
+  game of evidence and make the errors too small). Colour advantage is not modelled (the counts don't carry colours).
+  Each engine with a list rating has a Gaussian prior centred on it, `NYAYO_RATING_PRIOR` Elo wide (20); an Elephant
+  version or an opponent without a list rating has a flat one, and an engine whose games never lead to one with a prior is
+  left out (`ours` null). The fit is the MAP (L-BFGS, analytic gradient); `error` is one sigma, from the Hessian at the
+  optimum. `value` is **on the list's scale, under our conditions** (hardware, book, hash), never a list rating, and no
+  shift or stretch between the two scales is fitted. `as_of` is the date of the newest match among the games, so refitting
+  the same games changes nothing. `flagged` means the games alone, taken out of the posterior, differ from the list's number
+  by more than twice their error combined with the prior's (`z` is that difference in units of it); comparing the
+  posterior itself with the list would almost never fire, as the prior holds it. It is refitted, in the request, when a
+  gauntlet becomes `finished` (the fit takes a few hundredths of a second, and a failure is logged and never fails the
+  report), when a match is removed or brought back, and by `manage.py fit_ratings [--dry-run]`. `/opponents` shows it beside
+  the list's rating with its error and games, flagged rows marked, and lists Elephant's versions too.
 - **Snapshots**: an accepted report appends one when the counts differ from the last snapshot's (time, counts per
   opponent, the producer's LLR and `stats`); a re-send with the same counts adds none. They're what the SPRT card's
   graphs are drawn from. Snapshots from before `stats` existed have none, and the Elo graph uses nyayo's own figure

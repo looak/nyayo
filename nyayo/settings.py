@@ -105,6 +105,9 @@ NYAYO_UPLOADS_DIR = DATA_DIR / "uploads"
 NYAYO_INDEX_DB = Path(os.environ.get("NYAYO_INDEX_DB") or DATA_DIR / "index.sqlite3").resolve()
 NYAYO_MAX_BATCH_BYTES = 256 * 1024 * 1024
 
+# the width in Elo of the Gaussian prior a list rating gives an opponent in the fit of our own ratings (matches/ratings.py)
+NYAYO_RATING_PRIOR = float(os.environ.get("NYAYO_RATING_PRIOR", 20))
+
 # A match whose producer reports by changes is archived whole this often while it runs (and when it ends), not on every
 # report; 0 archives every report.
 NYAYO_ARCHIVE_EVERY = int(os.environ.get("NYAYO_ARCHIVE_EVERY", 60))
