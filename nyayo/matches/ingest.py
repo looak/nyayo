@@ -20,7 +20,7 @@ from django.utils import timezone
 
 from nyayo.runs.ingest import IngestError, atomic_write, first_difference, invalid, timestamp
 
-from . import engines, schedule
+from . import engines, ratings, schedule
 from .models import GAME_ID_MAX, ID_PATTERN, KINDS, MATCH_ID_MAX, STATES, Match, MatchResult, MatchSnapshot, Tombstone
 
 SCHEMA_VERSION = 1
@@ -78,17 +78,27 @@ def ingest(raw, machine=None, match_id=None):
     if existing is None and base is None:
         created = create_new(raw, document, machine)
         if created is not None:
+            refit_when_finished(created.match, None)
             return created
         # another producer created it first, while this one was waiting: this document is an update of what it wrote
         existing = find_match(m["id"])
     check_against(existing, document, base)
 
+    before = existing.state
     if base is None:
         write_archive(m["id"], raw, machine)
     match = store(existing, document, report, base)
     if base is not None:
         archive_merged(match, document, machine)
+    refit_when_finished(match, before)
     return Ingested(match, False)
+
+
+def refit_when_finished(match, before):
+    """A gauntlet that has just become finished adds its games to our ratings (ratings.py). Done here, in the request:
+    the fit takes a few hundredths of a second for the engines there are, and a failure is logged, never the report's."""
+    if match.kind == "gauntlet" and match.state == "finished" and before != "finished":
+        ratings.refit_quietly()
 
 
 def create_new(raw, document, machine):

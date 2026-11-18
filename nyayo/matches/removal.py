@@ -17,7 +17,7 @@ import logging
 
 from django.db import transaction
 
-from . import catalogue, games
+from . import catalogue, games, ratings
 from .ingest import delete_archived
 from .models import Match, Tombstone, Upload
 
@@ -55,12 +55,16 @@ def remove(matches, user):
         Match.objects.filter(pk=match.pk).update(hidden=True)
         done.append(match.pk)
         log.info("%s removed %s", user.get_username(), match.pk)
+    if done:
+        ratings.refit_quietly()  # a hidden gauntlet's games leave our ratings
     return done
 
 
 def bring_back(matches):
     ids = [m.pk for m in matches]
     Match.objects.filter(pk__in=ids).update(hidden=False)
+    if ids:
+        ratings.refit_quietly()
     return ids
 
 
