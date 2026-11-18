@@ -853,9 +853,9 @@ runs `sudo` on bobby; changes there are proposed, not made. [deploy.md](deploy.m
   `NYAYO_READER_SHA256`, `NYAYO_INDEX_DB`, `NYAYO_BACKUP_REPO`, `NYAYO_DATASETS_DIR` (position datasets' files, next to the batches by default), `NYAYO_BOOK_MIN_PLY` and `NYAYO_MIN_PLY_DEFAULT` (a dataset's first ply by book), `NYAYO_GITHUB_REPO` (the engine's repository, owner/name, for the dashboard's links), `NYAYO_TIME_ZONE` (the zone pages show times in, an IANA name) and `NYAYO_LOG_LEVEL`. A server error's traceback goes
   to the journal (`journalctl -u nyayo`); the jobs process's reasons are in `journalctl -u nyayo-jobs`.
 - **The share.** The batches are on the Synology's `nyayo-batches` folder over NFS 4.1, mounted on bobby at
-  `/mnt/nyayo-batches` (`NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches`); a `RequiresMountsFor` drop-in on both units
-  keeps nyayo from starting, and writing batches to bobby's own disk, before it is mounted. Its snapshots and backup are
-  the Synology's.
+  `/mnt/nyayo-batches` (`NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches`); a `RequiresMountsFor` drop-in (`share.conf`, in
+  `nyayo.service.d` and `nyayo-jobs.service.d`) on both units keeps nyayo from starting, and writing batches to bobby's
+  own disk, before it is mounted. Its snapshots and backup are the Synology's.
 - **The reader** is elephant's `phant-indexer` in `~/dev/nyayo-bin/`, pinned by its sha256.
 
 State is the database, `archive/` (runs and matches, the source of truth), `games/` (the only copy of each live game's
