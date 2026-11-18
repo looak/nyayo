@@ -35,6 +35,7 @@ nyayo receives smoke runs pushed from developer machines and shows them:
 - **Opponents** (`/opponents`, under Catalogue) is the catalogue of engines gauntlets are played against: each with its
   GitHub repository and release tag and the rating its list gave it, linked to the page it was read from. Staff edit a
   row and merge duplicates; `manage.py backfill_engines` fills it from stored gauntlets and uwanja's gauntlet files. `manage.py fit_ratings` fits our own rating for every engine from all the gauntlet games, on the list's scale (a list rating is a prior), with its error; it also runs when a gauntlet finishes.
+- **Run gauntlet** (`/gauntlet`, signed in) builds the `gauntlet.toml` uwanja plays: pick the engine under test and its opponents from the catalogue (by hand, by name, or by a rating range around its own rating), set the time control, book, rounds and concurrency, and copy or download the file. A gauntlet's page shows its performance against our ratings of the opponents beside the listed one.
 - **Tests** (`/tests`: SPRTs, tunes, datagens and the lab's games tests) and **Gauntlets** (`/gauntlets`), each a list
   with their state, games and Elo, under Jobs in the sidebar next to Smokes (the runs) and Compare. A gauntlet shows each opponent's
   score, pentanomial and Elo (as cards or a list, with a table to copy), and every game on a live page with board,

@@ -589,7 +589,10 @@ def match_detail(request, match_id):
     chosen = request.GET.get("view")
     view = chosen if chosen in RESULT_VIEWS else request.COOKIES.get(VIEW_COOKIE)
     view = view if view in RESULT_VIEWS else RESULT_VIEWS[0]
-    summary = stats.summarize(match.results.all(), excluded)
+    results = list(match.results.select_related("engine"))
+    summary = stats.summarize(results, excluded)
+    performance_ours = (stats.performance_against_ours(results, summary.overall.elo, excluded)
+                        if match.kind == "gauntlet" else None)
     kept = len(groups["finished"])
     games_note = None
     if not match.schedule and total is None and match.results.exists():
@@ -605,7 +608,7 @@ def match_detail(request, match_id):
     subject_name = engine_label(match.subject)
     context = {
         "view": view, "match": match, "silent": is_silent(match, silent_cutoff()), "silent_minutes": settings.NYAYO_SILENT_AFTER, "boards": live_boards(match, groups["playing"]),
-        "summary": summary, "excluded": excluded, "games_note": games_note,
+        "summary": summary, "performance_ours": performance_ours, "excluded": excluded, "games_note": games_note,
         "summary_clipboard": summary_clipboard_text(match, subject_name, summary, match.settings or {}),
         "sprt": sprt_view(match), **sprt_progress(match),
         "timing": timing.summarize(

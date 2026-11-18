@@ -1,0 +1,84 @@
+{% extends "runs/base.html" %}
+{% block title %}Run gauntlet · nyayo{% endblock %}
+{% block crumb %}Actions › Run gauntlet{% endblock %}
+{% block content %}
+<style>
+  .gauntlet-form label { margin-right: .75rem; white-space: nowrap; }
+  .gauntlet-form .row { margin: .5rem 0; }
+  .gauntlet-form code, .gauntlet-form .mono { font-family: ui-monospace, Consolas, monospace; }
+</style>
+<h1>Run gauntlet</h1>
+<p class="muted">Compose the file uwanja plays: the engine under test and its opponents, taken from the <a href="{% url 'opponents' %}">catalogue</a> (every row with a
+repository and a tag). Copy the file or download it and run it on a machine that plays gauntlets (<span class="mono">uwanja run gauntlet.toml</span>).
+Nothing is stored here: the page is the form, and the file is rebuilt from it.</p>
+{% for problem in problems %}<p class="flash error" role="alert">{{ problem }}</p>{% endfor %}
+{% if notice %}<p class="flash" role="status">{{ notice }}</p>{% endif %}
+<form method="get" class="gauntlet-form">
+<div class="card">
+  <h3>The engine under test</h3>
+  <div class="row">
+    <label>Engine <select name="subject">
+      {% for r in subjects %}<option value="{{ r.pk }}"{% if form.subject == r.pk|stringformat:"s" %} selected{% endif %}>{{ r.name }}{% if r.version %} {{ r.version }}{% endif %} · {{ r.ref }}{% if r.ours %} · ours {{ r.ours.value|floatformat:0 }}{% endif %}</option>{% endfor %}
+      <option value="cmd"{% if form.subject == "cmd" %} selected{% endif %}>A local engine (a command)…</option>
+    </select></label>
+  </div>
+  <div class="row">
+    <label>Command <input name="cmd" value="{{ form.cmd }}" size="34" placeholder="../engines/elephant-1.2.0" spellcheck="false"></label>
+    <label>Name <input name="subject_name" value="{{ form.subject_name }}" placeholder="Elephant Gambit"></label>
+    <span class="muted">only for a local engine</span>
+  </div>
+  <div class="row">
+    <label>Options (JSON) <input name="subject_options" value="{{ form.subject_options }}" size="30" spellcheck="false" placeholder='{"Threads": 1, "Hash": 64}'></label>
+    <span class="muted">left empty: the catalogue row's, else Threads 1, Hash 64</span>
+  </div>
+</div>
+
+<div class="card">
+  <h3>The gauntlet</h3>
+  <div class="row">
+    <label>Name <input name="name" value="{{ form.name }}" placeholder="{{ default_name }}" size="30"></label>
+    <label>Time control <input name="tc" value="{{ form.tc }}" size="8"></label>
+    <label>Rounds <input name="rounds" value="{{ form.rounds }}" size="4" inputmode="numeric"></label>
+    <label>At a time <input name="concurrency" value="{{ form.concurrency }}" size="4" inputmode="numeric"></label>
+  </div>
+  <div class="row"><label>Book <input name="book" value="{{ form.book }}" size="48" spellcheck="false"></label>
+    <span class="muted">relative to the file</span></div>
+  <p class="muted">Rounds are game pairs per opponent: 50 rounds are 100 games each.</p>
+</div>
+
+<div class="card">
+  <h3>The opponents</h3>
+  <div class="row">
+    <label>Rating range ± <input name="radius" value="{{ form.radius }}" size="4" inputmode="numeric"></label>
+    <label>around {% if subject_row.ours %}<b>{{ subject_row.ours.value|floatformat:0 }}</b> <span class="muted">(its rating from our games)</span>{% else %}<input name="centre" value="{{ form.centre }}" size="5" inputmode="numeric" placeholder="2700">{% endif %}</label>
+    <button class="act" type="submit" name="pick" value="range">Pick by range</button>
+  </div>
+  <div class="row">
+    <label>Names <input name="q" value="{{ form.q }}" size="30" placeholder="halogen, zahak"></label>
+    <button class="act" type="submit" name="pick" value="name">Add by name</button>
+    <span class="muted">a name, a part of one or an alias; commas between</span>
+  </div>
+  {% if candidates %}
+  <div class="scroll"><table>
+    <thead><tr><th></th><th>Engine</th><th>Tag</th><th class="num">List rating</th><th>List</th><th class="num" title="on the list's scale, under our conditions">Ours</th></tr></thead>
+    <tbody>{% for e in candidates %}<tr>
+      <td><input type="checkbox" name="opp" value="{{ e.pk }}" id="opp-{{ e.pk }}"{% if e.pk|stringformat:"s" in picked %} checked{% endif %}></td>
+      <td><label for="opp-{{ e.pk }}">{{ e.name }}{% if e.version %} <span class="muted">{{ e.version }}</span>{% endif %}</label></td>
+      <td>{{ e.ref }}</td>
+      <td class="num">{% if e.rating %}{% if e.rating.source %}<a href="{{ e.rating.source }}" rel="noopener">{{ e.rating.value }}</a>{% else %}{{ e.rating.value }}{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="nowrap">{% if e.rating %}{{ e.rating.list|default:"" }}{% if e.rating.as_of %} <span class="muted">{{ e.rating.as_of }}</span>{% endif %}{% endif %}</td>
+      <td class="num nowrap">{% if e.ours %}{{ e.ours.value|floatformat:0 }} <span class="muted">± {{ e.ours.error|floatformat:0 }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">No engine in the catalogue has a repository and a tag yet. <a href="{% url 'opponents' %}">Add them</a> there.</p>{% endif %}
+  <p class="muted">An engine's options in the file are the defaults of its row, edited on the opponents page. An opponent without a list rating is played, but not rated in the file.</p>
+</div>
+<p><button class="act" type="submit">Build the file</button></p>
+</form>
+
+{% if text %}
+<h2>gauntlet.toml</h2>
+<p class="muted">{{ count }} opponent{{ count|pluralize }}. <a href="{{ download }}" download>Download {{ settings.name }}.toml</a></p>
+{% include "runs/_copy_field.html" with title="gauntlet.toml" target_id="copy-gauntlet-file" value=text rows=24 copy_label="Copy" %}
+{% endif %}
+{% endblock %}
