@@ -15,7 +15,7 @@ import chess
 import chess.pgn
 from django.utils import timezone
 
-from . import catalogue, games, reader, uploads, worker
+from . import catalogue, games, reader, uploads, jobs
 from .ingest import delete_archived, ingest
 from .models import Batch, Game, Match, MatchSnapshot, Upload
 
@@ -421,7 +421,7 @@ def seed_batch(match_id):
                                   "white" if n % 2 else "black") for n in range(1, 9))
     uploads.store(match_id, "demo.0", bz2.compress(text.encode()), uploads.BZIP2, None, None)
     # put away at once, as the worker would within a second, and sealed short: the test has ended
-    worker.process_upload(Upload.objects.select_related("match").get(match_id=match_id, name="demo.0"),
+    jobs.process_upload(Upload.objects.select_related("match").get(match_id=match_id, name="demo.0"),
                           reader.default())
     for batch in Batch.objects.filter(match_id=match_id, state="open"):
         catalogue.seal(batch)

@@ -85,9 +85,9 @@ The **Games** page (`/games`) lists every game kept as data, newest first, 64 to
 who played white and black, its length, result and how it ended, the book position it started from (with a link to the
 other games from it) and the match it came from; a game opens in its own view with every move. It filters by match,
 result for the engine under test, how the game ended, its length in moves and its opening. It reads the index of
-cards, so it shows a game once the worker has put it away.
+cards, so it shows a game once the jobs process has put it away.
 
-For tuning, the **Exports** page (`/exports`) and `POST /api/exports` request a position dataset: the worker draws
+For tuning, the **Exports** page (`/exports`) and `POST /api/exports` request a position dataset: the jobs process draws
 quiet positions from every well-labelled game kept, through `phant-indexer --draw`, as `<fen> [result]` lines for
 `ElephantTuner`, and keeps a record (selection, seed, versions, the batches read) that rebuilds the same file.
 
@@ -97,9 +97,9 @@ verdict with any faults of the engine under test, and the commits pushed in the 
 kept by day, how the kept games ended and how they went for the engine under test, the running matches with their
 boards, the latest matches, and the most played book positions.
 
-Finished games sent in bulk (OpenBench uploads one per workload) are taken at once and put away by the worker,
-`manage.py worker`, which runs next to the site: it checks every game and keeps them in nyayo's own 64-game zstd
-batches, with a card per game in an index database of their own. `manage.py worker --once` does what is waiting and
+Finished games sent in bulk (OpenBench uploads one per workload) are taken at once and put away by the jobs process,
+`manage.py jobs`, which runs next to the site: it checks every game and keeps them in nyayo's own 64-game zstd
+batches, with a card per game in an index database of their own. `manage.py jobs --once` does what is waiting and
 exits.
 
 A test's match is `sprt-1000`, `games-1001`, `tune-1002` or `datagen-1003`: its mode and its number. The matches taken from OpenBench's

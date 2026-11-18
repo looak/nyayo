@@ -211,7 +211,7 @@ BATCH_STATES = ["open", "sealed"]
 
 class Upload(models.Model):
     """A producer's upload of finished games (PUT .../pgns/{name}), an OpenBench workload's .pgn.bz2 as sent. Taken
-    without reading it: the file waits in uploads/<match id>/ as `pending` until the worker has checked every game
+    without reading it: the file waits in uploads/<match id>/ as `pending` until the jobs process has checked every game
     and appended them to the match's batches (`done`), or refused it whole with the reason (`refused`). The file is
     deleted once done; the row stays, so a resend is recognised by its sha256. PROTECT: a match with games kept as data
     isn't deleted from under them; `manage.py purge_batches --match ID` comes first."""
@@ -229,7 +229,7 @@ class Upload(models.Model):
     state = models.CharField(max_length=10, choices=[(s, s) for s in UPLOAD_STATES], default="pending",
                              db_index=True)
     reason = models.TextField(blank=True)
-    # games read from it, and how many of them are in batches so far: a worker stopped half way carries on from there
+    # games read from it, and how many of them are in batches so far: a jobs run stopped half way carries on from there
     games = models.PositiveIntegerField(default=0)
     appended = models.PositiveIntegerField(default=0)
     # the reader that checked it, and the numbers of the batches its games went to
@@ -247,7 +247,7 @@ class Upload(models.Model):
 
 class Batch(models.Model):
     """nyayo's own batch of a match's finished games, every game it keeps as data: 64 of them, or fewer for a match's
-    last. While open it is a plain PGN file the worker appends to, batches/<match id>/<number>.pgn; sealed, it is
+    last. While open it is a plain PGN file the jobs process appends to, batches/<match id>/<number>.pgn; sealed, it is
     compressed to <number>.pgn.zst and never changes. A game's place in it is on its card in the index database."""
 
     match = models.ForeignKey(Match, on_delete=models.PROTECT, related_name="batches")
@@ -292,9 +292,9 @@ class Game(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     received_at = models.DateTimeField(default=timezone.now)
-    # A finished game waits for the worker to put it in its match's batches (worker.py), then says which batch it is
+    # A finished game waits for the jobs process to put it in its match's batches (jobs.py), then says which batch it is
     # in; its file stays until that batch is sealed, and purge_games leaves it until then. Games finished before
-    # nyayo kept batches wait for `manage.py keep_games`, not for the worker.
+    # nyayo kept batches wait for `manage.py keep_games`, not for the jobs process.
     waiting = models.BooleanField(default=False, db_index=True)
     kept_in = models.ForeignKey(Batch, null=True, blank=True, on_delete=models.SET_NULL, related_name="single_games")
 
@@ -314,7 +314,7 @@ DATASET_STATES = ["requested", "running", "done", "failed"]
 
 
 class Dataset(models.Model):
-    """A position dataset (game database, milestone 10): positions drawn from the games kept, by the worker through
+    """A position dataset (game database, milestone 10): positions drawn from the games kept, by the jobs process through
     `phant-indexer --draw`, for elephant's tuner. The record is kept for good, its file deleted or not: what was
     selected, the draw's settings and seed, both versions and the manifest of every batch read, so a rebuild reads
     the same games and is checked against the sha256 recorded (datasets.py)."""

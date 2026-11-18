@@ -1,4 +1,4 @@
-"""nyayo's worker: the games kept as data, put away in the background (`manage.py worker`, nyayo-worker.service).
+"""nyayo's jobs: the games kept as data, put away in the background (`manage.py jobs`, nyayo-jobs.service).
 
 It looks for work every second or so, oldest first, one thing at a time; the queue is the database. Nothing a
 producer sends waits for it.
@@ -7,7 +7,7 @@ producer sends waits for it.
   them (every move legal, a final result, [Subject] white or black, [Opponent] one of the match's). The first game
   that fails refuses the upload with the reason, and none of it is kept. Then its games go, as they came, into the
   match's open batch, sealed at 64 games, each with its card; then the upload is done and its file deleted. Its row
-  counts the games appended, and each batch's row which uploads' games it holds, so a worker stopped half way carries
+  counts the games appended, and each batch's row which uploads' games it holds, so a run stopped half way carries
   on where it was and appends nothing twice.
 - **A finished single game** (a gauntlet's, sent move by move and sealed by its final PGN) is read the same way and
   appended to its match's open batch, as it came. Its file and row stay until that batch is sealed; purge_games
@@ -36,7 +36,7 @@ from nyayo.lab import hours as lab_hours
 from . import cards, catalogue, datasets, expiry, games as single_games, reader as readers, uploads
 from .models import Batch, Game, Match, MatchResult, Upload
 
-log = logging.getLogger("nyayo.worker")
+log = logging.getLogger("nyayo.jobs")
 
 
 def describe(record):
@@ -74,7 +74,7 @@ def card_fields(record, pgn, context, colour, opponent, received=None):
 
 
 def seal(batch, reader):
-    """Seals a batch; one whose games one reader read all of, as the worker writes them, is marked filled by the
+    """Seals a batch; one whose games one reader read all of, as the jobs process writes them, is marked filled by the
     extractors' current versions, so reindex passes it by."""
     catalogue.seal(batch)
     if batch.reader == reader.name:
@@ -225,10 +225,10 @@ def step(reader):
 
 
 @contextlib.contextmanager
-def only_worker():
-    """Holds a lock next to the index database, on local disk, for as long as this worker runs, so two never work
+def only_jobs():
+    """Holds a lock next to the index database, on local disk, for as long as the jobs process runs, so two never work
     at once."""
-    path = Path(settings.NYAYO_INDEX_DB).with_name("worker.lock")
+    path = Path(settings.NYAYO_INDEX_DB).with_name("worker.lock")  # the old name, kept so nyayo-worker and nyayo-jobs exclude each other
     path.parent.mkdir(parents=True, exist_ok=True)
     file = open(path, "a+")
     try:
@@ -240,17 +240,17 @@ def only_worker():
                 import fcntl
                 fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
-            raise RuntimeError(f"another worker holds {path}")
+            raise RuntimeError(f"another jobs process holds {path}")
         yield
     finally:
         file.close()
 
 
 def is_running():
-    """Whether a worker holds the lock now: taking it for a moment and letting it go again says so, and costs nothing
+    """Whether a jobs process holds the lock now: taking it for a moment and letting it go again says so, and costs nothing
     when one does."""
     try:
-        with only_worker():
+        with only_jobs():
             return False
     except (RuntimeError, OSError):
         return True
@@ -269,8 +269,8 @@ def run(once=False, interval=1.0, reader=None):
     """Works until stopped, or with once until there is nothing left to do. Returns how many things it did."""
     reader = reader or readers.default()
     done = 0
-    with only_worker():
-        log.info("worker started, reading with %s", reader.name)
+    with only_jobs():
+        log.info("jobs started, reading with %s", reader.name)
         last_look = None
         while True:
             close_old_connections()
@@ -280,7 +280,7 @@ def run(once=False, interval=1.0, reader=None):
             try:
                 did = step(reader)
             except Exception:
-                log.exception("the worker failed, trying again shortly")
+                log.exception("the jobs process failed, trying again shortly")
                 did = False
                 if once:
                     raise

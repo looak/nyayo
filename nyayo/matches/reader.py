@@ -1,6 +1,6 @@
 """The game reader: PGN in, one record per game out, in order.
 
-The worker reads every game it keeps through this, an upload's before any of it is kept and a batch's when it is
+The jobs process reads every game it keeps through this, an upload's before any of it is kept and a batch's when it is
 indexed again. A record has the fields of elephant's phant-indexer's entries (its indexer/README.md, format 2) that
 nyayo uses: the game's place in the input from 1, where it starts and how long it is in bytes (through its movetext),
 whether every move read and was legal, its tags, its result and its plies, and when it didn't read the ply and the
@@ -25,7 +25,7 @@ class ReaderError(Exception):
 
 
 class WrongReader(Exception):
-    """The reader configured isn't the one pinned: the worker doesn't start."""
+    """The reader configured isn't the one pinned: the jobs process doesn't start."""
 
 
 def spans(data):
@@ -223,7 +223,7 @@ def file_sha256(path):
 
 
 def default():
-    """The reader the worker uses: phant-indexer when NYAYO_READER names it, else python-chess."""
+    """The reader the jobs process uses: phant-indexer when NYAYO_READER names it, else python-chess."""
     if settings.NYAYO_READER:
         return PhantIndexer(settings.NYAYO_READER, settings.NYAYO_READER_SHA256)
     return PythonChess()

@@ -14,7 +14,7 @@ from django.utils.functional import SimpleLazyObject
 
 def status():
     from nyayo.lab import machines
-    from nyayo.matches import worker
+    from nyayo.matches import jobs
     from nyayo.matches.models import Batch, Game, Match, Upload
     from nyayo.matches.pages import silent_cutoff
 
@@ -23,7 +23,7 @@ def status():
     live = Match.objects.filter(state="running", hidden=False, updated_at__gte=silent_cutoff())
     return {
         "host": socket.gethostname(),
-        "worker": worker.is_running(),
+        "jobs": jobs.is_running(),
         "reader": Path(settings.NYAYO_READER).name if settings.NYAYO_READER else "python-chess",
         "games_kept": f"{batches['games'] or 0:,}",
         "stored_mb": round((batches["stored"] or 0) / 1e6),

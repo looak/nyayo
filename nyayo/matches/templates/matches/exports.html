@@ -43,7 +43,7 @@
 {% if current %}{% with d=current %}
 <div class="card current top-running">
   <h3 class="box-title">Dataset {{ d.pk }} <span class="outcome card-state running">{% if d.state == "requested" %}queued{% else %}running{% endif %}</span>
-    <span class="right muted">{% if d.started_at %}started {{ d.started_at|timesince }} ago{% else %}waiting for the worker{% endif %}</span></h3>
+    <span class="right muted">{% if d.started_at %}started {{ d.started_at|timesince }} ago{% else %}waiting for the jobs process{% endif %}</span></h3>
   <div class="figures">
     <div><b>{{ d.batches_done|thousands }}<small class="muted"> / {{ d.batches_total|thousands }}</small></b><span>batches read</span></div>
     <div><b>{{ d.games|thousands }}</b><span>games read</span></div>

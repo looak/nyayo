@@ -87,10 +87,10 @@ class Keeping(BatchCase):
         self.work()
         self.put_game(FINISHED, game="2")
         Match.objects.update(state="finished", received_at=timezone.now() - timezone.timedelta(hours=1))
-        from nyayo.matches import reader, worker
+        from nyayo.matches import reader, jobs
 
-        self.assertEqual(list(worker.ended_batches()), [])
-        worker.step(reader.default())  # keeps game 2
-        self.assertEqual(len(list(worker.ended_batches())), 1)
+        self.assertEqual(list(jobs.ended_batches()), [])
+        jobs.step(reader.default())  # keeps game 2
+        self.assertEqual(len(list(jobs.ended_batches())), 1)
         self.work()
         self.assertEqual((Batch.objects.get().state, Batch.objects.get().games), ("sealed", 2))

@@ -64,7 +64,7 @@ NYAYO_COMMITTED_DAYS = int(os.environ.get("NYAYO_COMMITTED_DAYS", 30))
 # A test that failed its start (state failed_prechecks, no games) deletes itself this many hours after it ended. The
 # match page says when; the deleting is the SPRT steps plan's step 6, which reads this too.
 NYAYO_FAILED_PRECHECKS_HOURS = int(os.environ.get("NYAYO_FAILED_PRECHECKS_HOURS", 48))
-# how often the worker looks for failed starts that are due (seconds)
+# how often the jobs process looks for failed starts that are due (seconds)
 NYAYO_EXPIRY_EVERY = int(os.environ.get("NYAYO_EXPIRY_EVERY", 3600))
 
 # A git checkout (a private repository, cloned there) that manage.py backup commits the archive, the games and a dump of
@@ -76,7 +76,7 @@ NYAYO_BACKUP_REPO = os.environ.get("NYAYO_BACKUP_REPO", "")
 # and 256 MB once decompressed.
 NYAYO_BATCHES_DIR = Path(os.environ.get("NYAYO_BATCHES_DIR") or NYAYO_GAMES_DIR / "batches").resolve()
 
-# Position datasets (datasets.py): the positions files the worker draws from the batches, next to the batches on the
+# Position datasets (datasets.py): the positions files the jobs process draws from the batches, next to the batches on the
 # share by default. A dataset's record is in the database; its file can be deleted and made again.
 NYAYO_DATASETS_DIR = Path(os.environ.get("NYAYO_DATASETS_DIR") or NYAYO_BATCHES_DIR.parent / "datasets").resolve()
 # The first ply a dataset takes positions from, counted from where a game starts, by the match's opening book (its
@@ -91,11 +91,11 @@ NYAYO_BATCH_GAMES = int(os.environ.get("NYAYO_BATCH_GAMES", 64))
 NYAYO_SEAL_AFTER = int(os.environ.get("NYAYO_SEAL_AFTER", 300))
 
 # The game reader, elephant's phant-indexer: the path of its release binary and that release's sha256, which the
-# worker checks before it starts (it refuses to start on a mismatch). Unset, games are read with python-chess.
+# the jobs process checks before it starts (it refuses to start on a mismatch). Unset, games are read with python-chess.
 NYAYO_READER = os.environ.get("NYAYO_READER", "")
 NYAYO_READER_SHA256 = os.environ.get("NYAYO_READER_SHA256", "")
 
-# Uploads of finished games wait here, as sent, until the worker has put their games in batches (then they're
+# Uploads of finished games wait here, as sent, until the jobs process has put their games in batches (then they're
 # deleted). Not in the backup: a pending upload is the producer's to send again.
 NYAYO_UPLOADS_DIR = DATA_DIR / "uploads"
 

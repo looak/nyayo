@@ -3,7 +3,7 @@
 A producer that plays many short games sends them in bulk once played: `PUT /api/matches/{id}/pgns/{name}`, an
 OpenBench workload's .pgn.bz2 as its worker uploaded it. The request reads none of it: it checks what needs no
 reading (the match, the name, the size, a stored upload of that name), writes the bytes to uploads/<match id>/<name>,
-records the upload as pending and answers 202. nyayo's worker (worker.py) reads it within a second or so, checks every
+records the upload as pending and answers 202. nyayo's jobs process (jobs.py) reads it within a second or so, checks every
 game and appends them to the match's batches, or refuses it whole.
 """
 
@@ -67,7 +67,7 @@ def write(path, body):
 
 
 def store(match_id, name, body, content_type, encoding, machine):
-    """Takes one upload without reading it. Returns 202 when it is queued for the worker (new, or a refused one sent
+    """Takes one upload without reading it. Returns 202 when it is queued for the jobs process (new, or a refused one sent
     again), 200 for a resend of one pending or done. 400 for a bad name or Content-Type, 404 for an unknown match,
     409 for different content under the name of one pending or done, 413 when it is too large."""
     if not valid_id(name, GAME_ID_MAX):

@@ -13,7 +13,7 @@ from django.core.management.base import CommandError
 from django.test import RequestFactory, override_settings
 from django.utils import timezone
 
-from nyayo.matches import catalogue, reader, worker
+from nyayo.matches import catalogue, reader, jobs
 from nyayo.matches.models import Batch, Match, Upload
 
 from .test_games import GameTestCase, pgn
@@ -43,7 +43,7 @@ class BatchCase(GameTestCase):
                                headers=headers)
 
     def work(self):
-        return worker.run(once=True)
+        return jobs.run(once=True)
 
     def keep(self, body, batch="1.0", **kwargs):
         """PUTs an upload and has the worker put it away."""
@@ -225,17 +225,17 @@ class Keeping(BatchCase):
         self.assertEqual(self.work(), 0)  # not until nothing has been heard for a while
         Match.objects.update(received_at=timezone.now() - timezone.timedelta(hours=1))
         self.put_batch(bz2.compress(TWO), batch="late")
-        with mock.patch.object(worker, "process_upload"):
-            worker.step(reader.default())
+        with mock.patch.object(jobs, "process_upload"):
+            jobs.step(reader.default())
         self.assertEqual(Batch.objects.get().state, "open")  # nor while an upload of it waits
         self.work()
         batch = Batch.objects.get()
         self.assertEqual((batch.state, batch.games), ("sealed", 4))
 
     def test_only_one_worker_at_a_time(self):
-        with worker.only_worker():
+        with jobs.only_jobs():
             with self.assertRaises(RuntimeError):
-                with worker.only_worker():
+                with jobs.only_jobs():
                     pass
 
 

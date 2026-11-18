@@ -176,10 +176,10 @@ class Purging(GameTestCase):
         self.put_game(pgn(result="1-0"), game="1")
         self.put_game(pgn(), game="2")
         # a finished game is purged only once it is in a sealed batch
-        from nyayo.matches import worker
+        from nyayo.matches import jobs
 
         with override_settings(NYAYO_BATCH_GAMES=1):
-            worker.run(once=True)
+            jobs.run(once=True)
 
     def purge(self, *args):
         out = StringIO()

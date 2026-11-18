@@ -36,10 +36,10 @@ class Pinned(BatchCase):
         with self.assertRaises(reader.WrongReader):
             reader.PhantIndexer(FAKE, "", launcher=[sys.executable])
 
-    def test_the_worker_doesnt_start_on_a_mismatch(self):
+    def test_the_jobs_process_doesnt_start_on_a_mismatch(self):
         with override_settings(NYAYO_READER=str(FAKE), NYAYO_READER_SHA256="0" * 64):
             with self.assertRaises(CommandError) as raised:
-                call_command("worker", "--once")
+                call_command("jobs", "--once")
         self.assertIn("not starting", str(raised.exception))
 
     def test_without_one_it_is_python_chess(self):
@@ -47,17 +47,17 @@ class Pinned(BatchCase):
 
     def test_the_batch_records_the_reader(self):
         self.put_batch(bz2.compress(TWO))
-        from nyayo.matches import worker
+        from nyayo.matches import jobs
 
-        worker.run(once=True, reader=fake())
+        jobs.run(once=True, reader=fake())
         self.assertEqual(Batch.objects.get().reader, "phant-indexer 9.9.9")
         self.assertEqual(Upload.objects.get().reader, "phant-indexer 9.9.9")
 
     def test_a_reader_that_fails_refuses_the_upload_with_its_words(self):
-        from nyayo.matches import worker
+        from nyayo.matches import jobs
 
         self.put_batch(b"FAIL", content_type="application/x-chess-pgn")
-        worker.run(once=True, reader=fake())
+        jobs.run(once=True, reader=fake())
         upload = Upload.objects.get()
         self.assertEqual(upload.state, "refused")
         self.assertIn("can't decompress", upload.reason)

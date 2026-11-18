@@ -12,7 +12,7 @@ main() {
     "$NYAYO_BIN/python" manage.py migrate
     "$NYAYO_BIN/python" manage.py collectstatic --noinput --verbosity 0
     # the units to restart: nyayo's own, unless NYAYO_UNITS names others (a second nyayo on the machine, with units of other names)
-    units="${NYAYO_UNITS:-nyayo nyayo-worker}"
+    units="${NYAYO_UNITS:-nyayo nyayo-jobs}"
     sudo systemctl restart $units
     systemctl status $units --no-pager
 }

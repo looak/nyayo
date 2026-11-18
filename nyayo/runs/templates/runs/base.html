@@ -579,7 +579,7 @@
   <div class="side-status">
     <img class="logo" src="{% static 'img/elephant.svg' %}" alt="">
     <h4>Status</h4>
-    <div title="the worker puts uploads and finished games away">{% if shell.worker %}<i class="dot"></i>Worker running{% else %}<i class="dot bad"></i>Worker not running{% endif %}</div>
+    <div title="the jobs process puts uploads and finished games away">{% if shell.jobs %}<i class="dot"></i>Jobs running{% else %}<i class="dot bad"></i>Jobs not running{% endif %}</div>
     <div title="the game reader">{% if shell.reader == "python-chess" %}<i class="dot warn"></i>{% else %}<i class="dot"></i>{% endif %}{{ shell.reader }}</div>
     <div>{% if shell.uploads_refused %}<i class="dot bad"></i>{{ shell.uploads_refused }} upload{{ shell.uploads_refused|pluralize }} refused{% elif shell.uploads_waiting %}<i class="dot warn"></i>{{ shell.uploads_waiting }} upload{{ shell.uploads_waiting|pluralize }} waiting{% else %}<i class="dot"></i>No upload waiting{% endif %}</div>
     <div title="where the batches are kept">{% if shell.batches_here %}<i class="dot"></i>Batches {{ shell.stored_mb }} MB{% else %}<i class="dot bad"></i>No batches directory{% endif %}</div>

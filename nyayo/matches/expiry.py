@@ -1,8 +1,8 @@
 """A failed start that deletes itself (docs/match-schema.md, *Expiry*).
 
 A test whose engine fails before any game is played is reported as `failed_prechecks`, and what that leaves in nyayo is
-never more than a failed start: the test and its logs stay on OpenBench. The worker looks once an hour
-(`worker.run`) and deletes one when all of these hold, the time being the one the page shows (`stepsview.goes_at`,
+never more than a failed start: the test and its logs stay on OpenBench. The jobs process looks once an hour
+(`jobs.run`) and deletes one when all of these hold, the time being the one the page shows (`stepsview.goes_at`,
 `finished_at` plus NYAYO_FAILED_PRECHECKS_HOURS):
 
 - its state is `failed_prechecks`, and it has a `finished_at` (without one nothing says when it ended);

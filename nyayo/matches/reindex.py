@@ -36,7 +36,7 @@ def who(match, game_id, tags, opponents):
 
 
 def arrivals(batch):
-    """When nyayo received each of a batch's games, in order, as the worker dated them when it put them away: an
+    """When nyayo received each of a batch's games, in order, as the jobs process dated them when it put them away: an
     upload's games when the upload arrived, a single game when it finished (else arrived). The batch's own creation
     for anything no longer there."""
     uploads = dict(Upload.objects.filter(match_id=batch.match_id).values_list("name", "received_at"))

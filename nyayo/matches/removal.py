@@ -27,7 +27,7 @@ log = logging.getLogger("nyayo.removal")
 def blockers(matches):
     """Why these matches cannot be taken away yet, as sentences (empty when they can): an upload that is still being read
     would be put into batches of a match that is gone."""
-    return ["%s has an upload still being processed (%s). Wait for the worker to finish it." % (name_of(m), u.name)
+    return ["%s has an upload still being processed (%s). Wait for the jobs process to finish it." % (name_of(m), u.name)
             for m in matches for u in Upload.objects.filter(match=m, state="pending")]
 
 
