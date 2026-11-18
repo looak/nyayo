@@ -131,6 +131,12 @@
 <input type="hidden" name="view" value="{{ view }}">
 {% if view == "list" %}{% include "matches/_results_list.html" %}{% else %}{% include "matches/_results_cards.html" %}{% endif %}
 </form>
+{% if config_toml %}
+<div class="copy-panels">
+  {% include "runs/_copy_field.html" with title="Copy as gauntlet.toml" target_id="copy-match-config" value=config_toml rows=18 copy_label="Copy as gauntlet.toml" %}
+  <p class="muted">The gauntlet file this match was started from, as its producer stored it, to play it again as a new match.{% if not config_portable %} <strong>Not portable:</strong> it names things only the machine that played it has (a local command or a path), so it may not run elsewhere as it is.{% endif %}</p>
+</div>
+{% endif %}
 {% if summary.rows %}<p class="muted">Elo is the engine under test's difference to the opponent, ± the 95% interval{% if summary.performance is not None %}; the performance rating is the opponents' average listed rating plus the Elo of the overall score{% endif %}{% if performance_ours is not None %}; "against ours" is the same with the opponents' ratings fitted from our own gauntlet games (on the list's scale, under our conditions), so gauntlets months apart compare{% endif %}.</p>{% endif %}
 
 <div class="card">

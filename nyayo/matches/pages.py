@@ -17,7 +17,7 @@ from nyayo.actions.access import may_act
 from nyayo.lab.templatetags.lab_extras import producer_link
 from nyayo.paging import paginate
 
-from . import catalogue, gauges, games, pgnview, progress, sprtview, stats, stepsview, timing
+from . import catalogue, gauntlet_file, gauges, games, pgnview, progress, sprtview, stats, stepsview, timing
 from .models import STATES, Engine, Game, Match, Tombstone
 
 OUTCOMES = {("1-0", "white"): "win", ("0-1", "black"): "win", ("0-1", "white"): "loss", ("1-0", "black"): "loss",
@@ -620,6 +620,8 @@ def match_detail(request, match_id):
         "host": match.host, "subject_name": subject_name, "stored_games": stored_games(match),
         "uploads": upload_counts(match),
         "producer_url": producer_link(match), "jobs": jobs_of(match),
+        "config_toml": gauntlet_file.from_config(match.config),
+        "config_portable": (match.config or {}).get("portable") is not False,
     }
     # the games table shows one page of them, in play order (playing, cut off, scheduled, finished); what was counted
     # above, the totals and the boards in play, is of all of them

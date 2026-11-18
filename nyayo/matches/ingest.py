@@ -200,6 +200,7 @@ def validate(document, match_id=None):
             raise invalid(f"match.{name} must be an object")
     if m.get("name") is not None and not isinstance(m["name"], str):
         raise invalid("match.name must be a string")
+    validate_config(document.get("config"))
     timestamp(m, "started_at", where="match")
     timestamp(m, "updated_at", required=True, where="match")
     timestamp(m, "finished_at", where="match")
@@ -245,6 +246,22 @@ def validate(document, match_id=None):
             validate_machine(machine, f"machines[{i}]")
     validate_schedule(document, known)
     validate_report(document)
+
+
+CONFIG_MAX = 64 * 1024
+
+
+def validate_config(config):
+    """`config` is the producer's, opaque to nyayo: an object with a string `format`, at most 64 KB as JSON."""
+    if config is None:
+        return
+    if not isinstance(config, dict):
+        raise invalid("config must be an object")
+    if not isinstance(config.get("format"), str) or not config["format"]:
+        raise invalid("config.format must be a non-empty string")
+    size = len(json.dumps(config, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+    if size > CONFIG_MAX:
+        raise invalid(f"config is {size} bytes, at most {CONFIG_MAX} (64 KB)")
 
 
 def is_number(value):
@@ -438,7 +455,10 @@ def fixed_part(document):
 
 
 def check_update(previous, document, changes=False):
-    changed = first_difference(fixed_part(previous), fixed_part(document), "")
+    compared = document
+    if previous.get("config") is None:   # a config may arrive once, with a later report; after that it is fixed
+        compared = {name: value for name, value in document.items() if name != "config"}
+    changed = first_difference(fixed_part(previous), fixed_part(compared), "")
     if changed:
         raise IngestError(409, f"{changed.lstrip('.')} changed, only the state, name, verdict, counts and the "
                                f"producer's LLR and result may change on a recorded match")
@@ -470,7 +490,9 @@ def check_schedule(before, after):
 
 
 def check_update_against(existing, document):
-    """Without the archived version, at least hold that counts only grow."""
+    """Without the archived version, at least hold that counts only grow, and the config stays as it was."""
+    if existing.config is not None and document.get("config") != existing.config:
+        raise IngestError(409, "config changed, it is fixed once received")
     if (document.get("report") or {}).get("base") is None:
         check_schedule(existing.schedule, document.get("games"))
     new = {row["opponent"]: row for row in document["results"]}
@@ -575,7 +597,7 @@ def create_match(document, machine):
         settings=m.get("settings") or {}, subject=engine_for(document["subject"], document, "subject"),
         subject_info=participant_info(document["subject"], "branch", "repo", "bench", "options"),
         sprt=document.get("sprt"), stats=document.get("stats"), machines=document.get("machines") or [],
-        progress=document.get("progress"), received_at=now,
+        config=document.get("config"), progress=document.get("progress"), received_at=now,
         updated_at=timestamp(m, "updated_at"), report_seq=(document.get("report") or {}).get("seq"),
     )
     Tombstone.objects.filter(pk=match.pk).delete()  # a match deleted with its games, sent again, is a new one
@@ -609,8 +631,10 @@ def update_match(match, document, changes=False):
         schedule.apply_changes(match, document.get("games") or [])
     else:
         schedule.replace(match, document.get("games"))
+    if match.config is None and document.get("config") is not None:
+        match.config = document["config"]
     match.save(update_fields=["producer", "state", "name", "verdict", "finished_at", "updated_at", "sprt", "stats", "machines",
-                              "progress", "report_seq", "schedule_digest"])
+                              "progress", "report_seq", "schedule_digest", "config"])
     rows = {row["opponent"]: row for row in document["results"]}
     for result in match.results.all():
         row = rows.get(result.opponent)
