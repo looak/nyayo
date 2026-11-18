@@ -22,6 +22,21 @@ class Engine(models.Model):
     name = models.CharField(max_length=200)
     version = models.CharField(max_length=100, blank=True)
     commit = models.CharField(max_length=64, blank=True)
+    # The catalogue (docs/match-schema.md, The catalogue): where the engine comes from and how a gauntlet file takes it.
+    # `url` is a GitHub repository and `ref` its release tag; `asset` and `binary` are uwanja's globs when its defaults
+    # don't do; `options` are the defaults a new gauntlet starts from. All blank for an engine that was only reported.
+    url = models.URLField(max_length=300, blank=True)
+    ref = models.CharField(max_length=100, blank=True)
+    asset = models.CharField(max_length=200, blank=True)
+    binary = models.CharField(max_length=200, blank=True)
+    options = models.JSONField(default=dict, blank=True)
+    # the list's rating { value, list, as_of, source }, read once by hand and never fetched again; one JSON because the
+    # four belong together (a number means nothing without its list and date) and it is the shape of a match's rating
+    rating = models.JSONField(null=True, blank=True)
+    # other names the same engine was reported under, so that a report by one of them finds this row
+    aliases = models.JSONField(default=list, blank=True)
+    # its rating from our own gauntlet games, { value, error, games }, fitted by nyayo; room for it, nothing writes it yet
+    ours = models.JSONField(null=True, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["name", "version", "commit"], name="engine_identity")]

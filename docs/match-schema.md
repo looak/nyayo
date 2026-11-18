@@ -69,7 +69,8 @@ from a producer is `400`. Use any other id.
   },
   "opponents": [
     { "id": "barbarossa", "name": "Barbarossa", "version": "0.6.0", "options": { "Threads": 1 },
-      "rating": { "value": 2465, "list": "CCRL Blitz", "as_of": "2026-09-01" } }   // or null
+      "rating": { "value": 2465, "list": "CCRL Blitz", "as_of": "2026-09-01",
+                  "source": "https://computerchess.org.uk/ccrl/404/..." } }   // or null; source is optional
   ],
   "results": [                                       // one row per opponent that has played, subject's side
     { "opponent": "barbarossa", "games": 10, "wins": 5, "draws": 3, "losses": 2,
@@ -187,6 +188,24 @@ Only `step` and `state` are needed.
       "effect": "The test stops." },
     { "step": "running", "state": "pending" } ] }
 ```
+
+### The catalogue
+
+`matches.Engine` is also nyayo's catalogue of opponents: an engine at one version, shared by every match that used it.
+A row is found by `(name, version, commit)` as an engine reports itself, or by an **alias** (another name the same
+engine was reported under, `leorik` for `Leorik 3.0`; a report that gives a version must agree with the row's). It
+also holds, for a person to edit: `url` (a GitHub repository) and `ref` (its release tag), `asset` and `binary` (the
+globs a gauntlet file takes), default `options`, and the list's `rating`, `{ value, list, as_of, source }`, read once by
+hand and never fetched again.
+
+A report fills a row's `url`, `ref`, `asset`, `binary` and `rating` where the row has none, and never overwrites what is
+there. It takes them from what a participant says about itself, in this order: `url` (the subject's `repo` is the
+same), `ref`, `asset`, `binary` and `rating` as optional strings on the subject or an opponent; then, for an opponent,
+its entry (the one with its `id`) in `config.gauntlet`'s `opponent` or `opponents` list, when a producer sends a
+`config`. All of it is optional, and nothing is rejected for lacking it. `rating.source`, the URL of the list's page
+for this engine version, is an optional string; the rating a match carries is the one it was played against, as sent.
+Today uwanja sends neither `url` nor `ref` on an opponent, so a row's repository and tag come from `manage.py
+backfill_engines` or the Opponents page until it does.
 
 ### What may change under one id
 
