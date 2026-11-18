@@ -146,6 +146,7 @@ bounds and result, and `stats` its Elo and error. The shape it sent before v1 is
   gauntlet becomes `finished` (the fit takes a few hundredths of a second, and a failure is logged and never fails the
   report), when a match is removed or brought back, and by `manage.py fit_ratings [--dry-run]`. `/opponents` shows it beside
   the list's rating with its error and games, flagged rows marked, and lists Elephant's versions too.
+- **Config** (`Match.config`, `docs/match-schema.md` *The config*): the producer's object with a string `format`, at most 64 KB, stored and archived with the document and fixed once received (a change or a removal is `409` naming `config`; adding it once to a match that had none is accepted). A match whose `format` is `uwanja.gauntlet/N` offers **Copy as gauntlet.toml** on its page, built from `config.gauntlet` through the same writer as the gauntlet page, with a note when `portable` is false; the catalogue fill reads the subject's and opponents' entries in `config.gauntlet`. There is no GET endpoint for matches, so the config is read from the archive or the page.
 - **The gauntlet page** (`/gauntlet`, Actions group, behind `action_required`; `matches/gauntlet_views.py`,
   `matches/gauntlet_file.py`) composes the file uwanja plays and stores nothing: it is a GET form, the file is rebuilt
   from the query string, so a page can be bookmarked. The subject is a catalogue row with a `url` and `ref` (the newest

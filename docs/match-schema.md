@@ -207,12 +207,35 @@ for this engine version, is an optional string; the rating a match carries is th
 Today uwanja sends neither `url` nor `ref` on an opponent, so a row's repository and tag come from `manage.py
 backfill_engines` or the Opponents page until it does.
 
+### The config
+
+An optional top-level `config`, the producer's own and opaque to nyayo, so that a stored match can be played again as a
+new match (a rerun is a new match id):
+
+```jsonc
+"config": {
+  "format": "uwanja.gauntlet/1",   // who reads it and which version; required, a string
+  "gauntlet": { ... },             // what was asked for: the gauntlet file as JSON, defaults filled in
+  "resolved": { ... },             // what that became on the machine that played: tags, assets, SHA-256s
+  "portable": false                // false when it names things only that machine has (a command, a path)
+}
+```
+
+nyayo checks that it is an object with a non-empty string `format` and at most 64 KB as JSON (`400` otherwise), stores it
+(`Match.config`) and archives it with the document. It is **fixed once received**: a later document with a different
+`config`, or without it, is `409` naming `config`; one that adds it to a match that had none is accepted, once. Send it
+whole every time. Never put tokens, environment variables, nyayo's address or a book's path in it. nyayo reads `format`
+`uwanja.gauntlet/N` to offer **Copy as gauntlet.toml** on the match page (the `gauntlet` as uwanja's file, keys uwanja
+doesn't know left out, with a note when `portable` is false) and the catalogue reads the subject's and the opponents'
+`url`, `ref`, `asset`, `binary` and `options` from `config.gauntlet` where a row lacks them (*The catalogue*). Nothing else
+in it is interpreted.
+
 ### What may change under one id
 
 `state`, `name` (a label: a producer may rename a test, say when it learns a branch), `verdict`, `updated_at`, `finished_at`, `producer.url` (a link back, which a producer may only learn later), the counts in
 `results`, `sprt.llr` and `sprt.result`, `stats`, `machines`, `pgn`, `progress`, `report`, and each game's `state`,
 `result`, `termination` and `fault`. **Counts only grow**, across restarts too (a
-row can't disappear, `penta` and the per-side counts can't shrink). Everything else (subject, opponents, settings,
+row can't disappear, `penta` and the per-side counts can't shrink). Everything else (subject, opponents, settings, `config`,
 SPRT bounds, a started game's number, round, opponent and colour) is fixed once received, and a change is `409` naming
 the field.
 

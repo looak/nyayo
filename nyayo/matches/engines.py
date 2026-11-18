@@ -103,6 +103,15 @@ def configured(document):
 def extra_for(document, participant, role):
     """What the document says about one participant for `fill`: its own keys first, then its entry in `config`."""
     extra = declared(participant)
+    if role == "subject":
+        gauntlet = (document.get("config") or {}).get("gauntlet") if isinstance(document.get("config"), dict) else None
+        entry = gauntlet.get("subject") if isinstance(gauntlet, dict) else None
+        if isinstance(entry, dict):
+            for name, value in declared(entry).items():
+                if not extra.get(name) and name != "rating":
+                    extra[name] = value
+            if isinstance(entry.get("options"), dict):
+                extra["options"] = entry["options"]
     if role == "opponent":
         entry = configured(document).get(participant.get("id"))
         if entry:

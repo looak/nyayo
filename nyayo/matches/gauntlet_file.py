@@ -179,3 +179,45 @@ def build(settings, subject_row, subject_cmd, subject_name, subject_options, opp
     entry, ident = subject_entry(subject_row, subject_cmd, subject_name, subject_options)
     taken = {ident}
     return dump(settings, entry, opponent_entries(opponent_rows, taken))
+
+
+# --- from a stored match's config ---
+
+# the keys uwanja's loader knows (uwanja/config.py); a stored config is the producer's, so anything else is left out
+# rather than making the file one uwanja refuses
+TOP_KEYS = ("name", "tc", "book", "book_format", "book_order", "rounds", "concurrency", "adjudication", "recover",
+            "pgn_options", "fastchess")
+ENGINE_KEYS = ("id", "name", "version", "url", "ref", "asset", "binary", "build", "cmd", "dir", "options", "args",
+               "bench", "rating", "fastchess_args")
+GAUNTLET_FORMAT = "uwanja.gauntlet/"
+
+
+def from_config(config):
+    """The gauntlet file text for a match's `config`, or None when it isn't a uwanja gauntlet's (`format`
+    `uwanja.gauntlet/N`, with a `gauntlet` holding a subject and opponents). Null values are left out, being TOML's
+    absent; the subject never carries a rating."""
+    if not isinstance(config, dict) or not str(config.get("format", "")).startswith(GAUNTLET_FORMAT):
+        return None
+    gauntlet = config.get("gauntlet")
+    if not isinstance(gauntlet, dict) or not isinstance(gauntlet.get("subject"), dict):
+        return None
+    others = gauntlet.get("opponent") or gauntlet.get("opponents")
+    if not isinstance(others, list) or not others or not all(isinstance(o, dict) for o in others):
+        return None
+
+    def clean(item):
+        if isinstance(item, dict):
+            return {k: clean(v) for k, v in item.items() if v is not None}
+        if isinstance(item, (list, tuple)):
+            return [clean(v) for v in item if v is not None]
+        return item
+
+    def engine(table, rating=True):
+        keep = {k: clean(v) for k, v in table.items() if k in ENGINE_KEYS and v is not None and (rating or k != "rating")}
+        return Engine(keep)
+
+    settings = {k: clean(gauntlet[k]) for k in TOP_KEYS if gauntlet.get(k) not in (None, "", {}, [])}
+    try:
+        return dump(settings, engine(gauntlet["subject"], rating=False), [engine(o) for o in others])
+    except (ValueError, TypeError):   # a number or key the file can't hold: no file, rather than a broken one
+        return None

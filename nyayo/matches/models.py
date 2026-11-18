@@ -63,6 +63,8 @@ class Match(models.Model):
     subject = models.ForeignKey(Engine, on_delete=models.PROTECT, related_name="matches_as_subject")
     # the subject's branch, bench and options as played; the engine's identity is on `subject`
     subject_info = models.JSONField(default=dict)
+    # the producer's config (docs/match-schema.md, The config): opaque, fixed once received, so that a match can be played again
+    config = models.JSONField(null=True, blank=True)
     # SPRT bounds and the producer's own LLR and result, kind sprt only
     sprt = models.JSONField(null=True, blank=True)
     # the producer's own Elo and error { elo, error, model }, which may change as the match goes on
