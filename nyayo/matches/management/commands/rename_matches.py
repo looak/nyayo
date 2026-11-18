@@ -7,7 +7,7 @@ class Command(BaseCommand):
     help = ("Renames the matches taken from OpenBench, openbench-<anything>-<N>, to <mode>-<N> (sprt-1000): the mode of "
             "the lab's test N, else the match's kind. Moves everything that holds the id: the database rows, the "
             "datasets that name it, archive/matches/<id>.json (rewritten) and .meta.json, and the games, batches and "
-            "uploads directories. Stop nyayo and its worker first, and take a backup. Restartable: run it again after "
+            "uploads directories. Stop nyayo and its jobs first, and take a backup. Restartable: run it again after "
             "an interruption and it finishes what is left. --dry-run says what it would do and changes nothing. A "
             "clash is refused before anything changes. Old links redirect to the new ids from the rows it writes.")
 

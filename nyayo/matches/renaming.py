@@ -13,7 +13,7 @@ Everything that holds the id is moved, in this order, and each step can be repea
 The index database (NYAYO_INDEX_DB) holds batch and match-result row numbers, never a match id, so it is untouched.
 The step a run stopped in is told by what is left under an old name; running it again does the rest and nothing twice.
 A new id that is taken (a match, a tombstone, a file or directory that would be overwritten, two matches wanting the
-same one) is refused before anything is changed, naming every one. Services that write matches (nyayo, nyayo-worker)
+same one) is refused before anything is changed, naming every one. Services that write matches (nyayo, nyayo-jobs)
 must be stopped while it runs.
 """
 

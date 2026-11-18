@@ -2,7 +2,7 @@
 
 A match's games go into nyayo's own batches, 64 games each (NYAYO_BATCH_GAMES), one match per batch. The batch being
 filled is open: a plain PGN file, batches/<match id>/<number>.pgn, the games appended as they came, and its row says
-how many games and bytes of it are committed, so a worker stopped half way truncates what came after and carries on.
+how many games and bytes of it are committed, so a jobs run stopped half way truncates what came after and carries on.
 At 64 games, or when its match has ended, it is sealed: compressed to <number>.pgn.zst, which never changes again,
 and the plain file goes.
 
@@ -176,7 +176,7 @@ def open_batch(match_id):
 
 
 def recover(batch):
-    """An open batch's file cut back to what its row committed: a worker stopped between writing games and saying
+    """An open batch's file cut back to what its row committed: a jobs run stopped between writing games and saying
     so leaves bytes nobody counted."""
     path = open_path(batch)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -99,7 +99,7 @@ def say_plies(response, plies):
 @require_http_methods(["PUT"])
 def api_batch(request, match_id, batch):
     """PUT /api/matches/{id}/pgns/{batch}: an upload of finished games, bz2 or PGN, taken without reading it. 202
-    queued for the worker, 200 an identical resend, 400 a bad name or type, 404 an unknown match, 409 different
+    queued for the jobs process, 200 an identical resend, 400 a bad name or type, 404 an unknown match, 409 different
     content under a stored name, 413 too large."""
     machine = machine_for(request)
     if machine is None:

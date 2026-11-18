@@ -1,7 +1,7 @@
 """Migrating the single games already stored into batches (`manage.py keep_games`).
 
 Every finished single game (games/<match id>/<game>.pgn) is read through the reader and appended, as it came, to its
-match's batches by the worker's own path, its id kept, its card written with its ending (cards.ending_fields: by a
+match's batches by the jobs' own path, its id kept, its card written with its ending (cards.ending_fields: by a
 rule, by its Termination tag, or deduced and marked inferred). Nothing is converted in place: games/ and archive/ are
 untouched, and purge_games remains a separate step that waits for a game's batch to be sealed.
 
@@ -15,7 +15,7 @@ import hashlib
 import logging
 from collections import Counter
 
-from . import cards, catalogue, reader as readers, reindex, worker
+from . import cards, catalogue, reader as readers, reindex, jobs
 from .models import Batch, Game, Match
 
 log = logging.getLogger("nyayo.migrate")
@@ -48,10 +48,10 @@ def game_hashes(chunks):
 def plan(reader, match_id, rows):
     """What keeping a match's games would write, without writing: (games it would keep, endings counted)."""
     context = cards.Context(Match.objects.get(pk=match_id))
-    found = worker.read_singles(rows, reader)
+    found = jobs.read_singles(rows, reader)
     counts = Counter()
     for row, pgn, record in found:
-        counts[cards.ENDINGS[worker.card_fields(record, pgn, context, row.colour, None)["ending"]]] += 1
+        counts[cards.ENDINGS[jobs.card_fields(record, pgn, context, row.colour, None)["ending"]]] += 1
     return len(found), counts
 
 
@@ -62,12 +62,12 @@ def keep(reader, match=None, dry_run=False, out=print):
         if dry_run:
             kept[match_id] = plan(reader, match_id, rows)
         else:
-            worker.keep_singles(match_id, reader, rows)
+            jobs.keep_singles(match_id, reader, rows)
             kept[match_id] = (Game.objects.filter(pk__in=[r.pk for r in rows], kept_in__isnull=False).count(), None)
         out(f"{match_id}: {kept[match_id][0]} of {len(rows)} games")
     if not dry_run:
-        while (batch := worker.ended_batches().first()) is not None:
-            worker.seal(batch, reader)
+        while (batch := jobs.ended_batches().first()) is not None:
+            jobs.seal(batch, reader)
             out(f"sealed {batch.match_id}/{batch.number} short, its match has ended")
     return kept
 

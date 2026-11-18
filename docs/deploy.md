@@ -32,7 +32,7 @@ env. OpenBench's server is not run any more (see *The lab*); the workers talk to
 | Batches (`NYAYO_BATCHES_DIR`) | `/mnt/nyayo-batches/batches-2` (NFS, the Synology's `/volume2/nyayo-batches`) |
 | Datasets (`NYAYO_DATASETS_DIR`) | `/mnt/nyayo-batches/datasets-2` |
 | Backup repository (`NYAYO_BACKUP_REPO`) | `~/dev/nyayo-backups`, a git repository |
-| Units | `nyayo`, `nyayo-worker`, `nyayo-expire.timer`, `nyayo-backup.timer`, installed from `~/dev/nyayo-2` |
+| Units | `nyayo`, `nyayo-jobs`, `nyayo-expire.timer`, `nyayo-backup.timer`, installed from `~/dev/nyayo-2` |
 
 The names with a `2` are leftovers of how it got there (*How nyayo 2.0 replaced the old nyayo*); nothing else depends on
 them. A fresh install elsewhere can use plain `nyayo`, `nyayo-data` and so on, and the rest of this section is written that way.
@@ -102,12 +102,13 @@ It fills in the units in `deploy/` for this checkout, user and conda env (found 
   runner PUTs every move, so a couple of slow pages must not queue them. Game requests (a game's moves, a batch of
   games) may take at most `NYAYO_GAME_THREADS` (2) of each worker's threads; the others are kept for match reports and
   pages, so a flood of games never holds up a test's status (see *Game threads*);
-- `nyayo-worker.service`, nyayo's worker (`manage.py worker`): it reads uploads of finished games (OpenBench sends
+- `nyayo-jobs.service`, nyayo's jobs process (`manage.py jobs`; it was `nyayo-worker` until 2026-11-18, see *Swapping nyayo-worker for nyayo-jobs*): it reads uploads of finished games (OpenBench sends
   one per workload) into the matches' batches in the background, so the upload itself is answered at once. It is bound
   to `nyayo.service`, starting, stopping and restarting with it, `Restart=always`, at low CPU and disk priority, and
-  looks for work every second; nobody runs it by hand. `python manage.py worker --once` does what is waiting and
-  exits, and refuses to start while the service's worker runs (one worker at a time). Follow it with
-  `journalctl -u nyayo-worker -f`; a refused upload's reason is there and in the admin (Matches, Uploads), where it can
+  looks for work every second; nobody runs it by hand. `python manage.py jobs --once` does what is waiting and
+  exits, and refuses to start while the service's jobs process runs (one at a time). `manage.py worker` still runs the
+  same code, with a notice on stderr, until the units are swapped. Follow it with
+  `journalctl -u nyayo-jobs -f`; a refused upload's reason is there and in the admin (Matches, Uploads), where it can
   be read again;
 - `nyayo-expire.timer`, which runs `manage.py expire_runs` daily at 04:30 through `nyayo-expire.service`. It deletes
   wip runs never promoted within 14 days and committed runs not published within 30 (`NYAYO_WIP_DAYS`,
@@ -120,8 +121,8 @@ The pages show times in `NYAYO_TIME_ZONE` (an IANA name, UTC when unset), and th
 `NYAYO_TIME_ZONE=America/Vancouver` in `.env`. Times are stored in UTC whatever it is, so it can change at any time.
 
 A test in `failed_prechecks` shows that it deletes itself `NYAYO_FAILED_PRECHECKS_HOURS` (48 by default, in `.env`) hours
-after it ended, and `nyayo-worker.service` deletes it then, with its archive: it looks at start and then every
-`NYAYO_EXPIRY_EVERY` seconds (3600), so it goes within an hour of its time. The page and the worker read the same setting;
+after it ended, and `nyayo-jobs.service` deletes it then, with its archive: it looks at start and then every
+`NYAYO_EXPIRY_EVERY` seconds (3600), so it goes within an hour of its time. The page and the jobs process read the same setting;
 `nyayo-expire.timer` has nothing to do with it. A match with games, and any other state, is never deleted.
 
 A running match with no report for `NYAYO_SILENT_AFTER` minutes (30 by default, in `.env`) is shown as *silent* on
@@ -135,7 +136,7 @@ A match whose producer reports by changes (uwanja, once it sends `report.seq`) i
 is still the whole truth the database can be rebuilt from.
 
 Running the script again reinstalls the units, which is how a change to a unit file reaches the server, and how
-`nyayo-worker.service` is installed the first time. Follow the
+`nyayo-jobs.service` is installed the first time. Follow the
 log with `journalctl -u nyayo -f`.
 
 ### Updating
@@ -145,9 +146,65 @@ deploy/update.sh
 ```
 
 It pulls (fast-forward only), reinstalls the package, migrates the database, collects static files and restarts `nyayo` and
-`nyayo-worker`. No need to activate the env first, and it does not look at the active one: it uses the env that
+`nyayo-jobs`. No need to activate the env first, and it does not look at the active one: it uses the env that
 `NYAYO_CONDA_ENV` names (`nyayo` when unset; `nyayo2` on bobby, set in `~/.bashrc`, so a plain `deploy/update.sh` from
 `~/dev/nyayo-2` is right). `NYAYO_UNITS` names other units to restart, if there ever is a second nyayo on a machine.
+
+### Swapping `nyayo-worker` for `nyayo-jobs`
+
+On 2026-11-18 the server's background process was renamed from worker to jobs (the machines that play games stay
+workers). `deploy/update.sh` restarts `nyayo-jobs`, which is not installed on a machine that still has `nyayo-worker`, so
+swap the units once on that machine, by hand, in this order, after the update has pulled the code. Until then the old unit
+works: `manage.py worker` still runs the jobs code, with a notice on stderr. The paths are bobby's; they are what
+`install-service.sh` writes (a copy, with `User`, `WorkingDirectory` and the `ExecStart` bin path filled in).
+
+Fill in the new unit (this fails, writing nothing, if the checkout has not pulled `deploy/nyayo-jobs.service` yet; an
+empty unit file in `/etc/systemd/system` counts as masked):
+
+```bash
+sed -e "s#^User=.*#User=$(id -un)#" -e "s#^WorkingDirectory=.*#WorkingDirectory=$HOME/dev/nyayo-2#" -e "s#^ExecStart=[^ ]*/bin/#ExecStart=$HOME/miniconda3/envs/nyayo2/bin/#" ~/dev/nyayo-2/deploy/nyayo-jobs.service > /tmp/nyayo-jobs.service
+```
+
+Copy it into place:
+
+```bash
+sudo install -m 644 /tmp/nyayo-jobs.service /etc/systemd/system/nyayo-jobs.service
+```
+
+```bash
+sudo systemctl daemon-reload
+```
+
+```bash
+sudo systemctl enable --now nyayo-jobs
+```
+
+The old process still holds the lock, so `nyayo-jobs` says "another jobs process holds ..." and tries again every five
+seconds until the next command.
+
+```bash
+sudo systemctl disable --now nyayo-worker
+```
+
+```bash
+sudo rm /etc/systemd/system/nyayo-worker.service
+```
+
+```bash
+sudo systemctl daemon-reload
+```
+
+Check:
+
+```bash
+systemctl status nyayo-jobs
+```
+
+```bash
+journalctl -u nyayo-jobs -n 20
+```
+
+It should say `jobs started`. A fresh install has no `nyayo-worker` and needs none of this.
 
 ## How nyayo 2.0 replaced the old nyayo
 
@@ -156,7 +213,7 @@ History, not instructions: it was done once and cannot be repeated.
 On 2026-11-05 nyayo 2.0 replaced the old nyayo on bobby. It was first run **beside** the old one as a trial, with its own
 checkout, env, data, batches (a copy) and port (8002), while the old one went on unchanged on 8001. Then, in one sitting, the
 old units were stopped, the data was copied again from the old nyayo, and 2.0's units took port 8001 and the names `nyayo`,
-`nyayo-worker` and the two timers. The old checkout `~/dev/nyayo` and the conda env `nyayo` were then deleted, on the owner's
+`nyayo-worker` (now `nyayo-jobs`) and the two timers. The old checkout `~/dev/nyayo` and the conda env `nyayo` were then deleted, on the owner's
 word, so there is no going back to the old nyayo. `manage.py rename_matches` was run the same day (*Renaming the matches*): every
 old `openbench-openbench-N` is now `sprt-N`.
 
@@ -336,10 +393,10 @@ cap makes little difference (a median of 30 to 45 ms either way).
 
 ## The game reader
 
-The worker reads every game it keeps through a game reader: python-chess unless `.env` names elephant's
-**phant-indexer**, a release binary pinned by its sha256. The worker checks the binary's hash and its `--version`
+The jobs process reads every game it keeps through a game reader: python-chess unless `.env` names elephant's
+**phant-indexer**, a release binary pinned by its sha256. The jobs process checks the binary's hash and its `--version`
 before it starts and refuses to start on a mismatch (the unit then fails and says why in
-`journalctl -u nyayo-worker`), so a binary replaced under it is never run. Each batch and upload records the reader
+`journalctl -u nyayo-jobs`), so a binary replaced under it is never run. Each batch and upload records the reader
 that read it (`phant-indexer 1.3.1`, `python-chess 1.11.2`).
 
 ```bash
@@ -355,7 +412,7 @@ NYAYO_READER=/home/fischer/dev/nyayo-bin/phant-indexer-1.3.1-linux-x86-64
 NYAYO_READER_SHA256=<the release's sha256>
 ```
 
-then `sudo systemctl restart nyayo-worker`. A new release is a new file and a new hash, never the old file replaced.
+then `sudo systemctl restart nyayo-jobs`. A new release is a new file and a new hash, never the old file replaced.
 
 Measured on 2026-10-21 in WSL (one thread of a Ryzen 9 9900X) on a restore of bobby's 2026-10-20 backup, every
 stored game read as one input per producer through nyayo's own interface (a pipe in, JSON lines out, parsed):
@@ -371,10 +428,10 @@ about 37 to 1, is what carries over.
 
 ## Position datasets
 
-The worker draws position datasets for the tuner (the Exports page, `POST /api/exports`; `docs/match-schema.md`,
+The jobs process draws position datasets for the tuner (the Exports page, `POST /api/exports`; `docs/match-schema.md`,
 Position datasets), after everything else it has to do, a batch a turn. It needs phant-indexer as the reader, in a
 release with `--draw` (1.3.2 on, looak/elephant#34; its `--version` may add `positions 2`, which nyayo accepts): pin it as for reading games (`NYAYO_READER`, `NYAYO_READER_SHA256`)
-and restart the worker. The files go to `NYAYO_DATASETS_DIR`, by default `datasets/` next to the batches, on the
+and restart the jobs process. The files go to `NYAYO_DATASETS_DIR`, by default `datasets/` next to the batches, on the
 share; a dataset of 2026-10's 45,000 games is under 10 MB.
 
 To start one from another machine, with that machine's token:
@@ -386,7 +443,7 @@ curl http://172.16.100.11:8001/api/exports/<id>     # state, progress, and the f
 
 ## The index
 
-Every game kept as data has a card in `index.sqlite3` (see *Storage* in `match-schema.md`). The worker writes a
+Every game kept as data has a card in `index.sqlite3` (see *Storage* in `match-schema.md`). The jobs process writes a
 card as it appends a game. After a new release of the reader, or a change to what a card holds, run
 
 ```bash
@@ -403,7 +460,7 @@ once with `python manage.py reindex --only played`.
 
 ## Migrating the stored games into batches
 
-Once, after the worker and the reader are installed (see *The game reader*) and `NYAYO_BATCHES_DIR` is on the share:
+Once, after the jobs process and the reader are installed (see *The game reader*) and `NYAYO_BATCHES_DIR` is on the share:
 
 ```bash
 python manage.py backup                      # first, by hand
@@ -441,7 +498,7 @@ gigabytes. Put it on the Synology's share and let the NAS's own backup cover it:
 bobby and set `NYAYO_BATCHES_DIR` to it in `.env` (it defaults to `games/batches` in the data directory). Batches are
 never purged with the live games; `manage.py purge_batches --match ID` removes a match's by hand, and a match that has
 batches can't be deleted in the admin until then. Two more things are left out on purpose: `uploads/` (an upload
-waiting for the worker, OpenBench's to send again; it keeps the bytes in its own tars) and the index of the games,
+waiting for the jobs process, OpenBench's to send again; it keeps the bytes in its own tars) and the index of the games,
 `index.sqlite3` (`NYAYO_INDEX_DB`), which is derived from the batches. Keep the index on bobby's own disk, never on
 the share: SQLite's locking isn't safe over SMB or NFS.
 
@@ -467,17 +524,17 @@ are not of the form and are not touched. The command refuses, before changing an
 tombstone, an existing file or directory that differs) or wanted by two matches, and a match of a kind with no rule (only
 `sprt` and `games`) that is not a lab test.
 
-Order, with the services that write stopped (the worker and the web process both write matches; the expire timer deletes them):
+Order, with the services that write stopped (the jobs process and the web process both write matches; the expire timer deletes them):
 
 ```bash
-sudo systemctl stop nyayo-expire.timer nyayo-backup.timer nyayo nyayo-worker
+sudo systemctl stop nyayo-expire.timer nyayo-backup.timer nyayo nyayo-jobs
 cd <checkout> && conda activate <env>              # ~/dev/nyayo-2 and nyayo2 on bobby
 python manage.py backup                            # a fresh backup, then look at it: the database and the archive
 git pull --ff-only && python -m pip install --quiet -e . && python manage.py migrate   # the table of renames
 python manage.py rename_matches --dry-run          # every rename and move, one line each; nothing changes
 python manage.py rename_matches                    # for real
 python manage.py rename_matches --dry-run          # again: "0 match(es) would be renamed, 0 file(s)..."
-sudo systemctl start nyayo nyayo-worker
+sudo systemctl start nyayo nyayo-jobs
 curl -sI http://172.16.100.11:8001/matches/openbench-openbench-1000 | head -3   # 301, Location: /matches/sprt-1000
 sudo systemctl start nyayo-expire.timer nyayo-backup.timer
 ```

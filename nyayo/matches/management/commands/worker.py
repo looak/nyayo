@@ -1,23 +1,13 @@
-from django.core.management.base import BaseCommand, CommandError
+import sys
 
-from nyayo.matches import reader, worker
+from nyayo.matches.management.commands.jobs import Command as JobsCommand
 
 
-class Command(BaseCommand):
-    help = ("Puts away the games kept as data: reads pending uploads into the matches' batches and seals the batches "
-            "of matches that have ended. Runs until stopped, as nyayo-worker.service does; --once drains the queue "
-            "and exits.")
+class Command(JobsCommand):
+    """The old name of `manage.py jobs`, kept until nyayo-worker.service is swapped for nyayo-jobs.service."""
 
-    def add_arguments(self, parser):
-        parser.add_argument("--once", action="store_true", help="do what there is to do, then exit")
-        parser.add_argument("--interval", type=float, default=1.0, metavar="SECONDS",
-                            help="how often to look for work when there is none (default 1)")
+    help = "Deprecated: the old name of `manage.py jobs`, which it runs. Use that."
 
-    def handle(self, *args, once=False, interval=1.0, **options):
-        try:
-            chosen = reader.default()
-        except (reader.WrongReader, OSError) as error:
-            raise CommandError(f"not starting: {error}")
-        done = worker.run(once=once, interval=interval, reader=chosen)
-        if once:
-            self.stdout.write(f"{done} thing{'s' if done != 1 else ''} done")
+    def handle(self, *args, **options):
+        print("manage.py worker is now manage.py jobs (nyayo-jobs.service); this name will go.", file=sys.stderr)
+        return super().handle(*args, **options)

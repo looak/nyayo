@@ -100,8 +100,8 @@ bounds and result, and `stats` its Elo and error. The shape it sent before v1 is
   failure, with no games). Pages show the state as sent; a waiting, held or failed-start match is a plain match with
   no results yet. `match.verdict` (`blame`, `summary`, `detail`, `where`, `seen_on`) and each machine's `workloads`,
   `active` and `steps` are stored as sent and validated, not yet drawn (no worker cards or summary). Matches don't
-  expire, except a `failed_prechecks` match with no games, which the worker deletes with its archive once
-  `finished_at` plus `NYAYO_FAILED_PRECHECKS_HOURS` (48) has passed (see *The worker*).
+  expire, except a `failed_prechecks` match with no games, which the jobs process deletes with its archive once
+  `finished_at` plus `NYAYO_FAILED_PRECHECKS_HOURS` (48) has passed (see *The jobs process*).
 - **No state is final**: any state may go back to `running` (OpenBench restarts tests). `finished_at` is cleared and
   set again.
 - **What may change under one id**: state, `name`, `verdict`, timestamps, the counts, the producer's LLR, result and `stats`, the machines
@@ -203,7 +203,7 @@ A game in play is sent whole or by changes, and a finished one is kept as data.
   result, termination, times) is written when a game appears and when its result changes, not on every move. Which
   opponent and colour a game is comes from the schedule, then the `Subject` and `Opponent` tags, then the players'
   names.
-- **A game that seals is kept as data**: the worker (below) reads it and appends it, as it came, to its match's batches.
+- **A game that seals is kept as data**: the jobs process (below) reads it and appends it, as it came, to its match's batches.
   Its file and row stay until that batch is sealed, and `purge_games` removes a finished game only then, counting the
   ones it keeps back. The export takes it from its batch once it is in one.
 - **Game requests are held to part of the threads** (*Deployment*): a `PUT` or `PATCH` of a game, or a batch, that finds
@@ -215,20 +215,20 @@ is "not reported". OpenBench's games are cutechess's, stripped by its worker: `{
 depth/seldepth, milliseconds, nodes), `{book}` for a book move; the game page reads both. The details are in the
 schema, *Move comments*.
 
-### Matches: kept games, the worker and the index
+### Matches: kept games, the jobs process and the index
 
 `PUT /api/matches/{id}/pgns/{batch}` takes an **upload** of finished games as data to keep, not to watch: bz2
 (`application/x-bzip2`), or a plain or gzipped PGN, at most 64 MB as sent and 256 MB decompressed. It reads none of it:
 it checks the match, the name, the size and the type, writes the bytes to `uploads/<match id>/<name>` and answers `202`;
 the same bytes again are `200`, different bytes under that name `409`, an unknown match `404`.
 
-- **The worker** (`manage.py worker`, `nyayo-worker.service`) looks for work every second, oldest first, one thing at a
-  time (a lock beside the index database keeps it to one worker). Each pending upload is read whole through the reader
+- **The jobs process** (`manage.py jobs`, `nyayo-jobs.service`) looks for work every second, oldest first, one thing at a
+  time (a lock beside the index database keeps it to one jobs process). Each pending upload is read whole through the reader
   first, and **refused whole**, none of its games kept, at the first game that doesn't read, has no final `[Result]`,
   or lacks a `[Subject]` (white or black) or an `[Opponent]` that is one of the match's: nothing is matched by name.
   The reason, naming the game and the ply, is on the upload (the admin, *Uploads*, can read a refused one again) and
   the match page counts uploads waiting and refused. A refused upload sent again is read again.
-- **Failed starts**: at its start and then every `NYAYO_EXPIRY_EVERY` seconds (3600) the worker deletes the matches
+- **Failed starts**: at its start and then every `NYAYO_EXPIRY_EVERY` seconds (3600) the jobs process deletes the matches
   that are `failed_prechecks` with a `finished_at` older than `NYAYO_FAILED_PRECHECKS_HOURS` (48), whose results count
   no games and which have no game rows, schedule entries, uploads or batches, with their rows and their archive
   (`matches/expiry.py`). Nothing else is deleted this way. A failure of the look is logged and tried again at the next.
@@ -237,10 +237,10 @@ the same bytes again are `200`, different bytes under that name `409`, an unknow
   been heard of it for `NYAYO_SEAL_AFTER` seconds (300), it is compressed with zstd into `<number>.pgn.zst`, which
   never changes. They live in `NYAYO_BATCHES_DIR` (`games/batches` in the data directory unless pointed elsewhere:
   bobby's is the Synology's share). A batch row records its games, sizes, the sha256 of the stored file, the reader
-  and its **sources** (which uploads' games and which single games it holds, in order); a worker stopped half way
+  and its **sources** (which uploads' games and which single games it holds, in order); a jobs process stopped half way
   truncates what wasn't committed and carries on, so nothing is appended twice. A game's id is `<upload>.<n>`.
 - **The reader** is python-chess, or elephant's `phant-indexer` when `NYAYO_READER` names its binary and
-  `NYAYO_READER_SHA256` its hash: the worker checks both and `--version` before it starts and refuses to start on a
+  `NYAYO_READER_SHA256` its hash: the jobs process checks both and `--version` before it starts and refuses to start on a
   mismatch. It is about 37 times faster (20,934 OpenBench games a second against 559). Each batch and upload records
   its reader.
 - **The index** (`index.sqlite3`, `NYAYO_INDEX_DB`, on local disk, never on the share) has a **card** per game: its
@@ -270,9 +270,9 @@ not yet in a batch, so every game is in it once. The filters are `kind`, `engine
 more), `tc`, `book`, `since`, `until` and `match`, combined with *and*; a `match` that is an id `rename_matches` changed (a `RenamedMatch`) asks for the match it became, here and on the games page. A match's page counts its stored games and links
 its export. The games page below filters by match and by opening; a position is otherwise found by reading the games.
 
-**Position datasets** (milestone 10) are made by the worker, as jobs: requested from the Exports page (`/exports`)
+**Position datasets** (milestone 10) are made by the jobs process, as jobs: requested from the Exports page (`/exports`)
 or `POST /api/exports` with a machine token, one at a time, and only when there is nothing else to do, a batch a
-turn, so uploads never wait behind one. The worker resolves the selection to a manifest of sealed batches and their
+turn, so uploads never wait behind one. The jobs process resolves the selection to a manifest of sealed batches and their
 games (every game that read and has a result, ended by rule, resignation or adjudication, inferred ones included, and,
 if asked, **limited to players and a date**: see below; the filters are `nyayo.matches.selection`, which the games
 page shares), then feeds each batch's chosen games, as
@@ -284,7 +284,7 @@ page and from `GET /api/exports/{id}`. The record is kept for good: the selectio
 nyayo's and the reader's versions with the reader's sha256, the counts, the manifest with every batch's sha256, the
 positions' sha256 and a free note. Deleting (`DELETE /api/exports/{id}`, with a machine token) removes the file and keeps the record; a rebuild reads the same games
 again from the batches alone and checks the new sha256 against the old. Drawing needs phant-indexer as the reader
-(`NYAYO_READER`); with python-chess a dataset fails saying so. A dataset left running by a worker that stopped
+(`NYAYO_READER`); with python-chess a dataset fails saying so. A dataset left running by a jobs process that stopped
 starts over (`docs/match-schema.md`, Position datasets). The first ply positions are taken from is by the match's opening book, counted from
 where a game starts: `NYAYO_BOOK_MIN_PLY` (`8moves_v3` 4, `Endgames` 0) and `NYAYO_MIN_PLY_DEFAULT` (8) for any other,
 the map kept with each dataset and each batch's minimum in its manifest. Each game goes to the reader with its
@@ -372,7 +372,7 @@ no rule of its own: every verdict arrives written out. With no worker yet the ar
 
 `match.verdict` is the headline under the title (`Stopped:`, `Held:` or `Waiting:` and its summary, its detail, where,
 seen on, when it stopped), and for `failed_prechecks` when it deletes itself, `finished_at` plus
-`NYAYO_FAILED_PRECHECKS_HOURS` (48); the worker deletes it then, reading the same setting and the same `finished_at`. A test in
+`NYAYO_FAILED_PRECHECKS_HOURS` (48); the jobs process deletes it then, reading the same setting and the same `finished_at`. A test in
 `waiting`, `held` or `failed_prechecks` with no games shows no tiles, results or progress until it has results. With steps,
 *elapsed* and *pace* count from the first worker's `running` step, not from creation, and the card says *created* and
 *playing since*. Each engine in the head links to `<repo>/commit/<sha>` (the engine's `repo`, else `NYAYO_GITHUB_REPO`).
@@ -768,13 +768,13 @@ CSRF-exempt and open on the LAN like the rest, apart from the sign-in.
   match id is `<mode>-<test id>` (*A test and its match*).
 - **Games.** `clientSubmitPGN` stores the workload's `.pgn.bz2`, as the worker named and tagged it, as one of nyayo's uploads
   named `<result id>.<book index>` (the match is reported first if nyayo has none yet; a workload that played nothing sends
-  an empty archive, which is dropped). nyayo's worker puts the games away as for any producer. Nothing is kept as OpenBench
+  an empty archive, which is dropped). nyayo's jobs process puts the games away as for any producer. Nothing is kept as OpenBench
   kept it: the PGN tar, `api_pgns` and the watcher are not here.
 - **Not here:** the page that creates a datagen and its running page, the networks' upload (a network is a file `networks/<sha256>` under the data directory, served by
   `clientGetNetwork`), `api_*` of OpenBench's own scripts.
 
 The smoke test, `tools/smoke/run.py` (WSL or Linux; its docstring says how to set it up), runs nyayo as deployed (gunicorn,
-4 workers of 4 threads, and `manage.py worker`) with nyayo's own client playing, downloaded from `/client.zip` as a worker does and
+4 workers of 4 threads, and `manage.py jobs`) with nyayo's own client playing, downloaded from `/client.zip` as a worker does and
 changed only in its timers, with no checkout of openbench_eg and no password. A toy engine, a book and a stand-in for the part of GitHub's API that the create page asks (`NYAYO_GITHUB_API`, which
 replaces `https://api.github.com/repos`) are served from the harness, and every test is made through the real create page,
 signed in as the owner. It checks a games test (named, a base bench typed in, the walk, games put away, the pages), an SPRT to a
@@ -789,7 +789,7 @@ and prints its time. `--load` measures the writes and the waits of `--workers` w
 Every page sits in one frame, in Pi-hole's dark AdminLTE look: a sidebar, which stays in place while the page scrolls, and a top bar. nyayo's icon, in the sidebar and as the favicon (SVG, a 32 px PNG and a 180 px apple-touch-icon), is the chess elephant from Wikimedia Commons (Chess_elt45.svg by NikNaks93), bundled under `nyayo/runs/static/img/` and used under the BSD 3-Clause License (`LICENSE-elephant.txt`). Every page's coloured tiles carry an icon, large and faint behind the figures as
 Pi-hole's: Font Awesome Free 6.6.0's solid icons, the twelve used and no more, unchanged, under CC BY 4.0
 (`nyayo/runs/static/img/fa/`, with `LICENSE-fontawesome.txt`; `runs/_tile_icon.html` draws one). The sidebar has a status block
-(whether the worker holds its lock, the game reader, uploads waiting or refused, whether the batches' directory is
+(whether the jobs process holds its lock, the game reader, uploads waiting or refused, whether the batches' directory is
 there and how much it holds) and the links, grouped as Main (Dashboard), Actions (Create test, Create tune, Create datagen, Upload net, Run gauntlet), Lab (Engines, Books, Machines with the number of workers online: approved, enabled and heard from within 5 minutes, which is what the Machines page calls playing or idle, shown as a muted 0 when none, counted in one query), Jobs (Tests and Gauntlets, each with its number live: running and not silent, as its list's cards count them; Smokes, the runs' list at `/runs`; Compare),
 Catalogue (Games with the number kept, Exports, Uploads in the admin) and System (Admin); the page's own link is marked. The
 top bar says where the page is, names the host and the time zone the pages' times are in (`NYAYO_TIME_ZONE`, UTC by default; times are stored in UTC). and who is signed in, with a link to sign in or a button to sign out. Under 900 px the sidebar is one bar with a menu button: the status block goes and the links open and close with it, so the top bar's crumb keeps its room. The status is worked out only when a page's frame is drawn, never
@@ -836,10 +836,10 @@ its line, and the stubs' table in `nyayo/actions/views.py` loses its entry. Ther
 ### Deployment
 
 bobby (172.16.100.11), gunicorn on :8001 as `nyayo.service` with four workers of four threads each (`gthread`), in a
-conda env (`nyayo2` on bobby, named by `NYAYO_CONDA_ENV`), the only nyayo there and OpenBench's server is not run. `nyayo-worker.service` runs `manage.py worker`, bound to
+conda env (`nyayo2` on bobby, named by `NYAYO_CONDA_ENV`), the only nyayo there and OpenBench's server is not run. `nyayo-jobs.service` runs `manage.py jobs`, bound to
 `nyayo.service` so it starts, stops and restarts with it, `Restart=always`, at low CPU and disk priority;
 `nyayo-expire.timer` (04:30) and `nyayo-backup.timer` (05:00) run daily. `deploy/install-service.sh` installs the units
-and `deploy/update.sh` pulls, installs, migrates, collects static files and restarts nyayo and the worker. The owner
+and `deploy/update.sh` pulls, installs, migrates, collects static files and restarts nyayo and the jobs process. The owner
 runs `sudo` on bobby; changes there are proposed, not made. [deploy.md](deploy.md) has the install.
 
 - **Game threads.** Each gunicorn worker lets at most `NYAYO_GAME_THREADS` (2) of its threads handle game requests
@@ -851,7 +851,7 @@ runs `sudo` on bobby; changes there are proposed, not made. [deploy.md](deploy.m
   `NYAYO_WIP_DAYS`, `NYAYO_COMMITTED_DAYS`, `NYAYO_SILENT_AFTER`, `NYAYO_GAME_POLL_MS`, `NYAYO_GAME_THREADS`,
   `NYAYO_ARCHIVE_EVERY`, `NYAYO_BATCHES_DIR`, `NYAYO_BATCH_GAMES`, `NYAYO_SEAL_AFTER`, `NYAYO_READER`,
   `NYAYO_READER_SHA256`, `NYAYO_INDEX_DB`, `NYAYO_BACKUP_REPO`, `NYAYO_DATASETS_DIR` (position datasets' files, next to the batches by default), `NYAYO_BOOK_MIN_PLY` and `NYAYO_MIN_PLY_DEFAULT` (a dataset's first ply by book), `NYAYO_GITHUB_REPO` (the engine's repository, owner/name, for the dashboard's links), `NYAYO_TIME_ZONE` (the zone pages show times in, an IANA name) and `NYAYO_LOG_LEVEL`. A server error's traceback goes
-  to the journal (`journalctl -u nyayo`); the worker's reasons are in `journalctl -u nyayo-worker`.
+  to the journal (`journalctl -u nyayo`); the jobs process's reasons are in `journalctl -u nyayo-jobs`.
 - **The share.** The batches are on the Synology's `nyayo-batches` folder over NFS 4.1, mounted on bobby at
   `/mnt/nyayo-batches` (`NYAYO_BATCHES_DIR=/mnt/nyayo-batches/batches`); a `RequiresMountsFor` drop-in on both units
   keeps nyayo from starting, and writing batches to bobby's own disk, before it is mounted. Its snapshots and backup are
@@ -859,7 +859,7 @@ runs `sudo` on bobby; changes there are proposed, not made. [deploy.md](deploy.m
 - **The reader** is elephant's `phant-indexer` in `~/dev/nyayo-bin/`, pinned by its sha256.
 
 State is the database, `archive/` (runs and matches, the source of truth), `games/` (the only copy of each live game's
-PGN and its record), `uploads/` (uploads waiting for the worker), the batches (data to keep) and `index.sqlite3` (derived).
+PGN and its record), `uploads/` (uploads waiting for the jobs process), the batches (data to keep) and `index.sqlite3` (derived).
 
 **Backup.** `manage.py backup` takes an online copy of the database into the data directory's `backup/` and, when
 `NYAYO_BACKUP_REPO` names a checkout of a private git repository, mirrors `archive/` and `games/` into it with the

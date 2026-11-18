@@ -8,7 +8,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from nyayo import shell
-from nyayo.matches import worker
+from nyayo.matches import jobs
 from nyayo.matches.models import Match
 
 from .test_games import pgn
@@ -25,7 +25,7 @@ class Frame(BatchCase):
         self.keep(bz2.compress(TWO))
         self.put_batch(bz2.compress(TWO), batch="waiting")
         page = self.page()
-        self.assertIn("Worker not running", page)
+        self.assertIn("Jobs not running", page)
         self.assertIn("python-chess", page)
         self.assertIn("1 upload waiting", page)
         self.assertIn('title="games kept as data">2<', page)
@@ -33,11 +33,11 @@ class Frame(BatchCase):
         Match.objects.update(updated_at=timezone.now())
         self.assertIn("1 live", self.page())
 
-    def test_a_running_worker_and_the_pinned_reader(self):
-        with mock.patch.object(worker, "is_running", return_value=True), \
+    def test_running_jobs_and_the_pinned_reader(self):
+        with mock.patch.object(jobs, "is_running", return_value=True), \
                 override_settings(NYAYO_READER="/home/fischer/dev/nyayo-bin/phant-indexer-1.3.1-40623e8"):
             page = self.page()
-        self.assertIn("Worker running", page)
+        self.assertIn("Jobs running", page)
         self.assertIn("phant-indexer-1.3.1-40623e8", page)
 
     def test_a_refused_upload_is_red(self):
@@ -59,10 +59,10 @@ class Frame(BatchCase):
         self.assertIn("Catalogue › Games", self.page("/games"))
 
     def test_is_running_sees_a_held_lock(self):
-        self.assertFalse(worker.is_running())
-        with worker.only_worker():
-            self.assertTrue(worker.is_running())
-        self.assertFalse(worker.is_running())
+        self.assertFalse(jobs.is_running())
+        with jobs.only_jobs():
+            self.assertTrue(jobs.is_running())
+        self.assertFalse(jobs.is_running())
 
     def test_the_polled_fragment_never_works_the_status_out(self):
         self.put_game(pgn("1. e4 e5"), game="1")

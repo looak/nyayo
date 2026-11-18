@@ -9,7 +9,7 @@ import sys
 import zstandard
 from django.test import override_settings
 
-from nyayo.matches import catalogue, datasets, exports, reader, worker
+from nyayo.matches import catalogue, datasets, exports, reader, jobs
 from nyayo.matches.models import Batch, Dataset, Match, MatchResult, Upload
 
 from .test_index import MATE, OPENBENCH, RESIGNED
@@ -55,7 +55,7 @@ class Datasets(BatchCase):
                                 headers={"Authorization": f"Bearer {token or self.token}"})
 
     def draw(self):
-        worker.run(once=True, reader=self.reader)
+        jobs.run(once=True, reader=self.reader)
 
     def lines(self, dataset):
         return zstandard.ZstdDecompressor().stream_reader(open(datasets.file_path(dataset), "rb")).read()
@@ -97,9 +97,9 @@ class Datasets(BatchCase):
 
     def test_uploads_go_first(self):
         dataset = datasets.request()
-        worker.step(self.reader)  # begins: the manifest, the reader's process
+        jobs.step(self.reader)  # begins: the manifest, the reader's process
         self.put_batch(bz2.compress(batch_text(game("1-0", moves=MATE))), batch="2.0")
-        worker.step(self.reader)  # the upload, not the dataset
+        jobs.step(self.reader)  # the upload, not the dataset
         dataset.refresh_from_db()
         self.assertEqual((dataset.state, dataset.batches_done), ("running", 0))
         self.assertEqual(Upload.objects.get(name="2.0").state, "done")
@@ -142,14 +142,14 @@ class Datasets(BatchCase):
 
     def test_python_chess_cannot_draw(self):
         dataset = datasets.request()
-        worker.run(once=True, reader=reader.PythonChess())
+        jobs.run(once=True, reader=reader.PythonChess())
         dataset.refresh_from_db()
         self.assertEqual(dataset.state, "failed")
         self.assertIn("needs phant-indexer", dataset.error)
 
     def test_a_dataset_left_running_starts_over(self):
         dataset = datasets.request()
-        worker.step(self.reader)
+        jobs.step(self.reader)
         self.forget_run()  # the worker stopped
         dataset.refresh_from_db()
         self.assertEqual(dataset.state, "running")
@@ -173,7 +173,7 @@ class Datasets(BatchCase):
         self.assertEqual(dataset.requested_by, "page")
         page = self.client.get("/exports").content.decode()
         self.assertIn('<span class="badge stopped">queued</span>', page)
-        self.assertIn("waiting for the worker", page)  # on top, as the one in progress
+        self.assertIn("waiting for the jobs process", page)  # on top, as the one in progress
         self.assertIn('http-equiv="refresh"', page)
         self.draw()
         dataset.refresh_from_db()

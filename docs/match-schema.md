@@ -341,7 +341,7 @@ M") and must stay the same across a resume. A scheduled game that hasn't started
 
 - A PGN with a final `[Result]` seals the game: further different PUTs are `409`. A byte-identical resend of the final
   PGN is `200`. While the result is `*`, a PUT may replace the game with a shorter one (a resumed game starts over).
-- **A sealed game is kept as data**: nyayo's worker appends it, as it came, to its match's batches with every other
+- **A sealed game is kept as data**: nyayo's jobs process appends it, as it came, to its match's batches with every other
   game kept (*Batches*, *Storage*), within a second or so, and once only however often it is sent. Its id stays the
   game number. Its PGN file stays until its batch is sealed, so the game page finds it either way.
 - An illegal move or an unreadable PGN is `400`.
@@ -476,7 +476,7 @@ per-game files and never purged with them.
 still being filled, as a bz2 stream of its own, concatenated (a valid multi-stream bz2 file; Python's `bz2` and
 `bzip2 -d` read it whole), with sealed single games not in a batch yet compressed and added, so it is every game
 nyayo has, each once. An upload
-still waiting for the worker isn't in it yet. Open like the pages. `manage.py export_games` takes the same filters and writes
+still waiting for the jobs process isn't in it yet. Open like the pages. `manage.py export_games` takes the same filters and writes
 a file.
 
 | Filter | Matches |
@@ -580,7 +580,7 @@ of the progress graph) and a row per game (result, termination, colour, opponent
 `manage.py purge_games --match ID | --older-than DAYS` removes games' files and rows without touching a match's
 document, counts or snapshots. A finished game is removed only once its batch is sealed, so it is never lost between
 the two; one that isn't is kept back and counted. Games finished before nyayo kept batches join them through
-`manage.py keep_games`, not the worker, and are kept back until then.
+`manage.py keep_games`, not the jobs process, and are kept back until then.
 
 A live game also has `games/<match id>/<game>.plies` (one JSON line per ply) and `<game>.state` beside its
 PGN, both derived and deleted when the game is sealed (*Moves by changes*).

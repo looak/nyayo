@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from nyayo.lab import hours, machines
 from nyayo.lab.models import Machine, MachineHour, Result
-from nyayo.matches.worker import look_for_expired
+from nyayo.matches.jobs import look_for_expired
 
 from . import test_lab_worker_api as api
 from .lab_helpers import make_machine, make_result, make_test

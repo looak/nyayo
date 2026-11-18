@@ -1,6 +1,6 @@
-"""A producer's batch becomes an upload, taken as sent and read by the worker later; nyayo's own 64-game batches are
+"""A producer's batch becomes an upload, taken as sent and read by the jobs process later; nyayo's own 64-game batches are
 new. An upload stored before this was kept as bz2 in batches/<match id>/<name>.pgn.bz2 and its games were never put
-in batches: it moves to uploads/ as pending, so the worker reads it like any other."""
+in batches: it moves to uploads/ as pending, so the jobs process reads it like any other."""
 
 import os
 from pathlib import Path

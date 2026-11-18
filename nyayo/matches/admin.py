@@ -81,7 +81,7 @@ class UploadAdmin(ReadOnly):
     def read_again(self, request, queryset):
         count = queryset.filter(state="refused").update(state="pending", reason="", games=0, appended=0,
                                                         done_at=None)
-        self.message_user(request, f"{count} upload{'s' if count != 1 else ''} queued for the worker again")
+        self.message_user(request, f"{count} upload{'s' if count != 1 else ''} queued for the jobs process again")
 
 
 @admin.register(Batch)

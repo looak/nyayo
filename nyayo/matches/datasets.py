@@ -1,10 +1,10 @@
 """Position datasets (game database, milestone 10): positions drawn from the games kept, for elephant's tuner.
 
-A dataset is a job for the worker. Requested from the Exports page or `POST /api/exports`, it waits until the worker
+A dataset is a job for the jobs process. Requested from the Exports page or `POST /api/exports`, it waits until the jobs process
 has nothing else to do, then runs one batch a turn so uploads never wait behind it: the selected games of each sealed
 batch, as stored, go to one `phant-indexer --draw` process that stays open from the first batch to the last, so it
 dedupes positions across the whole dataset, and the `<fen> [result]` lines it writes become the dataset's file, zstd,
-in NYAYO_DATASETS_DIR. One dataset runs at a time; one left running by a worker that stopped starts again.
+in NYAYO_DATASETS_DIR. One dataset runs at a time; one left running by a jobs run that stopped starts again.
 
 The record stays when the file is deleted: the selection, the draw's settings and seed, nyayo's and the reader's
 versions with the reader's sha256, the counts, and the manifest of every batch read with its sha256 and the games
@@ -79,7 +79,7 @@ def draw_arguments(draw):
 
 
 def request(requested_by="", note="", merge=False, players=(), since=None):
-    """A new dataset, waiting for the worker: every game that read with a good label, of the players picked (either
+    """A new dataset, waiting for the jobs process: every game that read with a good label, of the players picked (either
     side) and from the date, if asked, and the book map in force now, kept with it. selection.BadSelection for a
     player nyayo has no game of."""
     unknown = sorted(set(players) - selection.known_players())
@@ -227,7 +227,7 @@ class Run:
         self.stats_path.unlink(missing_ok=True)
 
 
-# the worker's one dataset in progress; a worker restarted finds its dataset "running" and starts it over
+# the one dataset in progress; a restarted jobs process finds its dataset "running" and starts it over
 _run = None
 
 

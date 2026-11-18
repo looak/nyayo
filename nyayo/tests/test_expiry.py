@@ -6,7 +6,7 @@ from unittest import mock
 from django.test import override_settings
 from django.utils import timezone
 
-from nyayo.matches import expiry, stepsview, worker
+from nyayo.matches import expiry, stepsview, jobs
 from nyayo.matches.ingest import archive_dir, archive_path
 from nyayo.matches.models import Batch, Game, Match, MatchResult, ScheduleEntry, Upload
 
@@ -128,14 +128,14 @@ class Expiry(MatchTestCase):
 class WorkerLooksOnceAnHour(MatchTestCase):
     def test_the_worker_looks_at_the_start_and_then_every_interval(self):
         with mock.patch("nyayo.matches.expiry.expire") as expire, \
-                mock.patch("nyayo.matches.worker.time.monotonic", side_effect=[0, 10, 3600, 3601, 7300]), \
-                mock.patch("nyayo.matches.worker.step", return_value=False), \
-                mock.patch("nyayo.matches.worker.time.sleep", side_effect=[None, None, StopIteration]):
+                mock.patch("nyayo.matches.jobs.time.monotonic", side_effect=[0, 10, 3600, 3601, 7300]), \
+                mock.patch("nyayo.matches.jobs.step", return_value=False), \
+                mock.patch("nyayo.matches.jobs.time.sleep", side_effect=[None, None, StopIteration]):
             with self.assertRaises(StopIteration):
-                worker.run(reader=mock.Mock(name="r"))
+                jobs.run(reader=mock.Mock(name="r"))
         self.assertGreaterEqual(expire.call_count, 2)
 
     def test_a_failure_in_the_look_does_not_stop_the_worker(self):
         with mock.patch("nyayo.matches.expiry.expire", side_effect=OSError("disk")), \
-                mock.patch("nyayo.matches.worker.step", return_value=False):
-            self.assertEqual(worker.run(once=True, reader=mock.Mock()), 0)
+                mock.patch("nyayo.matches.jobs.step", return_value=False):
+            self.assertEqual(jobs.run(once=True, reader=mock.Mock()), 0)
