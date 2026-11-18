@@ -190,6 +190,14 @@ sudo systemctl disable --now nyayo-worker
 sudo rm /etc/systemd/system/nyayo-worker.service
 ```
 
+The old unit's drop-in, `share.conf`, makes the unit wait for the batch share and the checkout mount
+(`RequiresMountsFor=/mnt/nyayo-batches` and `RequiresMountsFor=/home/fischer/dev/nyayo-2`). Move it to the new unit, or
+`nyayo-jobs` can start before the share after a reboot:
+
+```bash
+sudo mv /etc/systemd/system/nyayo-worker.service.d /etc/systemd/system/nyayo-jobs.service.d
+```
+
 ```bash
 sudo systemctl daemon-reload
 ```
@@ -199,6 +207,12 @@ Check:
 ```bash
 systemctl status nyayo-jobs
 ```
+
+```bash
+systemctl show nyayo-jobs -p RequiresMountsFor
+```
+
+The last one should list both paths.
 
 ```bash
 journalctl -u nyayo-jobs -n 20
