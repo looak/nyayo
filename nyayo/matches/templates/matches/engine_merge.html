@@ -1,0 +1,15 @@
+{% extends "runs/base.html" %}
+{% block title %}Merge {{ other }} · nyayo{% endblock %}
+{% block crumb %}Catalogue › <a href="{% url 'opponents' %}">Opponents</a> › Merge{% endblock %}
+{% block content %}
+<h1>Merge {{ other }} into {{ keep }}?</h1>
+<ul>
+  <li><b>{{ other }}</b> ({{ other.name }}{% if other.version %} {{ other.version }}{% endif %}) is played as subject in {{ uses.other.subject }} match{{ uses.other.subject|pluralize:"es" }} and as opponent in {{ uses.other.opponent }}.</li>
+  <li>They all move to <b>{{ keep }}</b>, which then has {{ uses.keep.subject|add:uses.other.subject }} as subject and {{ uses.keep.opponent|add:uses.other.opponent }} as opponent.</li>
+  <li>“{{ other.name }}” becomes an alias of {{ keep }}, so a report by that name finds it. What {{ keep }} lacks (repository, tag, rating) is taken from {{ other }}.</li>
+</ul>
+<p class="flash error">This is final. {{ other }} is deleted and can't be brought back.</p>
+<form method="post">{% csrf_token %}<input type="hidden" name="other" value="{{ other.pk }}">
+  <button class="act" type="submit">Merge, for good</button> <a href="{% url 'opponent_edit' keep.pk %}">Cancel</a>
+</form>
+{% endblock %}

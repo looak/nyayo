@@ -1,0 +1,28 @@
+{% extends "runs/base.html" %}
+{% block title %}{{ engine }} · Opponents · nyayo{% endblock %}
+{% block crumb %}Catalogue › <a href="{% url 'opponents' %}">Opponents</a> › {{ engine }}{% endblock %}
+{% block content %}
+<h1>{{ engine }}</h1>
+<p class="muted">Reported as <b>{{ engine.name }}</b>{% if engine.version %} version <b>{{ engine.version }}</b>{% endif %}{% if engine.commit %} commit <b>{{ engine.commit|truncatechars:12 }}</b>{% endif %}. That stays as reported; the rest is the catalogue's.</p>
+<form method="post" class="card" style="max-width:46rem">{% csrf_token %}
+  <p><label>Repository (GitHub) <input name="url" value="{% if form %}{{ form.url }}{% else %}{{ engine.url }}{% endif %}" placeholder="https://github.com/owner/name" size="50"></label></p>
+  <p><label>Release tag <input name="ref" value="{% if form %}{{ form.ref }}{% else %}{{ engine.ref }}{% endif %}"></label>
+     <label>Asset <input name="asset" value="{% if form %}{{ form.asset }}{% else %}{{ engine.asset }}{% endif %}"></label>
+     <label>Binary <input name="binary" value="{% if form %}{{ form.binary }}{% else %}{{ engine.binary }}{% endif %}"></label></p>
+  <p><label>Default options (JSON) <input name="options" value="{% if form %}{{ form.options }}{% else %}{{ options_text }}{% endif %}" size="50" spellcheck="false"></label></p>
+  <p><label>Rating <input name="rating_value" value="{% if form %}{{ form.rating_value }}{% else %}{{ engine.rating.value|default:'' }}{% endif %}" size="6"></label>
+     <label>List <input name="rating_list" value="{% if form %}{{ form.rating_list }}{% else %}{{ engine.rating.list|default:'' }}{% endif %}"></label>
+     <label>Read on <input name="rating_as_of" value="{% if form %}{{ form.rating_as_of }}{% else %}{{ engine.rating.as_of|default:'' }}{% endif %}" placeholder="2026-10-18" size="10"></label></p>
+  <p><label>Source, the list's page for this version <input name="rating_source" value="{% if form %}{{ form.rating_source }}{% else %}{{ engine.rating.source|default:'' }}{% endif %}" size="60"></label></p>
+  <p><label>Also reported as, one per line<br><textarea name="aliases" rows="3">{% if form %}{{ form.aliases }}{% else %}{{ aliases_text }}{% endif %}</textarea></label></p>
+  <p><button class="act" type="submit">Save</button> <a href="{% url 'opponents' %}">Cancel</a></p>
+</form>
+{% if others %}
+<h2>Merge a duplicate into this one</h2>
+<p class="muted">Another row that is the same engine under another name: its matches move here and its name becomes an alias. It can't be undone.</p>
+<form method="get" action="{% url 'opponent_merge' engine.pk %}">
+  <select name="other" aria-label="Engine to merge into this one">{% for o in others %}<option value="{{ o.pk }}">{{ o }}</option>{% endfor %}</select>
+  <button class="act" type="submit">Merge…</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -113,9 +113,21 @@ bounds and result, and `stats` its Elo and error. The shape it sent before v1 is
   update. A report by changes isn't a document: the archive is then written from the match as it stands (the whole
   schedule from the rows, `report` `{seq, base: null}`) when the match isn't running any more and otherwise at most
   every `NYAYO_ARCHIVE_EVERY` seconds (60), so a lost database can be rebuilt from the archive.
-- **Index**: `Engine` (shared by every match that used it), `Match` (with the last `report_seq` and the schedule's
+- **Index**: `Engine` (shared by every match that used it; also the catalogue of opponents, below), `Match` (with the last `report_seq` and the schedule's
   digest), `ScheduleEntry`, `MatchResult` per opponent, `MatchSnapshot`, `Game` (the index of a single game's PGN
   file), and for games kept as data `Upload` and `Batch` (below).
+- **The catalogue of opponents** (`Engine`, `matches/engines.py`; the fields are in match-schema.md, The catalogue):
+  a row gains `url`, `ref`, `asset`, `binary`, default `options`, the list's `rating` (one JSON, `{ value, list, as_of,
+  source }`, as a match carries it), `aliases`, and `ours` (null; the fit that fills it isn't built). Ingest finds the
+  row for a reported engine by identity or alias and fills `url`, `ref`, `asset`, `binary` and the rating where the
+  row has none, from the participant or its `config` entry, never overwriting. **Opponents** (`/opponents`, in the
+  Catalogue group) lists the rows that have a `url` and `ref` or played a gauntlet as an opponent; reading is open.
+  Behind `action_required`, `/opponents/<id>/edit` edits a row's catalogue fields and aliases, and
+  `/opponents/<id>/merge` merges another row into it after a confirm page: every match (subject and opponent) is
+  repointed, the other's name and aliases become aliases, what the kept row lacks is taken from the other, and the
+  other is deleted. A merge is final. `manage.py backfill_engines [gauntlet.toml ...]` fills blanks from the stored
+  gauntlets and from uwanja gauntlet files (matched to their match by `name`, their opponents by uwanja's ids); run
+  again it changes nothing. The lab's Engines page (`/engines`) is OpenBench's builds and unrelated.
 - **Snapshots**: an accepted report appends one when the counts differ from the last snapshot's (time, counts per
   opponent, the producer's LLR and `stats`); a re-send with the same counts adds none. They're what the SPRT card's
   graphs are drawn from. Snapshots from before `stats` existed have none, and the Elo graph uses nyayo's own figure

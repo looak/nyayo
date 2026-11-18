@@ -20,8 +20,8 @@ from django.utils import timezone
 
 from nyayo.runs.ingest import IngestError, atomic_write, first_difference, invalid, timestamp
 
-from . import schedule
-from .models import GAME_ID_MAX, ID_PATTERN, KINDS, MATCH_ID_MAX, STATES, Engine, Match, MatchResult, MatchSnapshot, Tombstone
+from . import engines, schedule
+from .models import GAME_ID_MAX, ID_PATTERN, KINDS, MATCH_ID_MAX, STATES, Match, MatchResult, MatchSnapshot, Tombstone
 
 SCHEMA_VERSION = 1
 
@@ -211,6 +211,8 @@ def validate(document, match_id=None):
         rating = opponent.get("rating")
         if rating is not None and (not isinstance(rating, dict) or not isinstance(rating.get("value"), (int, float))):
             raise invalid(f"{where}.rating needs a numeric value")
+        if rating is not None and rating.get("source") is not None and not isinstance(rating["source"], str):
+            raise invalid(f"{where}.rating.source must be a string")
 
     results = document.get("results")
     if not isinstance(results, list):
@@ -375,7 +377,7 @@ def validate_engine(engine, where):
         raise invalid(f"{where} is missing")
     if not isinstance(engine.get("name"), str) or not engine["name"]:
         raise invalid(f"{where}.name is missing")
-    for name in ("version", "commit"):
+    for name in ("version", "commit", "url", "ref", "asset", "binary"):
         if engine.get(name) is not None and not isinstance(engine[name], str):
             raise invalid(f"{where}.{name} must be a string or null")
     if not isinstance(engine.get("options", {}) or {}, dict):
@@ -534,10 +536,10 @@ def delete_archived(match_id):
 
 # --- indexing ---
 
-def engine_for(info):
-    engine, _ = Engine.objects.get_or_create(name=info["name"], version=info.get("version") or "",
-                                             commit=info.get("commit") or "")
-    return engine
+def engine_for(info, document=None, role="opponent"):
+    """The catalogue row for a reported engine (engines.py): found by identity or alias, made if there is none, and its
+    url, ref and rating filled from the document where the row has none."""
+    return engines.engine_for(info, engines.extra_for(document or {}, info, role))
 
 
 def participant_info(info, *names):
@@ -560,7 +562,7 @@ def create_match(document, machine):
         id=m["id"], machine=machine, kind=m["kind"], state=m["state"], producer=m["producer"],
         producer_name=m["producer"]["name"], name=m.get("name") or "", verdict=m.get("verdict"), started_at=timestamp(m, "started_at"),
         finished_at=timestamp(m, "finished_at"), host_name=host.get("name") or "", host=host,
-        settings=m.get("settings") or {}, subject=engine_for(document["subject"]),
+        settings=m.get("settings") or {}, subject=engine_for(document["subject"], document, "subject"),
         subject_info=participant_info(document["subject"], "branch", "repo", "bench", "options"),
         sprt=document.get("sprt"), stats=document.get("stats"), machines=document.get("machines") or [],
         progress=document.get("progress"), received_at=now,
@@ -572,7 +574,7 @@ def create_match(document, machine):
     rows = {row["opponent"]: row for row in document["results"]}
     for ordinal, opponent in enumerate(document["opponents"]):
         result = MatchResult(
-            match=match, ordinal=ordinal, opponent=opponent["id"], engine=engine_for(opponent),
+            match=match, ordinal=ordinal, opponent=opponent["id"], engine=engine_for(opponent, document),
             info=participant_info(opponent, "branch", "repo", "bench", "options"), rating=opponent.get("rating"))
         apply_result(result, rows.get(opponent["id"]) or {name: 0 for name in COUNTS})
         result.save()

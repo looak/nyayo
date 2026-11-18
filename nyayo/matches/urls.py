@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import dashboard, exports, gameslist, pages, views
+from . import dashboard, engines_views, exports, gameslist, pages, views
 
 urlpatterns = [
     path("", dashboard.dashboard, name="dashboard"),
@@ -8,6 +8,9 @@ urlpatterns = [
     path("tests", pages.tests_list, name="tests"),
     path("gauntlets", pages.gauntlets_list, name="gauntlets"),
     path("games", gameslist.games_list, name="games"),
+    path("opponents", engines_views.listing, name="opponents"),
+    path("opponents/<int:pk>/edit", engines_views.edit, name="opponent_edit"),
+    path("opponents/<int:pk>/merge", engines_views.merge, name="opponent_merge"),
     path("exports", exports.exports_page, name="exports"),
     path("exports/<int:dataset_id>", exports.export_page, name="export"),
     path("exports/<int:dataset_id>/file", exports.export_file, name="export_file"),

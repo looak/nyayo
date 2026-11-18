@@ -1,0 +1,23 @@
+{% extends "runs/base.html" %}
+{% block title %}Opponents · nyayo{% endblock %}
+{% block crumb %}Catalogue › Opponents{% endblock %}
+{% block content %}
+<h1>Opponents</h1>
+<p class="muted">The engines gauntlets are played against: each with the repository and release it comes from and the rating its list gave it,
+read once by hand from the page it links to. A row appears when a gauntlet reports an engine, or when it has a repository and a tag.
+Two names for one engine are merged{% if not may_edit %}; <a href="{% url 'sign_in' %}?next={% url 'opponents' %}">sign in</a> to edit or merge{% endif %}.</p>
+{% if engines %}
+<div class="card"><div class="scroll"><table>
+  <thead><tr><th>Engine</th><th>Repository</th><th>Tag</th><th class="num">Rating</th><th>List</th><th>Also reported as</th><th class="num">Gauntlets</th>{% if may_edit %}<th></th>{% endif %}</tr></thead>
+  <tbody>{% for e in engines %}<tr>
+    <td>{{ e.name }}{% if e.version %} <span class="muted">{{ e.version }}</span>{% endif %}</td>
+    <td>{% if e.url %}<a href="{{ e.url }}" rel="noopener">{{ e.url|cut:"https://github.com/" }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td>{{ e.ref|default:"—" }}</td>
+    <td class="num">{% if e.rating %}{% if e.rating.source %}<a href="{{ e.rating.source }}" rel="noopener" title="where it was read">{{ e.rating.value }}</a>{% else %}{{ e.rating.value }}{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td class="nowrap">{% if e.rating %}{{ e.rating.list|default:"" }}{% if e.rating.as_of %} <span class="muted">{{ e.rating.as_of }}</span>{% endif %}{% endif %}</td>
+    <td>{{ e.aliases|join:", " }}</td>
+    <td class="num">{{ e.played }}</td>
+    {% if may_edit %}<td><a href="{% url 'opponent_edit' e.pk %}">Edit</a></td>{% endif %}</tr>{% endfor %}</tbody>
+</table></div></div>
+{% else %}<p class="muted">No engine has played a gauntlet yet.</p>{% endif %}
+{% endblock %}
